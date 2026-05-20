@@ -1,50 +1,93 @@
-# Welcome to your Expo app 👋
+# LA CANCHA
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+> Arma tu partida. O encuentra una en segundos.
 
-## Get started
+App móvil de matchmaking deportivo (fútbol, tenis, pádel, beach tennis, basket).
 
-1. Install dependencies
+## Stack
 
-   ```bash
-   npm install
-   ```
+- React Native 0.81 + Expo SDK 54 (new arch)
+- Expo Router (file-based, typed routes)
+- TypeScript estricto
+- Zustand (estado)
+- react-native-reanimated 4 + react-native-svg (animaciones)
+- phosphor-react-native (iconografía)
+- Inter (`@expo-google-fonts/inter`)
+- Supabase (pendiente — Phase 2)
 
-2. Start the app
+## Plataformas
 
-   ```bash
-   npx expo start
-   ```
+iOS + Android únicamente. Web está fuera del scope.
 
-In the output, you'll find options to open the app in a
-
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
-
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
-
-## Get a fresh project
-
-When you're ready, run:
+## Cómo correr
 
 ```bash
-npm run reset-project
+npm install
+npx expo start
 ```
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+- `i` → iOS simulator (macOS)
+- `a` → Android emulator
+- Escanea QR con Expo Go o con un dev build
 
-## Learn more
+## Estructura
 
-To learn more about developing your project with Expo, look at the following resources:
+```
+app/                       Rutas (Expo Router)
+  _layout.tsx              Root: fonts, SafeArea, GestureHandler, dark theme
+  index.tsx                Splash animado (SVG + Reanimated) → redirige a tabs
+  (tabs)/
+    _layout.tsx            Bottom tabs (5 secciones)
+    index.tsx              Inicio
+    buscar.tsx             Búsqueda (stub)
+    mis-partidas.tsx       Mis Partidas (stub)
+    chats.tsx              Chats (stub)
+    perfil.tsx             Perfil
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+theme/                     Tokens (colors, spacing, radius, typography, shadows)
+components/
+  ui/                      Primitivos reutilizables (Screen, Button, Card, Chip,
+                           Badge, Avatar, AvatarStack, Stars, Text, PressableScale)
+  brand/                   Crosshair SVG, Logo, SportIcon
+features/
+  match/                   MatchCard, MatchTypePromoCard, MatchTypeBadge, meta
+  player/                  (placeholder)
+data/                      Mocks (jugadores, partidas) — reemplazar por Supabase
+types/                     Tipos de dominio
+lib/                       Utilidades (format, etc.)
+store/                     (placeholder — zustand stores)
+assets/                    Imágenes, fuentes
+```
 
-## Join the community
+## Sistema de diseño
 
-Join our community of developers creating universal apps.
+Paleta:
 
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+| Token        | Hex       | Uso                        |
+|--------------|-----------|----------------------------|
+| `primary`    | `#7BFF00` | Verde neón — accent principal |
+| `bg`         | `#0B0F0C` | Fondo                      |
+| `surface`    | `#12161C` | Cards / superficies        |
+| `border`     | `#1F2630` | Bordes                     |
+| `accent`     | `#FFB800` | Tipo "Seria"               |
+| `alert`      | `#FF3B30` | Tipo "Competencia" / alertas |
+
+Tipos de partida:
+
+- 😎 **Chill** — verde
+- 👕 **Seria** — amarillo
+- 🏆 **Competencia** — rojo
+
+Radios: `12px` botones, `16px` cards.
+Spacing: escala 4pt (`xxs`–`giant`).
+
+## Pendiente (siguientes fases)
+
+- Auth (Supabase)
+- Crear partida (wizard 8 pasos)
+- Búsqueda con filtros
+- Detalle de partida + Unirse
+- Chats por partida
+- Mapa, reputación, historial
+- Reemplazar mocks en `data/` por queries a Supabase
+- Logo / iconos definitivos en `assets/images/`

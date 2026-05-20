@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm --version)",
+      "Bash(npx --version)",
+      "Bash(npx --yes create-expo-app@latest . --template default)",
+      "Bash(mv \"C:\\\\Users\\\\User\\\\OneDrive\\\\Documents\\\\la-cancha-claude-backup\" \"C:\\\\Users\\\\User\\\\OneDrive\\\\Documents\\\\la-cancha/.claude\" && ls -la \"C:\\\\Users\\\\User\\\\OneDrive\\\\Documents\\\\la-cancha\")",
+      "Bash(npx expo *)",
+      "Bash(rm -f components/parallax-scroll-view.tsx components/hello-wave.tsx components/themed-text.tsx components/themed-view.tsx components/external-link.tsx components/haptic-tab.tsx components/ui/collapsible.tsx components/ui/icon-symbol.tsx components/ui/icon-symbol.ios.tsx app/modal.tsx app/\\\\\\(tabs\\\\\\)/explore.tsx hooks/use-color-scheme.ts hooks/use-color-scheme.web.ts hooks/use-theme-color.ts constants/theme.ts)",
+      "Bash(rmdir hooks *)",
+      "Bash(npx expo-doctor *)",
+      "WebSearch",
+      "WebFetch(domain:docs.expo.dev)"
+    ]
+  }
+}
