@@ -1,93 +1,128 @@
-# LA CANCHA
+# La Cancha 🏟️
 
-> Arma tu partida. O encuentra una en segundos.
+> *Arma tu partida en segundos*
 
-App móvil de matchmaking deportivo (fútbol, tenis, pádel, beach tennis, basket).
+Mobile-first sports matchmaking app for Venezuela. Find pickup games, create matches, and connect with players near you.
 
-## Stack
+---
 
-- React Native 0.81 + Expo SDK 54 (new arch)
-- Expo Router (file-based, typed routes)
-- TypeScript estricto
-- Zustand (estado)
-- react-native-reanimated 4 + react-native-svg (animaciones)
-- phosphor-react-native (iconografía)
-- Inter (`@expo-google-fonts/inter`)
-- Supabase (pendiente — Phase 2)
+## What it does
 
-## Plataformas
+- **Buscar** — find nearby matches filtered by sport, type (chill / seria / torneo), skill level, and distance
+- **Crear** — 5-step wizard: sport → modality → type/level/positions → location/date/price → payments/requirements
+- **Unirse** — join flow with payment method selection and requirements confirmation
+- **Chat** — messaging with organizers and teammates
+- **Calificar** — post-match player ratings (stars, tags, comment)
 
-iOS + Android únicamente. Web está fuera del scope.
+Sports: **fútbol** (5/7/11), **basket** (3v3/5v5), **tenis**, **pádel**, **beach tennis**
 
-## Cómo correr
+Venezuelan context: USD/Bolívar pricing with BCV rate, Pago Móvil, Zelle, USDT (Binance).
+
+---
+
+## Status
+
+**Frontend-complete MVP.** All screens built, dark/light mode fully implemented, local state wired via Zustand. No backend yet — all data is mocked.
+
+**Next step:** Supabase backend (auth, CRUD, realtime chat). See `CLAUDE.md §11`.
+
+---
+
+## Tech Stack
+
+| Layer | Choice |
+|---|---|
+| Framework | Expo SDK 54 (managed workflow) |
+| Language | TypeScript 5.9 strict |
+| Navigation | expo-router 6 (file-based) |
+| State | Zustand 5 |
+| UI | React Native + react-native-reanimated 4 |
+| Icons | phosphor-react-native 3 |
+| Maps | react-native-maps |
+| Fonts | @expo-google-fonts/inter |
+
+---
+
+## Getting Started
 
 ```bash
 npm install
 npx expo start
 ```
 
-- `i` → iOS simulator (macOS)
-- `a` → Android emulator
-- Escanea QR con Expo Go o con un dev build
+Scan QR with Expo Go (iOS/Android) or press `i` / `a` for simulators.
 
-## Estructura
+**Requirements:** Node 18+, Expo Go on device or Xcode/Android Studio for simulators.
+
+---
+
+## Project Structure
 
 ```
-app/                       Rutas (Expo Router)
-  _layout.tsx              Root: fonts, SafeArea, GestureHandler, dark theme
-  index.tsx                Splash animado (SVG + Reanimated) → redirige a tabs
-  (tabs)/
-    _layout.tsx            Bottom tabs (5 secciones)
-    index.tsx              Inicio
-    buscar.tsx             Búsqueda (stub)
-    mis-partidas.tsx       Mis Partidas (stub)
-    chats.tsx              Chats (stub)
-    perfil.tsx             Perfil
-
-theme/                     Tokens (colors, spacing, radius, typography, shadows)
-components/
-  ui/                      Primitivos reutilizables (Screen, Button, Card, Chip,
-                           Badge, Avatar, AvatarStack, Stars, Text, PressableScale)
-  brand/                   Crosshair SVG, Logo, SportIcon
-features/
-  match/                   MatchCard, MatchTypePromoCard, MatchTypeBadge, meta
-  player/                  (placeholder)
-data/                      Mocks (jugadores, partidas) — reemplazar por Supabase
-types/                     Tipos de dominio
-lib/                       Utilidades (format, etc.)
-store/                     (placeholder — zustand stores)
-assets/                    Imágenes, fuentes
+app/          # All screens (expo-router file-based routing)
+components/   # UI primitives + feature composites
+features/     # Match-domain components (MatchCard, PositionPitch, etc.)
+store/        # Zustand stores (session, draftMatch, theme, matchOverrides, joinedMatches)
+lib/          # Pure helpers (format, exchange, time)
+data/         # Mock data (matches, players, chats, canchas)
+types/        # TypeScript domain types
+theme/        # Design tokens (palettes, spacing, radius, typography)
 ```
 
-## Sistema de diseño
+Full architecture docs: [`CLAUDE.md`](./CLAUDE.md)
 
-Paleta:
+---
 
-| Token        | Hex       | Uso                        |
-|--------------|-----------|----------------------------|
-| `primary`    | `#7BFF00` | Verde neón — accent principal |
-| `bg`         | `#0B0F0C` | Fondo                      |
-| `surface`    | `#12161C` | Cards / superficies        |
-| `border`     | `#1F2630` | Bordes                     |
-| `accent`     | `#FFB800` | Tipo "Seria"               |
-| `alert`      | `#FF3B30` | Tipo "Competencia" / alertas |
+## Screens
 
-Tipos de partida:
+| Screen | Route |
+|---|---|
+| Home | `/(tabs)` |
+| Search | `/(tabs)/buscar` |
+| My matches | `/(tabs)/mis-partidas` |
+| Chats | `/(tabs)/chats` |
+| Own profile | `/(tabs)/perfil` |
+| Match detail | `/match/[id]` |
+| Join flow | `/unirse/[id]` |
+| Create wizard | `/crear` |
+| Edit match | `/editar/[id]` |
+| Rate player | `/calificar/[id]` |
+| Player profile | `/perfil/[id]` |
+| Edit profile | `/perfil/editar` |
+| Chat thread | `/chat/[id]` |
+| Settings | `/ajustes` |
+| Change email | `/cuenta/correo` |
+| Change password | `/cuenta/contrasena` |
 
-- 😎 **Chill** — verde
-- 👕 **Seria** — amarillo
-- 🏆 **Competencia** — rojo
+---
 
-Radios: `12px` botones, `16px` cards.
-Spacing: escala 4pt (`xxs`–`giant`).
+## Design
 
-## Pendiente (siguientes fases)
+- **Dark-first** with full light mode support (toggle in Ajustes)
+- Neon green accent `#7BFF00` (dark) / `#1A7A00` (light)
+- All colors reactive via `useColors()` → `makeStyles(c: ColorPalette)` pattern
+- Match type colors: chill (green), seria (amber), torneo (red)
+- MatchCard: type-tinted background + colored border + sport emoji watermark
+- Inter font family, 6 weights
 
-- Auth (Supabase)
-- Crear partida (wizard 8 pasos)
-- Búsqueda con filtros
-- Detalle de partida + Unirse
-- Chats por partida
-- Mapa, reputación, historial
-- Reemplazar mocks en `data/` por queries a Supabase
-- Logo / iconos definitivos en `assets/images/`
+---
+
+## Roadmap
+
+1. **Phase A** — Supabase backend (auth, CRUD, storage, realtime)
+2. **Phase B** — Push notifications (`expo-notifications`)
+3. **Phase C** — Real location (`expo-location`, haversine distance)
+4. **Phase D** — Payments (Pago Móvil API / Stripe Connect)
+5. **Phase E** — Reputation system + match recommendations
+6. **Phase F** — Tests, accessibility, i18n
+7. **Phase G** — EAS Build + App Store / Play Store
+
+---
+
+## Dev Notes
+
+- `typedRoutes: false` in `app.json` — allows string interpolation in route paths
+- Mock user auto-signed in for dev (`store/session.ts` → `isAuthed: true`)
+- BCV rate is a hardcoded constant in `lib/exchange.ts` (`BCV_RATE = 36.72`)
+- All screens must use `useColors()` + `makeStyles(c)` — never the static `colors` import
+- `mockMatches[5]` (`m_6`) is organized by `mockCurrentUser` — needed for Creadas tab + invite sheet

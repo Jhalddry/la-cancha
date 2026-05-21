@@ -1,7 +1,10 @@
 import type { ReactNode } from 'react';
+import { useMemo } from 'react';
 import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 
-import { colors, radius, spacing } from '@/theme';
+import { useColors } from '@/hooks/useColors';
+import { radius, spacing } from '@/theme';
+import type { ColorPalette } from '@/theme/palettes';
 
 import { PressableScale } from './PressableScale';
 
@@ -14,6 +17,8 @@ interface Props {
 }
 
 export function Card({ children, onPress, padded = true, bordered = true, style }: Props) {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
   const composed: StyleProp<ViewStyle> = [
     styles.base,
     padded && styles.padded,
@@ -30,12 +35,14 @@ export function Card({ children, onPress, padded = true, bordered = true, style 
   return <View style={composed}>{children}</View>;
 }
 
-const styles = StyleSheet.create({
-  base: {
-    backgroundColor: colors.surface,
-    borderRadius: radius.lg,
-    overflow: 'hidden',
-  },
-  padded: { padding: spacing.lg },
-  bordered: { borderWidth: 1, borderColor: colors.border },
-});
+function makeStyles(c: ColorPalette) {
+  return StyleSheet.create({
+    base: {
+      backgroundColor: c.surface,
+      borderRadius: radius.lg,
+      overflow: 'hidden',
+    },
+    padded: { padding: spacing.lg },
+    bordered: { borderWidth: 1, borderColor: c.border },
+  });
+}

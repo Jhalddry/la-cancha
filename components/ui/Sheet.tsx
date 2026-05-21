@@ -1,14 +1,21 @@
 import { X } from 'phosphor-react-native';
-import type { ReactNode } from 'react';
+import { type ReactNode, useEffect, useMemo, useRef } from 'react';
 import {
+  Animated,
+  Dimensions,
+  Keyboard,
   Modal,
+  Platform,
   Pressable,
+  ScrollView,
   StyleSheet,
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { colors, radius, spacing } from '@/theme';
+import { useColors } from '@/hooks/useColors';
+import { radius, spacing } from '@/theme';
+import type { ColorPalette } from '@/theme/palettes';
 
 import { Text } from './Text';
 
@@ -19,8 +26,48 @@ interface Props {
   children: ReactNode;
 }
 
+const SCREEN_H = Dimensions.get('window').height;
+
 export function Sheet({ visible, onClose, title, children }: Props) {
+  const c = useColors();
+  const s = useMemo(() => makeStyles(c), [c]);
   const insets = useSafeAreaInsets();
+  const keyboardH = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+
+    const show = Keyboard.addListener(showEvent, (e) => {
+      Animated.timing(keyboardH, {
+        toValue: e.endCoordinates.height,
+        duration: Platform.OS === 'ios' ? e.duration ?? 250 : 200,
+        useNativeDriver: false,
+      }).start();
+    });
+
+    const hide = Keyboard.addListener(hideEvent, (e) => {
+      Animated.timing(keyboardH, {
+        toValue: 0,
+        duration: Platform.OS === 'ios' ? e.duration ?? 250 : 200,
+        useNativeDriver: false,
+      }).start();
+    });
+
+    return () => {
+      show.remove();
+      hide.remove();
+    };
+  }, [keyboardH]);
+
+  const maxH = SCREEN_H - insets.top - spacing.xxl;
+
+  const sheetPb = keyboardH.interpolate({
+    inputRange: [0, 1],
+    outputRange: [insets.bottom + spacing.lg, spacing.sm],
+    extrapolate: 'clamp',
+  });
+
   return (
     <Modal
       visible={visible}
@@ -29,61 +76,73 @@ export function Sheet({ visible, onClose, title, children }: Props) {
       onRequestClose={onClose}
       statusBarTranslucent
     >
-      <Pressable style={styles.backdrop} onPress={onClose} />
-      <View style={[styles.sheet, { paddingBottom: insets.bottom + spacing.lg }]}>
-        <View style={styles.grabber} />
-        {title ? (
-          <View style={styles.header}>
-            <Text variant="h3">{title}</Text>
-            <Pressable onPress={onClose} hitSlop={12} style={styles.close}>
-              <X size={20} color={colors.textSecondary} weight="bold" />
-            </Pressable>
-          </View>
-        ) : null}
-        <View style={styles.content}>{children}</View>
-      </View>
+      <Animated.View style={[s.container, { paddingBottom: keyboardH }]}>
+        <Pressable style={StyleSheet.absoluteFill} onPress={() => { Keyboard.dismiss(); onClose(); }} />
+
+        <Animated.View style={[s.sheet, { maxHeight: maxH, paddingBottom: sheetPb }]}>
+          <View style={s.grabber} />
+
+          {title ? (
+            <View style={s.header}>
+              <Text variant="h3">{title}</Text>
+              <Pressable onPress={() => { Keyboard.dismiss(); onClose(); }} hitSlop={12} style={s.close}>
+                <X size={20} color={c.textSecondary} weight="bold" />
+              </Pressable>
+            </View>
+          ) : null}
+
+          <ScrollView
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={s.content}
+          >
+            {children}
+          </ScrollView>
+        </Animated.View>
+      </Animated.View>
     </Modal>
   );
 }
 
-const styles = StyleSheet.create({
-  backdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: colors.overlay },
-  sheet: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: colors.surface,
-    borderTopLeftRadius: radius.xxl,
-    borderTopRightRadius: radius.xxl,
-    paddingTop: spacing.sm,
-    paddingHorizontal: spacing.lg,
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
-  },
-  grabber: {
-    alignSelf: 'center',
-    width: 44,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: colors.border,
-    marginBottom: spacing.md,
-  },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingBottom: spacing.md,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-  },
-  close: {
-    width: 32,
-    height: 32,
-    borderRadius: radius.full,
-    backgroundColor: colors.surfaceElevated,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  content: { paddingVertical: spacing.lg },
-});
+function makeStyles(c: ColorPalette) {
+  return StyleSheet.create({
+    container: {
+      flex: 1,
+      justifyContent: 'flex-end',
+    },
+    sheet: {
+      backgroundColor: c.surface,
+      borderTopLeftRadius: radius.xxl,
+      borderTopRightRadius: radius.xxl,
+      paddingTop: spacing.sm,
+      paddingHorizontal: spacing.lg,
+      borderTopWidth: 1,
+      borderTopColor: c.border,
+    },
+    grabber: {
+      alignSelf: 'center',
+      width: 44,
+      height: 4,
+      borderRadius: 2,
+      backgroundColor: c.border,
+      marginBottom: spacing.md,
+    },
+    header: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      paddingBottom: spacing.md,
+      borderBottomWidth: 1,
+      borderBottomColor: c.border,
+    },
+    close: {
+      width: 32,
+      height: 32,
+      borderRadius: radius.full,
+      backgroundColor: c.surfaceElevated,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    content: { paddingVertical: spacing.lg },
+  });
+}

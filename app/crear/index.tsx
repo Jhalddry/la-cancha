@@ -10,7 +10,7 @@ import {
   WarningCircle,
 } from 'phosphor-react-native';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
-import { InputAccessoryView, Keyboard, Platform, ScrollView, StyleSheet, View } from 'react-native';
+import { InputAccessoryView, Keyboard, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, View } from 'react-native';
 
 import {
   DateTimePickerSheet,
@@ -45,7 +45,9 @@ import {
   labelSport,
 } from '@/lib/format';
 import { useDraftMatch, type DraftMatch } from '@/store/draftMatch';
-import { colors, radius, spacing } from '@/theme';
+import { useColors } from '@/hooks/useColors';
+import type { ColorPalette } from '@/theme/palettes';
+import { radius, spacing } from '@/theme';
 import type {
   MatchType,
   Modality,
@@ -205,8 +207,17 @@ export default function CrearWizard() {
   const togglePayment = useDraftMatch((s) => s.togglePayment);
   const toggleRequirement = useDraftMatch((s) => s.toggleRequirement);
   const reset = useDraftMatch((s) => s.reset);
+  const c = useColors();
+  const s = useMemo(() => makeStyles(c), [c]);
 
   const [triedNext, setTriedNext] = useState(false);
+  const [keyboardVisible, setKeyboardVisible] = useState(false);
+
+  useEffect(() => {
+    const show = Keyboard.addListener('keyboardDidShow', () => setKeyboardVisible(true));
+    const hide = Keyboard.addListener('keyboardDidHide', () => setKeyboardVisible(false));
+    return () => { show.remove(); hide.remove(); };
+  }, []);
   const errors = useMemo(() => validateStep(step, draft), [step, draft]);
   const isValid = Object.keys(errors).length === 0;
   const shownErrors: StepErrors = triedNext ? errors : {};
@@ -241,12 +252,17 @@ export default function CrearWizard() {
     <Screen edges={['top']}>
       <BackHeader title="Crear partida" onBack={onBack} transparent />
 
-      <View style={styles.stepperWrap}>
+      <View style={s.stepperWrap}>
         <StepperBar total={TOTAL_STEPS} current={step} />
       </View>
 
+      <KeyboardAvoidingView
+        style={{ flex: 1, backgroundColor: c.bg }}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={0}
+      >
       <ScrollView
-        contentContainerStyle={styles.scroll}
+        contentContainerStyle={s.scroll}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
       >
@@ -281,13 +297,16 @@ export default function CrearWizard() {
           />
         ) : null}
       </ScrollView>
+      </KeyboardAvoidingView>
 
-      <View style={styles.footer}>
-        <Button
-          label={step === TOTAL_STEPS ? 'Publicar partida' : 'Siguiente'}
-          onPress={onNext}
-        />
-      </View>
+      {!keyboardVisible ? (
+        <View style={s.footer}>
+          <Button
+            label={step === TOTAL_STEPS ? 'Publicar partida' : 'Siguiente'}
+            onPress={onNext}
+          />
+        </View>
+      ) : null}
     </Screen>
   );
 }
@@ -300,7 +319,7 @@ interface StepProps {
 
 function StepHeader({ title, sub }: { title: string; sub?: string }) {
   return (
-    <View style={styles.stepHead}>
+    <View style={staticStyles.stepHead}>
       <Text variant="h2">{title}</Text>
       {sub ? (
         <Text variant="body" color="textSecondary">
@@ -312,10 +331,11 @@ function StepHeader({ title, sub }: { title: string; sub?: string }) {
 }
 
 function ErrorMessage({ message }: { message?: string }) {
+  const c = useColors();
   if (!message) return null;
   return (
-    <View style={styles.errorRow}>
-      <WarningCircle size={14} color={colors.alert} weight="fill" />
+    <View style={staticStyles.errorRow}>
+      <WarningCircle size={14} color={c.alert} weight="fill" />
       <Text variant="small" color="alert">
         {message}
       </Text>
@@ -328,40 +348,42 @@ function ErrorMessage({ message }: { message?: string }) {
 // ---------------------------------------------------------------------------
 
 function Step1Sport({ draft, setKey, errors }: StepProps) {
+  const c = useColors();
+  const s = useMemo(() => makeStyles(c), [c]);
   return (
-    <View style={styles.step}>
+    <View style={staticStyles.step}>
       <StepHeader
         title="¿Qué deporte quieres jugar?"
         sub="Selecciona el deporte para tu partida"
       />
 
-      <View style={styles.sportList}>
-        {SPORTS.map((s) => (
+      <View style={staticStyles.sportList}>
+        {SPORTS.map((sport) => (
           <PressableScale
-            key={s.value}
+            key={sport.value}
             onPress={() => {
-              setKey('sport', s.value);
+              setKey('sport', sport.value);
               setKey('modality', null);
               setKey('positions', []);
             }}
             style={[
-              styles.sportRow,
-              draft.sport === s.value ? styles.sportRowActive : null,
+              s.sportRow,
+              draft.sport === sport.value ? s.sportRowActive : null,
             ]}
             scaleTo={0.98}
           >
-            <View style={styles.sportEmojiWrap}>
-              <Text style={styles.sportEmoji}>{s.emoji}</Text>
+            <View style={s.sportEmojiWrap}>
+              <Text style={staticStyles.sportEmoji}>{sport.emoji}</Text>
             </View>
             <View style={{ flex: 1 }}>
               <Text variant="bodySemibold" color="textPrimary">
-                {labelSport(s.value)}
+                {labelSport(sport.value)}
               </Text>
             </View>
-            {draft.sport === s.value ? (
-              <Check size={20} color={colors.primary} weight="bold" />
+            {draft.sport === sport.value ? (
+              <Check size={20} color={c.primary} weight="bold" />
             ) : (
-              <CaretRight size={18} color={colors.textTertiary} weight="bold" />
+              <CaretRight size={18} color={c.textTertiary} weight="bold" />
             )}
           </PressableScale>
         ))}
@@ -376,6 +398,8 @@ function Step1Sport({ draft, setKey, errors }: StepProps) {
 // ---------------------------------------------------------------------------
 
 function Step2Modality({ draft, setKey, errors }: StepProps) {
+  const c = useColors();
+  const s = useMemo(() => makeStyles(c), [c]);
   const modalities = useMemo(
     () => (draft.sport ? sportModalities[draft.sport] : []),
     [draft.sport],
@@ -383,9 +407,9 @@ function Step2Modality({ draft, setKey, errors }: StepProps) {
   const hasPlayerCount = draft.sport === 'futbol' || draft.sport === 'basket';
 
   return (
-    <View style={styles.step}>
+    <View style={staticStyles.step}>
       {(() => {
-        const sportEmoji = SPORTS.find((s) => s.value === draft.sport)?.emoji ?? '';
+        const sportEmoji = SPORTS.find((sp) => sp.value === draft.sport)?.emoji ?? '';
         const modalidadSub: Record<string, string> = {
           futbol: '¿A 5, a 7 o full 11?',
           basket: '¿3 contra 3 o el equipo completo?',
@@ -400,7 +424,7 @@ function Step2Modality({ draft, setKey, errors }: StepProps) {
         );
       })()}
 
-      <View style={styles.modalityList}>
+      <View style={staticStyles.modalityList}>
         {modalities.map((m) => {
           const active = draft.modality === m;
           return (
@@ -411,8 +435,8 @@ function Step2Modality({ draft, setKey, errors }: StepProps) {
                 setKey('positions', []);
               }}
               style={[
-                styles.modalityRow,
-                active ? styles.modalityRowActive : null,
+                s.modalityRow,
+                active ? s.modalityRowActive : null,
               ]}
               scaleTo={0.97}
             >
@@ -423,7 +447,7 @@ function Step2Modality({ draft, setKey, errors }: StepProps) {
                   active={active}
                 />
               ) : (
-                <View style={styles.modalityIcon}>
+                <View style={s.modalityIcon}>
                   <Text variant="bodySemibold" color="primary">
                     {modalityShortLabel(m as Modality)}
                   </Text>
@@ -440,7 +464,7 @@ function Step2Modality({ draft, setKey, errors }: StepProps) {
                 ) : null}
               </View>
               {active ? (
-                <Check size={20} color={colors.primary} weight="bold" />
+                <Check size={20} color={c.primary} weight="bold" />
               ) : null}
             </PressableScale>
           );
@@ -473,6 +497,8 @@ function Step3TypeLevelPositions({
   togglePosition,
   errors,
 }: StepProps & { togglePosition: (p: Position) => void }) {
+  const c = useColors();
+  const s = useMemo(() => makeStyles(c), [c]);
   const levels: SkillLevel[] = [1, 2, 3, 4, 5];
   const hasPitch = draft.sport === 'futbol' || draft.sport === 'basket';
   const noPositions =
@@ -484,7 +510,7 @@ function Step3TypeLevelPositions({
   );
 
   return (
-    <View style={styles.step}>
+    <View style={staticStyles.step}>
       <StepHeader
         title="Tipo, nivel y posiciones"
         sub="Configura los detalles del partido"
@@ -492,29 +518,31 @@ function Step3TypeLevelPositions({
 
       {/* Match type */}
       <View>
-        <Text variant="caption" color="textSecondary" style={styles.sectionLabel}>
+        <Text variant="caption" color="textSecondary" style={staticStyles.sectionLabel}>
           Tipo de partida
         </Text>
-        <View style={styles.typeList}>
+        <View style={staticStyles.typeList}>
           {(['chill', 'seria', 'competencia'] as MatchType[]).map((t) => {
             const m = matchTypeMeta[t];
             const active = draft.type === t;
+            const typeClr = t === 'chill' ? c.chill : t === 'seria' ? c.seria : c.competencia;
+            const typeSoft = t === 'chill' ? c.chillSoft : t === 'seria' ? c.seriaSoft : c.competenciaSoft;
             return (
               <PressableScale
                 key={t}
                 onPress={() => setKey('type', t)}
                 style={[
-                  styles.typeRow,
+                  staticStyles.typeRow,
                   {
-                    borderColor: active ? m.color : colors.border,
-                    backgroundColor: active ? m.softBg : colors.surface,
+                    borderColor: active ? typeClr : c.border,
+                    backgroundColor: active ? typeSoft : c.surface,
                   },
                 ]}
                 scaleTo={0.98}
               >
-                <Text style={styles.typeEmoji}>{m.emoji}</Text>
+                <Text style={staticStyles.typeEmoji}>{m.emoji}</Text>
                 <View style={{ flex: 1 }}>
-                  <Text variant="bodySemibold" style={{ color: m.color }}>
+                  <Text variant="bodySemibold" style={{ color: typeClr }}>
                     {m.label}
                   </Text>
                   <Text variant="small" color="textSecondary">
@@ -522,7 +550,7 @@ function Step3TypeLevelPositions({
                   </Text>
                 </View>
                 {active ? (
-                  <Check size={20} color={m.color} weight="bold" />
+                  <Check size={20} color={typeClr} weight="bold" />
                 ) : null}
               </PressableScale>
             );
@@ -533,10 +561,10 @@ function Step3TypeLevelPositions({
 
       {/* Skill level */}
       <View>
-        <Text variant="caption" color="textSecondary" style={styles.sectionLabel}>
+        <Text variant="caption" color="textSecondary" style={staticStyles.sectionLabel}>
           Nivel de jugadores requerido
         </Text>
-        <View style={styles.levelStars}>
+        <View style={staticStyles.levelStars}>
           {levels.map((lvl) => {
             const active = draft.skillLevel === lvl;
             return (
@@ -544,8 +572,8 @@ function Step3TypeLevelPositions({
                 key={lvl}
                 onPress={() => setKey('skillLevel', lvl)}
                 style={[
-                  styles.levelBtn,
-                  active ? styles.levelBtnActive : null,
+                  s.levelBtn,
+                  active ? s.levelBtnActive : null,
                 ]}
                 scaleTo={0.94}
               >
@@ -555,7 +583,7 @@ function Step3TypeLevelPositions({
           })}
         </View>
         {draft.skillLevel ? (
-          <View style={styles.levelLabel}>
+          <View style={staticStyles.levelLabel}>
             <Text variant="bodySemibold" color="primary">
               {labelSkill(draft.skillLevel)}
             </Text>
@@ -567,7 +595,7 @@ function Step3TypeLevelPositions({
       {/* Positions */}
       {noPositions ? (
         <View>
-          <Text variant="caption" color="textSecondary" style={styles.sectionLabel}>
+          <Text variant="caption" color="textSecondary" style={staticStyles.sectionLabel}>
             Posiciones
           </Text>
           <Text variant="body" color="textTertiary">
@@ -576,11 +604,11 @@ function Step3TypeLevelPositions({
         </View>
       ) : (
         <View>
-          <Text variant="caption" color="textSecondary" style={styles.sectionLabel}>
+          <Text variant="caption" color="textSecondary" style={staticStyles.sectionLabel}>
             Posiciones que buscas
           </Text>
           {hasPitch && draft.modality ? (
-            <View style={styles.pitchWrap}>
+            <View style={staticStyles.pitchWrap}>
               <PositionPitch
                 sport={draft.sport ?? undefined}
                 modality={draft.modality}
@@ -589,7 +617,7 @@ function Step3TypeLevelPositions({
               />
             </View>
           ) : null}
-          <View style={styles.chipsWrap}>
+          <View style={staticStyles.chipsWrap}>
             {positions.map((p) => (
               <Chip
                 key={p}
@@ -602,31 +630,31 @@ function Step3TypeLevelPositions({
           <ErrorMessage message={errors.positions} />
 
           {/* Missing count stepper */}
-          <View style={styles.countBlock}>
+          <View style={staticStyles.countBlock}>
             <Text variant="caption" color="textSecondary">
               ¿Cuántos jugadores faltan?
             </Text>
-            <View style={styles.counterRow}>
+            <View style={s.counterRow}>
               <PressableScale
-                style={styles.counterBtn}
+                style={s.counterBtn}
                 scaleTo={0.9}
                 onPress={() =>
                   setKey('missingCount', Math.max(1, draft.missingCount - 1))
                 }
               >
-                <Minus size={18} color={colors.textPrimary} weight="bold" />
+                <Minus size={18} color={c.textPrimary} weight="bold" />
               </PressableScale>
-              <Text variant="h2" color="textPrimary" style={styles.counterNum}>
+              <Text variant="h2" color="textPrimary" style={staticStyles.counterNum}>
                 {draft.missingCount}
               </Text>
               <PressableScale
-                style={styles.counterBtn}
+                style={s.counterBtn}
                 scaleTo={0.9}
                 onPress={() =>
                   setKey('missingCount', Math.min(22, draft.missingCount + 1))
                 }
               >
-                <Plus size={18} color={colors.textPrimary} weight="bold" />
+                <Plus size={18} color={c.textPrimary} weight="bold" />
               </PressableScale>
             </View>
           </View>
@@ -643,6 +671,8 @@ function Step3TypeLevelPositions({
 const PRICE_ACCESSORY_ID = 'price-done';
 
 function Step4LocationPrice({ draft, setKey, errors }: StepProps) {
+  const c = useColors();
+  const s = useMemo(() => makeStyles(c), [c]);
   const priceNum = Number(draft.pricePerHour) || 0;
   const vesAmount = usdToVes(priceNum);
   const [locationOpen, setLocationOpen] = useState(false);
@@ -651,27 +681,27 @@ function Step4LocationPrice({ draft, setKey, errors }: StepProps) {
   const [durationOpen, setDurationOpen] = useState(false);
 
   return (
-    <View style={styles.step}>
+    <View style={staticStyles.step}>
       <StepHeader
         title="Ubicación, fecha y precio"
         sub="¿Dónde, cuándo y cuánto costará?"
       />
 
-      <View style={styles.fieldGroup}>
+      <View style={staticStyles.fieldGroup}>
         <TextInput
           label="Cancha"
           placeholder="Nombre de la cancha"
           value={draft.locationName}
           onChangeText={(v) => setKey('locationName', v)}
-          leading={<MapPin size={18} color={colors.textSecondary} weight="fill" />}
+          leading={<MapPin size={18} color={c.textSecondary} weight="fill" />}
           error={errors.locationName}
         />
         <PressableScale
-          style={styles.mapBtn}
+          style={s.mapBtn}
           scaleTo={0.97}
           onPress={() => setLocationOpen(true)}
         >
-          <MapPin size={16} color={colors.primary} weight="bold" />
+          <MapPin size={16} color={c.primary} weight="bold" />
           <Text variant="smallMedium" color="primary">
             Seleccionar en mapa
           </Text>
@@ -687,13 +717,13 @@ function Step4LocationPrice({ draft, setKey, errors }: StepProps) {
 
       <RowBlock
         label="Fecha"
-        icon={<CalendarBlank size={18} color={colors.textSecondary} weight="fill" />}
+        icon={<CalendarBlank size={18} color={c.textSecondary} weight="fill" />}
         value={formatDateLabel(draft.date)}
         onPress={() => setDateOpen(true)}
       />
       <RowBlock
         label="Hora de inicio"
-        icon={<ClockCounterClockwise size={18} color={colors.textSecondary} weight="fill" />}
+        icon={<ClockCounterClockwise size={18} color={c.textSecondary} weight="fill" />}
         value={formatTimeLabel(draft.date)}
         onPress={() => setTimeOpen(true)}
       />
@@ -704,17 +734,17 @@ function Step4LocationPrice({ draft, setKey, errors }: StepProps) {
       />
 
       {/* Price */}
-      <View style={styles.priceField}>
+      <View style={staticStyles.priceField}>
         <Text variant="caption" color="textSecondary">
           Precio por hora de la cancha
         </Text>
         <View
           style={[
-            styles.priceRow,
-            errors.pricePerHour ? styles.priceRowError : null,
+            s.priceRow,
+            errors.pricePerHour ? s.priceRowError : null,
           ]}
         >
-          <View style={styles.priceInputWrap}>
+          <View style={staticStyles.priceInputWrap}>
             <Text variant="h1" color="textPrimary">
               $
             </Text>
@@ -728,17 +758,17 @@ function Step4LocationPrice({ draft, setKey, errors }: StepProps) {
               returnKeyType="done"
               onSubmitEditing={Keyboard.dismiss}
               inputAccessoryViewID={Platform.OS === 'ios' ? PRICE_ACCESSORY_ID : undefined}
-              inputStyle={styles.priceInput}
-              containerStyle={styles.priceInputContainer}
+              inputStyle={staticStyles.priceInput}
+              containerStyle={staticStyles.priceInputContainer}
             />
           </View>
-          <View style={styles.currencyPill}>
+          <View style={s.currencyPill}>
             <Text variant="smallMedium" color="textPrimary">
               USD
             </Text>
           </View>
         </View>
-        <View style={styles.conversionRow}>
+        <View style={staticStyles.conversionRow}>
           <Text variant="small" color="textSecondary">
             ≈ {formatVes(vesAmount)}
           </Text>
@@ -751,7 +781,7 @@ function Step4LocationPrice({ draft, setKey, errors }: StepProps) {
 
       {Platform.OS === 'ios' ? (
         <InputAccessoryView nativeID={PRICE_ACCESSORY_ID}>
-          <View style={styles.inputAccessory}>
+          <View style={s.inputAccessory}>
             <PressableScale onPress={Keyboard.dismiss} scaleTo={0.95}>
               <Text variant="bodySemibold" color="primary">
                 Listo
@@ -765,10 +795,10 @@ function Step4LocationPrice({ draft, setKey, errors }: StepProps) {
         visible={locationOpen}
         onClose={() => setLocationOpen(false)}
         filterSport={draft.sport}
-        onSelect={(c) => {
-          setKey('locationAddress', c.address);
-          setKey('locationLat', c.lat);
-          setKey('locationLng', c.lng);
+        onSelect={(cancha) => {
+          setKey('locationAddress', cancha.address);
+          setKey('locationLat', cancha.lat);
+          setKey('locationLng', cancha.lng);
         }}
       />
       <DateTimePickerSheet
@@ -817,12 +847,14 @@ function Step5PaymentsExtras({
   togglePayment: (m: PaymentMethod) => void;
   toggleRequirement: (r: string) => void;
 }) {
+  const c = useColors();
+  const s = useMemo(() => makeStyles(c), [c]);
   const typeMeta = draft.type ? matchTypeMeta[draft.type] : null;
   const priceNum = Number(draft.pricePerHour) || 0;
   const reqs = draft.sport ? REQUIREMENTS_BY_SPORT[draft.sport] : DEFAULT_REQUIREMENTS;
 
   return (
-    <View style={styles.step}>
+    <View style={staticStyles.step}>
       <StepHeader
         title="Pagos, requisitos y resumen"
         sub="Configura cómo pagan y qué se requiere"
@@ -830,7 +862,7 @@ function Step5PaymentsExtras({
 
       {/* Payment methods */}
       <View>
-        <Text variant="caption" color="textSecondary" style={styles.sectionLabel}>
+        <Text variant="caption" color="textSecondary" style={staticStyles.sectionLabel}>
           Métodos de pago aceptados
         </Text>
         <Card>
@@ -838,7 +870,7 @@ function Step5PaymentsExtras({
             <View key={m}>
               <PressableScale
                 onPress={() => togglePayment(m)}
-                style={styles.payRow}
+                style={staticStyles.payRow}
                 scaleTo={0.98}
               >
                 <Text variant="body" color="textPrimary">
@@ -846,17 +878,17 @@ function Step5PaymentsExtras({
                 </Text>
                 <View
                   style={[
-                    styles.check,
-                    draft.paymentMethods.includes(m) ? styles.checkOn : null,
+                    s.check,
+                    draft.paymentMethods.includes(m) ? s.checkOn : null,
                   ]}
                 >
                   {draft.paymentMethods.includes(m) ? (
-                    <Check size={14} color={colors.bg} weight="bold" />
+                    <Check size={14} color={c.bg} weight="bold" />
                   ) : null}
                 </View>
               </PressableScale>
               {i < PAYMENT_METHODS.length - 1 ? (
-                <View style={styles.payDivider} />
+                <View style={s.payDivider} />
               ) : null}
             </View>
           ))}
@@ -866,11 +898,11 @@ function Step5PaymentsExtras({
 
       {/* Exchange rate */}
       <View>
-        <Text variant="caption" color="textSecondary" style={styles.sectionLabel}>
+        <Text variant="caption" color="textSecondary" style={staticStyles.sectionLabel}>
           Tasa de cambio
         </Text>
         <Card>
-          <View style={styles.payRow}>
+          <View style={staticStyles.payRow}>
             <Text variant="body" color="textPrimary">
               BCV
             </Text>
@@ -886,22 +918,22 @@ function Step5PaymentsExtras({
         <Text variant="caption" color="textSecondary">
           Verificaciones / Requisitos (opcional)
         </Text>
-        <View style={styles.reqList}>
+        <View style={staticStyles.reqList}>
           {reqs.map((r) => (
             <PressableScale
               key={r}
               onPress={() => toggleRequirement(r)}
-              style={styles.reqRow}
+              style={s.reqRow}
               scaleTo={0.98}
             >
               <View
                 style={[
-                  styles.check,
-                  draft.requirements.includes(r) ? styles.checkOn : null,
+                  s.check,
+                  draft.requirements.includes(r) ? s.checkOn : null,
                 ]}
               >
                 {draft.requirements.includes(r) ? (
-                  <Check size={14} color={colors.bg} weight="bold" />
+                  <Check size={14} color={c.bg} weight="bold" />
                 ) : null}
               </View>
               <Text variant="body" color="textPrimary" style={{ flex: 1 }}>
@@ -910,7 +942,7 @@ function Step5PaymentsExtras({
             </PressableScale>
           ))}
         </View>
-        <View style={styles.customReqWrap}>
+        <View style={staticStyles.customReqWrap}>
           <TextInput
             label="Requisito personalizado (opcional)"
             placeholder="Ej: Camiseta blanca obligatoria"
@@ -922,12 +954,12 @@ function Step5PaymentsExtras({
       </View>
 
       {/* Summary */}
-      <Text variant="caption" color="textSecondary" style={styles.sectionLabel}>
+      <Text variant="caption" color="textSecondary" style={staticStyles.sectionLabel}>
         Resumen de tu partida
       </Text>
       <Card>
-        <View style={styles.summaryRow}>
-          <Text style={styles.summaryEmoji}>{typeMeta?.emoji ?? '⚽'}</Text>
+        <View style={staticStyles.summaryRow}>
+          <Text style={staticStyles.summaryEmoji}>{typeMeta?.emoji ?? '⚽'}</Text>
           <View style={{ flex: 1 }}>
             <Text variant="bodySemibold" color="textPrimary">
               {draft.modality ? labelModality(draft.modality) : '—'}
@@ -964,17 +996,19 @@ function RowBlock({
   icon?: ReactNode;
   onPress?: () => void;
 }) {
+  const c = useColors();
+  const s = useMemo(() => makeStyles(c), [c]);
   const content = (
-    <View style={styles.rowBlock}>
+    <View style={staticStyles.rowBlock}>
       <Text variant="caption" color="textSecondary">
         {label}
       </Text>
-      <View style={styles.rowField}>
+      <View style={s.rowField}>
         {icon}
         <Text variant="body" color="textPrimary" style={{ flex: 1 }}>
           {value}
         </Text>
-        <CaretRight size={16} color={colors.textTertiary} weight="bold" />
+        <CaretRight size={16} color={c.textTertiary} weight="bold" />
       </View>
     </View>
   );
@@ -988,68 +1022,16 @@ function RowBlock({
   return content;
 }
 
-const styles = StyleSheet.create({
-  stepperWrap: {
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.sm,
-  },
-  scroll: {
-    paddingHorizontal: spacing.lg,
-    paddingBottom: 140,
-  },
+// ---------------------------------------------------------------------------
+// Static styles (no color tokens)
+// ---------------------------------------------------------------------------
+
+const staticStyles = StyleSheet.create({
   step: { gap: spacing.lg, paddingTop: spacing.md },
   stepHead: { gap: spacing.xs },
   sportList: { gap: spacing.sm },
-  sportRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md,
-    padding: spacing.md,
-    backgroundColor: colors.surface,
-    borderRadius: radius.lg,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  sportEmojiWrap: {
-    width: 44,
-    height: 44,
-    borderRadius: radius.full,
-    backgroundColor: colors.primarySoft,
-    borderWidth: 1,
-    borderColor: colors.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
   sportEmoji: { fontSize: 24, lineHeight: 30, textAlign: 'center' },
-  sportRowActive: {
-    borderColor: colors.primary,
-    backgroundColor: colors.primarySoft,
-  },
   modalityList: { gap: spacing.sm },
-  modalityRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md,
-    padding: spacing.lg,
-    backgroundColor: colors.surface,
-    borderRadius: radius.lg,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  modalityRowActive: {
-    borderColor: colors.primary,
-    backgroundColor: colors.primarySoft,
-  },
-  modalityIcon: {
-    width: 44,
-    height: 44,
-    borderRadius: radius.sm,
-    backgroundColor: colors.primarySoft,
-    borderWidth: 1,
-    borderColor: colors.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
   typeList: { gap: spacing.sm },
   typeEmoji: { fontSize: 28, lineHeight: 36, width: 36, textAlign: 'center' },
   typeRow: {
@@ -1066,21 +1048,6 @@ const styles = StyleSheet.create({
     gap: spacing.xs,
     justifyContent: 'space-between',
   },
-  levelBtn: {
-    flex: 1,
-    paddingVertical: spacing.md,
-    backgroundColor: colors.surface,
-    borderRadius: radius.md,
-    borderWidth: 1,
-    borderColor: colors.border,
-    alignItems: 'center',
-    minHeight: 44,
-    justifyContent: 'center',
-  },
-  levelBtnActive: {
-    backgroundColor: colors.primarySoft,
-    borderColor: colors.primary,
-  },
   levelLabel: { alignItems: 'center', marginTop: spacing.sm },
   pitchWrap: { marginBottom: spacing.md },
   chipsWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
@@ -1089,64 +1056,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginTop: spacing.lg,
   },
-  counterRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.xl,
-    backgroundColor: colors.surface,
-    paddingHorizontal: spacing.xl,
-    paddingVertical: spacing.sm,
-    borderRadius: radius.full,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  counterBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: radius.full,
-    backgroundColor: colors.surfaceElevated,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
   counterNum: { minWidth: 32, textAlign: 'center' },
   fieldGroup: { gap: spacing.sm },
-  mapBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.xs,
-    alignSelf: 'flex-start',
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    backgroundColor: colors.primarySoft,
-    borderRadius: radius.full,
-    borderWidth: 1,
-    borderColor: colors.primary,
-  },
   rowBlock: { gap: spacing.xs },
-  rowField: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.md,
-    backgroundColor: colors.surface,
-    borderRadius: radius.md,
-    borderWidth: 1,
-    borderColor: colors.border,
-    minHeight: 50,
-  },
   priceField: { gap: spacing.sm },
-  priceRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md,
-    padding: spacing.md,
-    backgroundColor: colors.surface,
-    borderRadius: radius.md,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  priceRowError: { borderColor: colors.alert },
   priceInputWrap: {
     flex: 1,
     flexDirection: 'row',
@@ -1155,12 +1068,6 @@ const styles = StyleSheet.create({
   },
   priceInputContainer: { flex: 1 },
   priceInput: { fontSize: 28, paddingVertical: 0 },
-  currencyPill: {
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    borderRadius: radius.sm,
-    backgroundColor: colors.surfaceElevated,
-  },
   conversionRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1173,29 +1080,8 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingVertical: spacing.md,
   },
-  payDivider: { height: 1, backgroundColor: colors.border },
-  check: {
-    width: 22,
-    height: 22,
-    borderRadius: radius.sm,
-    borderWidth: 1.5,
-    borderColor: colors.border,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  checkOn: { backgroundColor: colors.primary, borderColor: colors.primary },
   reqList: { gap: spacing.sm, marginTop: spacing.sm, marginBottom: spacing.lg },
   customReqWrap: { marginTop: spacing.sm },
-  reqRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md,
-    padding: spacing.md,
-    backgroundColor: colors.surface,
-    borderRadius: radius.md,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
   summaryRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1208,24 +1094,185 @@ const styles = StyleSheet.create({
     gap: spacing.xs,
     marginTop: spacing.xs,
   },
-  inputAccessory: {
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.sm,
-    backgroundColor: colors.surface,
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
-  },
-  footer: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 0,
-    padding: spacing.lg,
-    paddingBottom: spacing.xxl,
-    backgroundColor: colors.bg,
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
-  },
 });
+
+// ---------------------------------------------------------------------------
+// Dynamic styles factory
+// ---------------------------------------------------------------------------
+
+function makeStyles(c: ColorPalette) {
+  return StyleSheet.create({
+    stepperWrap: {
+      paddingHorizontal: spacing.lg,
+      paddingVertical: spacing.sm,
+    },
+    scroll: {
+      paddingHorizontal: spacing.lg,
+      paddingBottom: 120,
+    },
+    sportRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.md,
+      padding: spacing.md,
+      backgroundColor: c.surface,
+      borderRadius: radius.lg,
+      borderWidth: 1,
+      borderColor: c.border,
+    },
+    sportEmojiWrap: {
+      width: 44,
+      height: 44,
+      borderRadius: radius.full,
+      backgroundColor: c.primarySoft,
+      borderWidth: 1,
+      borderColor: c.primary,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    sportRowActive: {
+      borderColor: c.primary,
+      backgroundColor: c.primarySoft,
+    },
+    modalityRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.md,
+      padding: spacing.lg,
+      backgroundColor: c.surface,
+      borderRadius: radius.lg,
+      borderWidth: 1,
+      borderColor: c.border,
+    },
+    modalityRowActive: {
+      borderColor: c.primary,
+      backgroundColor: c.primarySoft,
+    },
+    modalityIcon: {
+      width: 44,
+      height: 44,
+      borderRadius: radius.sm,
+      backgroundColor: c.primarySoft,
+      borderWidth: 1,
+      borderColor: c.primary,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    levelBtn: {
+      flex: 1,
+      paddingVertical: spacing.md,
+      backgroundColor: c.surface,
+      borderRadius: radius.md,
+      borderWidth: 1,
+      borderColor: c.border,
+      alignItems: 'center',
+      minHeight: 44,
+      justifyContent: 'center',
+    },
+    levelBtnActive: {
+      backgroundColor: c.primarySoft,
+      borderColor: c.primary,
+    },
+    counterRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.xl,
+      backgroundColor: c.surface,
+      paddingHorizontal: spacing.xl,
+      paddingVertical: spacing.sm,
+      borderRadius: radius.full,
+      borderWidth: 1,
+      borderColor: c.border,
+    },
+    counterBtn: {
+      width: 36,
+      height: 36,
+      borderRadius: radius.full,
+      backgroundColor: c.surfaceElevated,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    mapBtn: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.xs,
+      alignSelf: 'flex-start',
+      paddingHorizontal: spacing.md,
+      paddingVertical: spacing.sm,
+      backgroundColor: c.primarySoft,
+      borderRadius: radius.full,
+      borderWidth: 1,
+      borderColor: c.primary,
+    },
+    rowField: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.md,
+      paddingHorizontal: spacing.md,
+      paddingVertical: spacing.md,
+      backgroundColor: c.surface,
+      borderRadius: radius.md,
+      borderWidth: 1,
+      borderColor: c.border,
+      minHeight: 50,
+    },
+    priceRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.md,
+      padding: spacing.md,
+      backgroundColor: c.surface,
+      borderRadius: radius.md,
+      borderWidth: 1,
+      borderColor: c.border,
+    },
+    priceRowError: { borderColor: c.alert },
+    currencyPill: {
+      paddingHorizontal: spacing.md,
+      paddingVertical: spacing.sm,
+      borderRadius: radius.sm,
+      backgroundColor: c.surfaceElevated,
+    },
+    payDivider: { height: 1, backgroundColor: c.border },
+    check: {
+      width: 22,
+      height: 22,
+      borderRadius: radius.sm,
+      borderWidth: 1.5,
+      borderColor: c.border,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    checkOn: { backgroundColor: c.primary, borderColor: c.primary },
+    reqRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.md,
+      padding: spacing.md,
+      backgroundColor: c.surface,
+      borderRadius: radius.md,
+      borderWidth: 1,
+      borderColor: c.border,
+    },
+    inputAccessory: {
+      flexDirection: 'row',
+      justifyContent: 'flex-end',
+      paddingHorizontal: spacing.lg,
+      paddingVertical: spacing.sm,
+      backgroundColor: c.surface,
+      borderTopWidth: 1,
+      borderTopColor: c.border,
+    },
+    footer: {
+      position: 'absolute',
+      left: 0,
+      right: 0,
+      bottom: 0,
+      padding: spacing.lg,
+      paddingBottom: spacing.xxl,
+      backgroundColor: c.bg,
+      borderTopWidth: 1,
+      borderTopColor: c.border,
+    },
+  });
+}

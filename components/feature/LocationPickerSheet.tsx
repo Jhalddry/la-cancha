@@ -7,7 +7,9 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Button } from '@/components/ui/Button';
 import { Text } from '@/components/ui/Text';
 import { CARACAS_CENTER, mockCanchas, type Cancha } from '@/data/canchas';
-import { colors, radius, spacing } from '@/theme';
+import { useColors } from '@/hooks/useColors';
+import { radius, spacing } from '@/theme';
+import type { ColorPalette } from '@/theme/palettes';
 import type { Sport } from '@/types/domain';
 
 interface Props {
@@ -32,12 +34,14 @@ export function LocationPickerSheet({
   onSelect,
   filterSport,
 }: Props) {
+  const c = useColors();
+  const s = useMemo(() => makeStyles(c), [c]);
   const insets = useSafeAreaInsets();
   const [pin, setPin] = useState<Pin | null>(null);
 
   const canchas = useMemo(() => {
     if (!filterSport) return mockCanchas;
-    const matching = mockCanchas.filter((c) => c.sports.includes(filterSport));
+    const matching = mockCanchas.filter((ca) => ca.sports.includes(filterSport));
     return matching.length > 0 ? matching : mockCanchas;
   }, [filterSport]);
 
@@ -75,20 +79,20 @@ export function LocationPickerSheet({
       onRequestClose={resetAndClose}
       statusBarTranslucent
     >
-      <View style={[styles.container, { paddingTop: insets.top }]}>
-        <View style={styles.header}>
-          <Pressable onPress={resetAndClose} hitSlop={12} style={styles.headerBtn}>
+      <View style={[s.container, { paddingTop: insets.top }]}>
+        <View style={s.header}>
+          <Pressable onPress={resetAndClose} hitSlop={12} style={s.headerBtn}>
             <Text variant="bodyMedium" color="primary">
               Cancelar
             </Text>
           </Pressable>
           <Text variant="bodySemibold">Seleccionar ubicación</Text>
-          <View style={styles.headerBtn} />
+          <View style={s.headerBtn} />
         </View>
 
         <MapView
           provider={PROVIDER_DEFAULT}
-          style={styles.map}
+          style={s.map}
           initialRegion={{
             latitude: CARACAS_CENTER.lat,
             longitude: CARACAS_CENTER.lng,
@@ -100,25 +104,25 @@ export function LocationPickerSheet({
             setPin({ kind: 'custom', lat: latitude, lng: longitude });
           }}
         >
-          {canchas.map((c) => (
+          {canchas.map((ca) => (
             <Marker
-              key={c.id}
-              coordinate={{ latitude: c.lat, longitude: c.lng }}
-              title={c.name}
-              description={c.address}
+              key={ca.id}
+              coordinate={{ latitude: ca.lat, longitude: ca.lng }}
+              title={ca.name}
+              description={ca.address}
               pinColor={
-                pin?.kind === 'cancha' && pin.cancha.id === c.id ? '#7BFF00' : '#FF3B30'
+                pin?.kind === 'cancha' && pin.cancha.id === ca.id ? c.primary : '#FF3B30'
               }
               onPress={(e) => {
                 e.stopPropagation();
-                setPin({ kind: 'cancha', cancha: c });
-                  }}
+                setPin({ kind: 'cancha', cancha: ca });
+              }}
             />
           ))}
           {pin?.kind === 'custom' ? (
             <Marker
               coordinate={{ latitude: pin.lat, longitude: pin.lng }}
-              pinColor="#7BFF00"
+              pinColor={c.primary}
               title="Ubicación personalizada"
             />
           ) : null}
@@ -126,14 +130,14 @@ export function LocationPickerSheet({
 
         <View
           style={[
-            styles.bottomSheet,
+            s.bottomSheet,
             { paddingBottom: insets.bottom + spacing.lg },
           ]}
         >
           {pin?.kind === 'cancha' ? (
-            <View style={styles.selectedCard}>
-              <View style={styles.selectedIcon}>
-                <MapPin size={20} color={colors.primary} weight="fill" />
+            <View style={s.selectedCard}>
+              <View style={s.selectedIcon}>
+                <MapPin size={20} color={c.primary} weight="fill" />
               </View>
               <View style={{ flex: 1 }}>
                 <Text variant="bodySemibold" color="textPrimary">
@@ -145,14 +149,14 @@ export function LocationPickerSheet({
               </View>
             </View>
           ) : pin?.kind === 'custom' ? (
-            <View style={styles.coordsRow}>
-              <MapPin size={16} color={colors.primary} weight="fill" />
+            <View style={s.coordsRow}>
+              <MapPin size={16} color={c.primary} weight="fill" />
               <Text variant="small" color="textSecondary">
                 Ubicación personalizada · {pin.lat.toFixed(4)}, {pin.lng.toFixed(4)}
               </Text>
             </View>
           ) : (
-            <Text variant="body" color="textSecondary" style={styles.hint}>
+            <Text variant="body" color="textSecondary" style={s.hint}>
               Toca un pin existente o cualquier punto del mapa para elegir ubicación
             </Text>
           )}
@@ -167,48 +171,50 @@ export function LocationPickerSheet({
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.bg },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-  },
-  headerBtn: { minWidth: 80 },
-  map: { flex: 1 },
-  bottomSheet: {
-    backgroundColor: colors.surface,
-    padding: spacing.lg,
-    gap: spacing.md,
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
-  },
-  hint: { textAlign: 'center', paddingVertical: spacing.md },
-  selectedCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md,
-    padding: spacing.md,
-    backgroundColor: colors.primarySoft,
-    borderRadius: radius.md,
-    borderWidth: 1,
-    borderColor: colors.primary,
-  },
-  selectedIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: radius.full,
-    backgroundColor: colors.bg,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  coordsRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.xs,
-  },
-});
+function makeStyles(c: ColorPalette) {
+  return StyleSheet.create({
+    container: { flex: 1, backgroundColor: c.bg },
+    header: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingHorizontal: spacing.lg,
+      paddingVertical: spacing.md,
+      borderBottomWidth: 1,
+      borderBottomColor: c.border,
+    },
+    headerBtn: { minWidth: 80 },
+    map: { flex: 1 },
+    bottomSheet: {
+      backgroundColor: c.surface,
+      padding: spacing.lg,
+      gap: spacing.md,
+      borderTopWidth: 1,
+      borderTopColor: c.border,
+    },
+    hint: { textAlign: 'center', paddingVertical: spacing.md },
+    selectedCard: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.md,
+      padding: spacing.md,
+      backgroundColor: c.primarySoft,
+      borderRadius: radius.md,
+      borderWidth: 1,
+      borderColor: c.primary,
+    },
+    selectedIcon: {
+      width: 40,
+      height: 40,
+      borderRadius: radius.full,
+      backgroundColor: c.bg,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    coordsRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.xs,
+    },
+  });
+}

@@ -1,6 +1,9 @@
+import { useMemo } from 'react';
 import { StyleSheet, View } from 'react-native';
 
-import { colors, spacing } from '@/theme';
+import { useColors } from '@/hooks/useColors';
+import { spacing } from '@/theme';
+import type { ColorPalette } from '@/theme/palettes';
 
 interface Props {
   vertical?: boolean;
@@ -8,6 +11,9 @@ interface Props {
 }
 
 export function Divider({ vertical, inset }: Props) {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
+
   return (
     <View
       style={[
@@ -18,18 +24,20 @@ export function Divider({ vertical, inset }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
-  horizontal: {
-    height: StyleSheet.hairlineWidth,
-    backgroundColor: colors.border,
-    alignSelf: 'stretch',
-  },
-  vertical: {
-    width: StyleSheet.hairlineWidth,
-    backgroundColor: colors.border,
-    alignSelf: 'stretch',
-  },
-  inset: {
-    marginHorizontal: spacing.lg,
-  },
-});
+function makeStyles(c: ColorPalette) {
+  return StyleSheet.create({
+    horizontal: {
+      height: StyleSheet.hairlineWidth,
+      backgroundColor: c.border,
+      alignSelf: 'stretch',
+    },
+    vertical: {
+      width: StyleSheet.hairlineWidth,
+      backgroundColor: c.border,
+      alignSelf: 'stretch',
+    },
+    inset: {
+      marginHorizontal: spacing.lg,
+    },
+  });
+}

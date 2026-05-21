@@ -1,4 +1,5 @@
 import { useRouter } from 'expo-router';
+import { useMemo } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 
 import { BackHeader } from '@/components/ui/BackHeader';
@@ -7,7 +8,9 @@ import { Card } from '@/components/ui/Card';
 import { Chip } from '@/components/ui/Chip';
 import { Screen } from '@/components/ui/Screen';
 import { Text } from '@/components/ui/Text';
-import { colors, spacing } from '@/theme';
+import { useColors } from '@/hooks/useColors';
+import type { ColorPalette } from '@/theme/palettes';
+import { spacing } from '@/theme';
 
 interface PastMatch {
   id: string;
@@ -35,7 +38,7 @@ function resultColor(result: string): 'primary' | 'alert' | 'textPrimary' {
 
 function StatBox({ value, label }: { value: string; label: string }) {
   return (
-    <View style={styles.statBox}>
+    <View style={staticStyles.statBox}>
       <Text variant="h3" color="primary">
         {value}
       </Text>
@@ -48,21 +51,23 @@ function StatBox({ value, label }: { value: string; label: string }) {
 
 export default function HistorialScreen() {
   const router = useRouter();
+  const c = useColors();
+  const s = useMemo(() => makeStyles(c), [c]);
 
   return (
     <Screen>
       <BackHeader title="Historial" onBack={() => router.back()} />
       <ScrollView
-        contentContainerStyle={styles.content}
+        contentContainerStyle={s.content}
         showsVerticalScrollIndicator={false}
       >
         {/* Stats row */}
         <Card>
-          <View style={styles.statsRow}>
+          <View style={staticStyles.statsRow}>
             <StatBox value="5" label="Partidas jugadas" />
-            <View style={styles.statDivider} />
+            <View style={s.statDivider} />
             <StatBox value="3" label="Victorias" />
-            <View style={styles.statDivider} />
+            <View style={s.statDivider} />
             <StatBox value="60%" label="Efectividad" />
           </View>
         </Card>
@@ -71,7 +76,7 @@ export default function HistorialScreen() {
         {PAST_MATCHES.map((match) => (
           <Card key={match.id}>
             {/* Top row */}
-            <View style={styles.cardTopRow}>
+            <View style={staticStyles.cardTopRow}>
               <Text variant="bodySemibold" color="textPrimary">
                 {match.sport}
               </Text>
@@ -82,7 +87,7 @@ export default function HistorialScreen() {
             </View>
 
             {/* Middle row */}
-            <View style={styles.cardMidRow}>
+            <View style={staticStyles.cardMidRow}>
               <Text variant="small" color="textSecondary">
                 {match.location}
               </Text>
@@ -92,7 +97,7 @@ export default function HistorialScreen() {
             </View>
 
             {/* Bottom row */}
-            <View style={styles.cardBottomRow}>
+            <View style={staticStyles.cardBottomRow}>
               <Text variant="bodyMedium" color={resultColor(match.result)}>
                 {match.result}
               </Text>
@@ -105,13 +110,7 @@ export default function HistorialScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  content: {
-    paddingHorizontal: spacing.lg,
-    paddingTop: spacing.md,
-    paddingBottom: spacing.huge,
-    gap: spacing.xl,
-  },
+const staticStyles = StyleSheet.create({
   statsRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -121,11 +120,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: spacing.xs,
     flex: 1,
-  },
-  statDivider: {
-    width: 1,
-    height: 36,
-    backgroundColor: colors.border,
   },
   cardTopRow: {
     flexDirection: 'row',
@@ -145,3 +139,19 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
 });
+
+function makeStyles(c: ColorPalette) {
+  return StyleSheet.create({
+    content: {
+      paddingHorizontal: spacing.lg,
+      paddingTop: spacing.md,
+      paddingBottom: spacing.huge,
+      gap: spacing.xl,
+    },
+    statDivider: {
+      width: 1,
+      height: 36,
+      backgroundColor: c.border,
+    },
+  });
+}

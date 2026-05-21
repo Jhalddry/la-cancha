@@ -1,6 +1,6 @@
 import { useRouter } from 'expo-router';
 import { Camera } from 'phosphor-react-native';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 
 import { Avatar } from '@/components/ui/Avatar';
@@ -14,9 +14,11 @@ import { Stars } from '@/components/ui/Stars';
 import { Text } from '@/components/ui/Text';
 import { TextInput } from '@/components/ui/TextInput';
 import { footballPositionsByModality, basketPositionsByModality } from '@/features/match/helpers';
+import { useColors } from '@/hooks/useColors';
 import { labelPosition, labelSkill, labelSport } from '@/lib/format';
 import { useSession } from '@/store/session';
-import { colors, radius, spacing } from '@/theme';
+import { radius, spacing } from '@/theme';
+import type { ColorPalette } from '@/theme/palettes';
 import type { Position, SkillLevel, Sport } from '@/types/domain';
 
 const ALL_SPORTS: Sport[] = ['futbol', 'tenis', 'padel', 'beachTennis', 'basket'];
@@ -41,8 +43,11 @@ export default function EditPerfilScreen() {
   const [sports, setSports] = useState<Sport[]>(user?.sports ?? []);
   const [positions, setPositions] = useState<Position[]>(user?.positions ?? []);
 
-  const toggleSport = (s: Sport) =>
-    setSports((cur) => (cur.includes(s) ? cur.filter((x) => x !== s) : [...cur, s]));
+  const c = useColors();
+  const s = useMemo(() => makeStyles(c), [c]);
+
+  const toggleSport = (sp: Sport) =>
+    setSports((cur) => (cur.includes(sp) ? cur.filter((x) => x !== sp) : [...cur, sp]));
   const togglePosition = (p: Position) =>
     setPositions((cur) => (cur.includes(p) ? cur.filter((x) => x !== p) : [...cur, p]));
 
@@ -75,14 +80,14 @@ export default function EditPerfilScreen() {
     <Screen edges={['top']}>
       <BackHeader title="Editar perfil" transparent />
       <ScrollView
-        contentContainerStyle={styles.scroll}
+        contentContainerStyle={s.scroll}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
       >
-        <View style={styles.avatarWrap}>
+        <View style={s.avatarWrap}>
           <Avatar name={name || '?'} size={96} />
-          <PressableScale style={styles.cameraBtn} scaleTo={0.9}>
-            <Camera size={18} color={colors.bg} weight="fill" />
+          <PressableScale style={s.cameraBtn} scaleTo={0.9}>
+            <Camera size={18} color={c.bg} weight="fill" />
           </PressableScale>
         </View>
 
@@ -99,35 +104,35 @@ export default function EditPerfilScreen() {
           onChangeText={setBio}
           multiline
           numberOfLines={3}
-          inputStyle={styles.bioInput}
+          inputStyle={s.bioInput}
         />
 
-        <View style={styles.section}>
+        <View style={s.section}>
           <Text variant="caption" color="textSecondary">
             Deportes que practicas
           </Text>
-          <View style={styles.sportsRow}>
-            {ALL_SPORTS.map((s) => {
-              const active = sports.includes(s);
+          <View style={s.sportsRow}>
+            {ALL_SPORTS.map((sp) => {
+              const active = sports.includes(sp);
               return (
                 <PressableScale
-                  key={s}
-                  onPress={() => toggleSport(s)}
-                  style={styles.sportItem}
+                  key={sp}
+                  onPress={() => toggleSport(sp)}
+                  style={s.sportItem}
                   scaleTo={0.94}
                 >
                   <IconCircle
                     size={56}
-                    bg={active ? colors.primarySoft : colors.surface}
-                    border={active ? colors.primary : colors.border}
+                    bg={active ? c.primarySoft : c.surface}
+                    border={active ? c.primary : c.border}
                   >
-                    <Text style={styles.sportEmoji}>{SPORT_EMOJIS[s]}</Text>
+                    <Text style={s.sportEmoji}>{SPORT_EMOJIS[sp]}</Text>
                   </IconCircle>
                   <Text
                     variant="caption"
                     color={active ? 'primary' : 'textSecondary'}
                   >
-                    {labelSport(s)}
+                    {labelSport(sp)}
                   </Text>
                 </PressableScale>
               );
@@ -135,18 +140,18 @@ export default function EditPerfilScreen() {
           </View>
         </View>
 
-        <View style={styles.section}>
+        <View style={s.section}>
           <Text variant="caption" color="textSecondary">
             Nivel de juego
           </Text>
-          <View style={styles.levelRow}>
+          <View style={s.levelRow}>
             {ALL_LEVELS.map((lvl) => (
               <PressableScale
                 key={lvl}
                 onPress={() => setSkill(lvl)}
                 style={[
-                  styles.levelBtn,
-                  skill === lvl ? styles.levelBtnActive : null,
+                  s.levelBtn,
+                  skill === lvl ? s.levelBtnActive : null,
                 ]}
                 scaleTo={0.94}
               >
@@ -154,16 +159,16 @@ export default function EditPerfilScreen() {
               </PressableScale>
             ))}
           </View>
-          <Text variant="bodySemibold" color="primary" style={styles.levelLabel}>
+          <Text variant="bodySemibold" color="primary" style={s.levelLabel}>
             {labelSkill(skill)}
           </Text>
         </View>
 
-        <View style={styles.section}>
+        <View style={s.section}>
           <Text variant="caption" color="textSecondary">
             Posiciones que juegas
           </Text>
-          <View style={styles.chipsWrap}>
+          <View style={s.chipsWrap}>
             {availablePositions.map((p) => (
               <Chip
                 key={p}
@@ -175,60 +180,62 @@ export default function EditPerfilScreen() {
           </View>
         </View>
       </ScrollView>
-      <View style={styles.footer}>
+      <View style={s.footer}>
         <Button label="Guardar cambios" onPress={save} />
       </View>
     </Screen>
   );
 }
 
-const styles = StyleSheet.create({
-  scroll: {
-    paddingHorizontal: spacing.lg,
-    paddingTop: spacing.md,
-    paddingBottom: 120,
-    gap: spacing.lg,
-  },
-  avatarWrap: { alignSelf: 'center', marginVertical: spacing.md },
-  cameraBtn: {
-    position: 'absolute',
-    bottom: 0,
-    right: 0,
-    width: 36,
-    height: 36,
-    borderRadius: radius.full,
-    backgroundColor: colors.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 3,
-    borderColor: colors.bg,
-  },
-  bioInput: { minHeight: 88, textAlignVertical: 'top', paddingTop: spacing.md },
-  section: { gap: spacing.sm },
-  sportsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md },
-  sportItem: { alignItems: 'center', gap: spacing.xs, width: 64 },
-  sportEmoji: { fontSize: 24, lineHeight: 30, textAlign: 'center' },
-  levelRow: { flexDirection: 'row', gap: spacing.xs },
-  levelBtn: {
-    flex: 1,
-    paddingVertical: spacing.md,
-    paddingHorizontal: 0,
-    backgroundColor: colors.surface,
-    borderRadius: radius.md,
-    borderWidth: 1,
-    borderColor: colors.border,
-    alignItems: 'center',
-    justifyContent: 'center',
-    minHeight: 44,
-  },
-  levelBtnActive: { backgroundColor: colors.primarySoft, borderColor: colors.primary },
-  levelLabel: { textAlign: 'center' },
-  chipsWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
-  footer: {
-    padding: spacing.lg,
-    paddingBottom: spacing.xxl,
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
-    backgroundColor: colors.bg,
-  },
-});
+function makeStyles(c: ColorPalette) {
+  return StyleSheet.create({
+    scroll: {
+      paddingHorizontal: spacing.lg,
+      paddingTop: spacing.md,
+      paddingBottom: 120,
+      gap: spacing.lg,
+    },
+    avatarWrap: { alignSelf: 'center', marginVertical: spacing.md },
+    cameraBtn: {
+      position: 'absolute',
+      bottom: 0,
+      right: 0,
+      width: 36,
+      height: 36,
+      borderRadius: radius.full,
+      backgroundColor: c.primary,
+      alignItems: 'center',
+      justifyContent: 'center',
+      borderWidth: 3,
+      borderColor: c.bg,
+    },
+    bioInput: { minHeight: 88, textAlignVertical: 'top', paddingTop: spacing.md },
+    section: { gap: spacing.sm },
+    sportsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md },
+    sportItem: { alignItems: 'center', gap: spacing.xs, width: 64 },
+    sportEmoji: { fontSize: 24, lineHeight: 30, textAlign: 'center' },
+    levelRow: { flexDirection: 'row', gap: spacing.xs },
+    levelBtn: {
+      flex: 1,
+      paddingVertical: spacing.md,
+      paddingHorizontal: 0,
+      backgroundColor: c.surface,
+      borderRadius: radius.md,
+      borderWidth: 1,
+      borderColor: c.border,
+      alignItems: 'center',
+      justifyContent: 'center',
+      minHeight: 44,
+    },
+    levelBtnActive: { backgroundColor: c.primarySoft, borderColor: c.primary },
+    levelLabel: { textAlign: 'center' },
+    chipsWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
+    footer: {
+      padding: spacing.lg,
+      paddingBottom: spacing.xxl,
+      borderTopWidth: 1,
+      borderTopColor: c.border,
+      backgroundColor: c.bg,
+    },
+  });
+}

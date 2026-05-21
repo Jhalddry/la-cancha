@@ -1,4 +1,4 @@
-import { forwardRef, useState, type ReactNode } from 'react';
+import { forwardRef, useMemo, useState, type ReactNode } from 'react';
 import {
   StyleSheet,
   TextInput as RNTextInput,
@@ -9,7 +9,9 @@ import {
   type ViewStyle,
 } from 'react-native';
 
-import { colors, fonts, radius, spacing } from '@/theme';
+import { useColors } from '@/hooks/useColors';
+import { fonts, radius, spacing } from '@/theme';
+import type { ColorPalette } from '@/theme/palettes';
 
 import { Text } from './Text';
 
@@ -38,12 +40,14 @@ export const TextInput = forwardRef<RNTextInput, Props>(function TextInput(
   },
   ref,
 ) {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
   const [focused, setFocused] = useState(false);
   const borderColor = error
-    ? colors.alert
+    ? c.alert
     : focused
-      ? colors.primary
-      : colors.border;
+      ? c.primary
+      : c.border;
 
   return (
     <View style={containerStyle}>
@@ -61,8 +65,8 @@ export const TextInput = forwardRef<RNTextInput, Props>(function TextInput(
         {leading ? <View style={styles.adornment}>{leading}</View> : null}
         <RNTextInput
           ref={ref}
-          placeholderTextColor={colors.textTertiary}
-          selectionColor={colors.primary}
+          placeholderTextColor={c.textTertiary}
+          selectionColor={c.primary}
           {...rest}
           style={[styles.input, inputStyle]}
           onFocus={(e) => {
@@ -85,30 +89,32 @@ export const TextInput = forwardRef<RNTextInput, Props>(function TextInput(
   );
 });
 
-const styles = StyleSheet.create({
-  label: { marginBottom: spacing.xs },
-  field: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: colors.surface,
-    borderRadius: radius.md,
-    borderWidth: 1,
-    paddingHorizontal: spacing.md,
-    minHeight: 50,
-  },
-  plain: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 0,
-    minHeight: 44,
-  },
-  input: {
-    flex: 1,
-    color: colors.textPrimary,
-    fontFamily: fonts.regular,
-    fontSize: 15,
-    paddingVertical: spacing.md,
-  },
-  adornment: { paddingHorizontal: spacing.sm },
-  error: { marginTop: spacing.xs },
-});
+function makeStyles(c: ColorPalette) {
+  return StyleSheet.create({
+    label: { marginBottom: spacing.xs },
+    field: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: c.surface,
+      borderRadius: radius.md,
+      borderWidth: 1,
+      paddingHorizontal: spacing.md,
+      minHeight: 50,
+    },
+    plain: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingHorizontal: 0,
+      minHeight: 44,
+    },
+    input: {
+      flex: 1,
+      color: c.textPrimary,
+      fontFamily: fonts.regular,
+      fontSize: 15,
+      paddingVertical: spacing.md,
+    },
+    adornment: { paddingHorizontal: spacing.sm },
+    error: { marginTop: spacing.xs },
+  });
+}

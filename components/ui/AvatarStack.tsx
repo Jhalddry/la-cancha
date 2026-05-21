@@ -1,6 +1,9 @@
+import { useMemo } from 'react';
 import { StyleSheet, View } from 'react-native';
 
-import { colors, radius } from '@/theme';
+import { useColors } from '@/hooks/useColors';
+import { radius } from '@/theme';
+import type { ColorPalette } from '@/theme/palettes';
 import type { Player } from '@/types/domain';
 
 import { Avatar } from './Avatar';
@@ -14,6 +17,8 @@ interface Props {
 }
 
 export function AvatarStack({ players, max = 3, size = 32, extraCount }: Props) {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
   const shown = players.slice(0, max);
   const remaining = extraCount ?? Math.max(0, players.length - shown.length);
   return (
@@ -44,14 +49,16 @@ export function AvatarStack({ players, max = 3, size = 32, extraCount }: Props) 
   );
 }
 
-const styles = StyleSheet.create({
-  row: { flexDirection: 'row', alignItems: 'center' },
-  more: {
-    backgroundColor: colors.primarySoft,
-    borderRadius: radius.full,
-    borderWidth: 2,
-    borderColor: colors.bg,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-});
+function makeStyles(c: ColorPalette) {
+  return StyleSheet.create({
+    row: { flexDirection: 'row', alignItems: 'center' },
+    more: {
+      backgroundColor: c.primarySoft,
+      borderRadius: radius.full,
+      borderWidth: 2,
+      borderColor: c.bg,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+  });
+}

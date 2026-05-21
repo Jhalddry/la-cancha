@@ -1,7 +1,7 @@
 import { useRouter } from 'expo-router';
 import { CaretRight } from 'phosphor-react-native';
-import { useState } from 'react';
-import { ScrollView, StyleSheet, Switch, View } from 'react-native';
+import { useMemo, useState } from 'react';
+import { Alert, ScrollView, StyleSheet, Switch, View } from 'react-native';
 
 import { BackHeader } from '@/components/ui/BackHeader';
 import { Card } from '@/components/ui/Card';
@@ -9,18 +9,15 @@ import { Divider } from '@/components/ui/Divider';
 import { PressableScale } from '@/components/ui/PressableScale';
 import { Screen } from '@/components/ui/Screen';
 import { Text } from '@/components/ui/Text';
-import { colors, spacing, radius } from '@/theme';
-import { useTheme, type ThemeMode } from '@/store/theme';
+import { useColors } from '@/hooks/useColors';
+import type { ColorPalette } from '@/theme/palettes';
+import { spacing } from '@/theme';
+import { useTheme } from '@/store/theme';
 
-const THEME_OPTIONS: { label: string; value: ThemeMode }[] = [
-  { label: 'Oscuro', value: 'dark' },
-  { label: 'Claro', value: 'light' },
-  { label: 'Sistema', value: 'system' },
-];
 
 function SectionLabel({ title }: { title: string }) {
   return (
-    <Text variant="small" color="textTertiary" style={styles.sectionLabel}>
+    <Text variant="small" color="textTertiary" style={staticStyles.sectionLabel}>
       {title.toUpperCase()}
     </Text>
   );
@@ -37,13 +34,14 @@ function SettingsRow({
   danger?: boolean;
   trailing?: React.ReactNode;
 }) {
+  const c = useColors();
   const content = (
-    <View style={styles.settingsRow}>
+    <View style={staticStyles.settingsRow}>
       <Text variant="bodyMedium" color={danger ? 'alert' : 'textPrimary'}>
         {label}
       </Text>
       {trailing ?? (
-        <CaretRight size={16} color={danger ? colors.alert : colors.textTertiary} />
+        <CaretRight size={16} color={danger ? c.alert : c.textTertiary} />
       )}
     </View>
   );
@@ -61,6 +59,8 @@ function SettingsRow({
 export default function AjustesScreen() {
   const router = useRouter();
   const { mode, setMode } = useTheme();
+  const c = useColors();
+  const s = useMemo(() => makeStyles(c), [c]);
   const [nearbyMatches, setNearbyMatches] = useState(true);
   const [newMessages, setNewMessages] = useState(true);
   const [myMatches, setMyMatches] = useState(true);
@@ -69,78 +69,61 @@ export default function AjustesScreen() {
     <Screen>
       <BackHeader title="Ajustes" onBack={() => router.back()} />
       <ScrollView
-        contentContainerStyle={styles.content}
+        contentContainerStyle={s.content}
         showsVerticalScrollIndicator={false}
       >
         {/* Appearance */}
         <SectionLabel title="Apariencia" />
-        <Card>
-          <View style={styles.themeRow}>
+        <Card padded={false}>
+          <View style={staticStyles.toggleRow}>
             <Text variant="bodyMedium" color="textPrimary">
-              Tema
+              Modo oscuro
             </Text>
-            <View style={styles.pillGroup}>
-              {THEME_OPTIONS.map((opt) => {
-                const selected = mode === opt.value;
-                return (
-                  <PressableScale
-                    key={opt.value}
-                    onPress={() => setMode(opt.value)}
-                    scaleTo={0.94}
-                    style={[
-                      styles.pill,
-                      selected ? styles.pillSelected : styles.pillDefault,
-                    ]}
-                  >
-                    <Text
-                      variant="smallMedium"
-                      color={selected ? 'primary' : 'textSecondary'}
-                    >
-                      {opt.label}
-                    </Text>
-                  </PressableScale>
-                );
-              })}
-            </View>
+            <Switch
+              value={mode === 'dark'}
+              onValueChange={(v) => setMode(v ? 'dark' : 'light')}
+              trackColor={{ false: c.border, true: c.primaryBg }}
+              thumbColor={c.bg}
+            />
           </View>
         </Card>
 
         {/* Notifications */}
         <SectionLabel title="Notificaciones" />
         <Card padded={false}>
-          <View style={styles.toggleRow}>
+          <View style={staticStyles.toggleRow}>
             <Text variant="bodyMedium" color="textPrimary">
               Partidas cercanas
             </Text>
             <Switch
               value={nearbyMatches}
               onValueChange={setNearbyMatches}
-              trackColor={{ false: colors.border, true: colors.primary }}
-              thumbColor={colors.bg}
+              trackColor={{ false: c.border, true: c.primaryBg }}
+              thumbColor={c.bg}
             />
           </View>
           <Divider inset />
-          <View style={styles.toggleRow}>
+          <View style={staticStyles.toggleRow}>
             <Text variant="bodyMedium" color="textPrimary">
               Nuevos mensajes
             </Text>
             <Switch
               value={newMessages}
               onValueChange={setNewMessages}
-              trackColor={{ false: colors.border, true: colors.primary }}
-              thumbColor={colors.bg}
+              trackColor={{ false: c.border, true: c.primaryBg }}
+              thumbColor={c.bg}
             />
           </View>
           <Divider inset />
-          <View style={styles.toggleRow}>
+          <View style={staticStyles.toggleRow}>
             <Text variant="bodyMedium" color="textPrimary">
               Mis partidas
             </Text>
             <Switch
               value={myMatches}
               onValueChange={setMyMatches}
-              trackColor={{ false: colors.border, true: colors.primary }}
-              thumbColor={colors.bg}
+              trackColor={{ false: c.border, true: c.primaryBg }}
+              thumbColor={c.bg}
             />
           </View>
         </Card>
@@ -148,51 +131,34 @@ export default function AjustesScreen() {
         {/* Account */}
         <SectionLabel title="Cuenta" />
         <Card padded={false}>
-          <SettingsRow label="Cambiar contraseña" onPress={() => {}} />
+          <SettingsRow label="Cambiar contraseña" onPress={() => router.push('/cuenta/contrasena')} />
           <Divider inset />
-          <SettingsRow label="Correo electrónico" onPress={() => {}} />
+          <SettingsRow label="Correo electrónico" onPress={() => router.push('/cuenta/correo')} />
           <Divider inset />
-          <SettingsRow label="Eliminar cuenta" danger onPress={() => {}} />
+          <SettingsRow
+            label="Eliminar cuenta"
+            danger
+            onPress={() =>
+              Alert.alert(
+                'Eliminar cuenta',
+                '¿Estás seguro? Esta acción es irreversible y eliminarás todos tus datos.',
+                [
+                  { text: 'Cancelar', style: 'cancel' },
+                  { text: 'Eliminar', style: 'destructive', onPress: () => {} },
+                ],
+              )
+            }
+          />
         </Card>
       </ScrollView>
     </Screen>
   );
 }
 
-const styles = StyleSheet.create({
-  content: {
-    paddingHorizontal: spacing.lg,
-    paddingTop: spacing.md,
-    paddingBottom: spacing.huge,
-    gap: spacing.xl,
-  },
+const staticStyles = StyleSheet.create({
   sectionLabel: {
     marginBottom: -spacing.md,
     marginLeft: spacing.xs,
-  },
-  themeRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: spacing.md,
-  },
-  pillGroup: {
-    flexDirection: 'row',
-    gap: spacing.xs,
-  },
-  pill: {
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    borderRadius: radius.full,
-    borderWidth: 1,
-  },
-  pillSelected: {
-    backgroundColor: colors.primarySoft,
-    borderColor: colors.primary,
-  },
-  pillDefault: {
-    backgroundColor: colors.surfaceElevated,
-    borderColor: colors.border,
   },
   toggleRow: {
     flexDirection: 'row',
@@ -209,3 +175,14 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.lg,
   },
 });
+
+function makeStyles(c: ColorPalette) {
+  return StyleSheet.create({
+    content: {
+      paddingHorizontal: spacing.lg,
+      paddingTop: spacing.md,
+      paddingBottom: spacing.huge,
+      gap: spacing.xl,
+    },
+  });
+}

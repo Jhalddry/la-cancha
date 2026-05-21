@@ -1,4 +1,5 @@
 import { useRouter } from 'expo-router';
+import { useMemo } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 
 import { Avatar } from '@/components/ui/Avatar';
@@ -7,7 +8,9 @@ import { Card } from '@/components/ui/Card';
 import { Screen } from '@/components/ui/Screen';
 import { Stars } from '@/components/ui/Stars';
 import { Text } from '@/components/ui/Text';
-import { colors, spacing } from '@/theme';
+import { useColors } from '@/hooks/useColors';
+import type { ColorPalette } from '@/theme/palettes';
+import { spacing } from '@/theme';
 import type { SkillLevel } from '@/types/domain';
 
 interface Review {
@@ -31,7 +34,7 @@ const ATTENDANCE = '94%';
 
 function StatBox({ value, label }: { value: string; label: string }) {
   return (
-    <View style={styles.statBox}>
+    <View style={staticStyles.statBox}>
       <Text variant="bodySemibold" color="textPrimary">
         {value}
       </Text>
@@ -44,17 +47,19 @@ function StatBox({ value, label }: { value: string; label: string }) {
 
 export default function ReputacionScreen() {
   const router = useRouter();
+  const c = useColors();
+  const s = useMemo(() => makeStyles(c), [c]);
 
   return (
     <Screen>
       <BackHeader title="Reputación" onBack={() => router.back()} />
       <ScrollView
-        contentContainerStyle={styles.content}
+        contentContainerStyle={s.content}
         showsVerticalScrollIndicator={false}
       >
         {/* Overall rating card */}
         <Card>
-          <View style={styles.ratingCenter}>
+          <View style={staticStyles.ratingCenter}>
             <Text variant="h1" color="primary">
               {OVERALL_RATING.toFixed(1)}
             </Text>
@@ -63,12 +68,12 @@ export default function ReputacionScreen() {
               {TOTAL_REVIEWS} reseñas
             </Text>
           </View>
-          <View style={styles.divider} />
-          <View style={styles.statsRow}>
+          <View style={s.divider} />
+          <View style={staticStyles.statsRow}>
             <StatBox value={ATTENDANCE} label="Asistencia" />
-            <View style={styles.statSep} />
+            <View style={s.statSep} />
             <StatBox value={String(TOTAL_REVIEWS)} label="Partidas" />
-            <View style={styles.statSep} />
+            <View style={s.statSep} />
             <StatBox value="Verificado ✓" label="Estado" />
           </View>
         </Card>
@@ -79,10 +84,10 @@ export default function ReputacionScreen() {
         </Text>
         {REVIEWS.map((review, index) => (
           <Card key={index}>
-            <View style={styles.reviewHeader}>
-              <View style={styles.reviewAuthorRow}>
+            <View style={staticStyles.reviewHeader}>
+              <View style={staticStyles.reviewAuthorRow}>
                 <Avatar name={review.author} size={36} />
-                <View style={styles.reviewAuthorInfo}>
+                <View style={staticStyles.reviewAuthorInfo}>
                   <Text variant="bodyMedium" color="textPrimary">
                     {review.author}
                   </Text>
@@ -93,7 +98,7 @@ export default function ReputacionScreen() {
                 {review.date}
               </Text>
             </View>
-            <Text variant="body" color="textSecondary" style={styles.reviewComment}>
+            <Text variant="body" color="textSecondary" style={staticStyles.reviewComment}>
               {review.comment}
             </Text>
           </Card>
@@ -103,21 +108,10 @@ export default function ReputacionScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  content: {
-    paddingHorizontal: spacing.lg,
-    paddingTop: spacing.md,
-    paddingBottom: spacing.huge,
-    gap: spacing.xl,
-  },
+const staticStyles = StyleSheet.create({
   ratingCenter: {
     alignItems: 'center',
     gap: spacing.sm,
-    marginBottom: spacing.lg,
-  },
-  divider: {
-    height: 1,
-    backgroundColor: colors.border,
     marginBottom: spacing.lg,
   },
   statsRow: {
@@ -129,11 +123,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: spacing.xs,
     flex: 1,
-  },
-  statSep: {
-    width: 1,
-    height: 32,
-    backgroundColor: colors.border,
   },
   reviewHeader: {
     flexDirection: 'row',
@@ -153,3 +142,24 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
 });
+
+function makeStyles(c: ColorPalette) {
+  return StyleSheet.create({
+    content: {
+      paddingHorizontal: spacing.lg,
+      paddingTop: spacing.md,
+      paddingBottom: spacing.huge,
+      gap: spacing.xl,
+    },
+    divider: {
+      height: 1,
+      backgroundColor: c.border,
+      marginBottom: spacing.lg,
+    },
+    statSep: {
+      width: 1,
+      height: 32,
+      backgroundColor: c.border,
+    },
+  });
+}

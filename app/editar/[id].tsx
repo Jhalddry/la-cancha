@@ -11,7 +11,7 @@ import {
   Wallet,
   X,
 } from 'phosphor-react-native';
-import { useState, type ReactNode } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 import { Alert, ScrollView, StyleSheet, View } from 'react-native';
 
 import {
@@ -26,8 +26,11 @@ import { Screen } from '@/components/ui/Screen';
 import { Text } from '@/components/ui/Text';
 import { mockMatches } from '@/data/matches';
 import { MatchTypeBadge } from '@/features/match/MatchTypeBadge';
-import { formatMatchTime, labelModality, labelPayment, labelPosition } from '@/lib/format';
-import { colors, radius, spacing } from '@/theme';
+import { labelModality, labelPayment, labelPosition } from '@/lib/format';
+import { useMatchOverrides } from '@/store/matchOverrides';
+import { useColors } from '@/hooks/useColors';
+import { radius, spacing } from '@/theme';
+import type { ColorPalette } from '@/theme/palettes';
 import type { Sport } from '@/types/domain';
 
 const SPORT_EMOJIS: Record<Sport, string> = {
@@ -54,12 +57,30 @@ function fmtTime(d: Date) {
 export default function EditarPartidaScreen() {
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
-  const match = mockMatches.find((m) => m.id === id) ?? mockMatches[0];
+  const c = useColors();
+  const s = useMemo(() => makeStyles(c), [c]);
+  const getMatch = useMatchOverrides((st) => st.getMatch);
+  const setOverride = useMatchOverrides((st) => st.setOverride);
+  const baseMatch = mockMatches.find((m) => m.id === id) ?? mockMatches[0];
+  const match = getMatch(baseMatch);
 
   const [date, setDate] = useState(() => new Date(match.startsAt));
   const [durationMin, setDurationMin] = useState(match.durationMin);
   const [locationName, setLocationName] = useState(match.location.name);
   const [locationAddress, setLocationAddress] = useState(match.location.address ?? '');
+
+  const handleSave = () => {
+    setOverride(match.id, {
+      startsAt: date.toISOString(),
+      durationMin,
+      location: {
+        ...match.location,
+        name: locationName,
+        address: locationAddress || undefined,
+      },
+    });
+    router.back();
+  };
 
   const [dateOpen, setDateOpen] = useState(false);
   const [timeOpen, setTimeOpen] = useState(false);
@@ -99,25 +120,25 @@ export default function EditarPartidaScreen() {
   return (
     <Screen edges={['top']}>
       {/* Header */}
-      <View style={styles.header}>
+      <View style={s.header}>
         <PressableScale onPress={() => router.back()} scaleTo={0.9}>
-          <X size={22} color={colors.textPrimary} weight="bold" />
+          <X size={22} color={c.textPrimary} weight="bold" />
         </PressableScale>
         <Text variant="bodySemibold">Editar partida</Text>
-        <PressableScale scaleTo={0.95} onPress={() => router.back()}>
+        <PressableScale scaleTo={0.95} onPress={handleSave}>
           <Text variant="bodySemibold" color="primary">
             Guardar
           </Text>
         </PressableScale>
       </View>
 
-      <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
+      <ScrollView contentContainerStyle={s.scroll} showsVerticalScrollIndicator={false}>
         {/* Match identity card */}
         <Card>
-          <View style={styles.matchIdRow}>
-            <Text style={styles.sportEmoji}>{SPORT_EMOJIS[match.sport]}</Text>
+          <View style={s.matchIdRow}>
+            <Text style={s.sportEmoji}>{SPORT_EMOJIS[match.sport]}</Text>
             <View style={{ flex: 1 }}>
-              <View style={styles.badgeRow}>
+              <View style={s.badgeRow}>
                 <Text variant="bodySemibold" color="textPrimary">
                   {labelModality(match.modality)}
                 </Text>
@@ -131,23 +152,26 @@ export default function EditarPartidaScreen() {
         </Card>
 
         {/* Settings rows */}
-        <View style={styles.settingsGroup}>
+        <View style={s.settingsGroup}>
           <SettingsRow
-            icon={<CalendarBlank size={18} color={colors.primary} weight="fill" />}
+            c={c}
+            icon={<CalendarBlank size={18} color={c.primary} weight="fill" />}
             label="Fecha y hora"
             value={`${fmtDate(date)} · ${fmtTime(date)}`}
             onPress={() => setDateOpen(true)}
           />
-          <View style={styles.rowDivider} />
+          <View style={s.rowDivider} />
           <SettingsRow
-            icon={<ClockCounterClockwise size={18} color={colors.primary} weight="fill" />}
+            c={c}
+            icon={<ClockCounterClockwise size={18} color={c.primary} weight="fill" />}
             label="Duración"
             value={`${durationMin} minutos`}
             onPress={() => setDurationOpen(true)}
           />
-          <View style={styles.rowDivider} />
+          <View style={s.rowDivider} />
           <SettingsRow
-            icon={<MapPin size={18} color={colors.primary} weight="fill" />}
+            c={c}
+            icon={<MapPin size={18} color={c.primary} weight="fill" />}
             label="Ubicación"
             value={locationName || 'Sin cancha'}
             sub={locationAddress || undefined}
@@ -155,37 +179,40 @@ export default function EditarPartidaScreen() {
           />
         </View>
 
-        <View style={styles.settingsGroup}>
+        <View style={s.settingsGroup}>
           <SettingsRow
-            icon={<Users size={18} color={colors.primary} weight="fill" />}
+            c={c}
+            icon={<Users size={18} color={c.primary} weight="fill" />}
             label="Posiciones faltantes"
             value={`${match.missingCount} jugadores · ${match.missingPositions.map(labelPosition).join(', ')}`}
           />
-          <View style={styles.rowDivider} />
+          <View style={s.rowDivider} />
           <SettingsRow
-            icon={<Wallet size={18} color={colors.primary} weight="fill" />}
+            c={c}
+            icon={<Wallet size={18} color={c.primary} weight="fill" />}
             label="Precio y pagos"
             value={`$${match.pricePerHour}/h · ${match.paymentMethods.length} métodos`}
             sub={match.paymentMethods.map(labelPayment).join(', ')}
           />
-          <View style={styles.rowDivider} />
+          <View style={s.rowDivider} />
           <SettingsRow
-            icon={<ShieldCheck size={18} color={colors.primary} weight="fill" />}
+            c={c}
+            icon={<ShieldCheck size={18} color={c.primary} weight="fill" />}
             label="Requisitos"
             value={`${match.requirements.length} configurados`}
           />
         </View>
 
         {/* Danger zone */}
-        <View style={styles.dangerSection}>
-          <View style={styles.dangerHeader}>
-            <Siren size={15} color={colors.alert} weight="fill" />
+        <View style={s.dangerSection}>
+          <View style={s.dangerHeader}>
+            <Siren size={15} color={c.alert} weight="fill" />
             <Text variant="caption" color="alert">
               Zona peligrosa
             </Text>
           </View>
-          <View style={styles.dangerGroup}>
-            <PressableScale style={styles.dangerRow} scaleTo={0.98} onPress={handleCancel}>
+          <View style={s.dangerGroup}>
+            <PressableScale style={s.dangerRow} scaleTo={0.98} onPress={handleCancel}>
               <View style={{ flex: 1 }}>
                 <Text variant="bodyMedium" color="alert">
                   Cancelar partida
@@ -194,11 +221,11 @@ export default function EditarPartidaScreen() {
                   Se notificará a todos los jugadores
                 </Text>
               </View>
-              <CaretRight size={16} color={colors.alert} weight="bold" />
+              <CaretRight size={16} color={c.alert} weight="bold" />
             </PressableScale>
-            <View style={styles.rowDivider} />
-            <PressableScale style={styles.dangerRow} scaleTo={0.98} onPress={handleDelete}>
-              <Trash size={18} color={colors.alert} weight="fill" />
+            <View style={s.rowDivider} />
+            <PressableScale style={s.dangerRow} scaleTo={0.98} onPress={handleDelete}>
+              <Trash size={18} color={c.alert} weight="fill" />
               <View style={{ flex: 1 }}>
                 <Text variant="bodyMedium" color="alert">
                   Eliminar partida
@@ -207,7 +234,7 @@ export default function EditarPartidaScreen() {
                   Esta acción no se puede deshacer
                 </Text>
               </View>
-              <CaretRight size={16} color={colors.alert} weight="bold" />
+              <CaretRight size={16} color={c.alert} weight="bold" />
             </PressableScale>
           </View>
         </View>
@@ -246,9 +273,9 @@ export default function EditarPartidaScreen() {
         visible={locationOpen}
         onClose={() => setLocationOpen(false)}
         filterSport={match.sport}
-        onSelect={(c) => {
-          setLocationName(c.name || c.address);
-          setLocationAddress(c.address);
+        onSelect={(loc) => {
+          setLocationName(loc.name || loc.address);
+          setLocationAddress(loc.address);
         }}
       />
     </Screen>
@@ -256,21 +283,24 @@ export default function EditarPartidaScreen() {
 }
 
 function SettingsRow({
+  c,
   icon,
   label,
   value,
   sub,
   onPress,
 }: {
+  c: ColorPalette;
   icon: ReactNode;
   label: string;
   value: string;
   sub?: string;
   onPress?: () => void;
 }) {
+  const s = useMemo(() => makeStyles(c), [c]);
   const inner = (
-    <View style={styles.settingsRow}>
-      <View style={styles.settingsIcon}>{icon}</View>
+    <View style={s.settingsRow}>
+      <View style={s.settingsIcon}>{icon}</View>
       <View style={{ flex: 1 }}>
         <Text variant="caption" color="textTertiary">
           {label}
@@ -285,7 +315,7 @@ function SettingsRow({
         ) : null}
       </View>
       {onPress ? (
-        <CaretRight size={16} color={colors.textTertiary} weight="bold" />
+        <CaretRight size={16} color={c.textTertiary} weight="bold" />
       ) : null}
     </View>
   );
@@ -299,60 +329,62 @@ function SettingsRow({
   return inner;
 }
 
-const styles = StyleSheet.create({
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-  },
-  scroll: {
-    paddingHorizontal: spacing.lg,
-    paddingTop: spacing.lg,
-    paddingBottom: 60,
-    gap: spacing.md,
-  },
-  matchIdRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
-  sportEmoji: { fontSize: 28, lineHeight: 36 },
-  badgeRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, flexWrap: 'wrap' },
-  settingsGroup: {
-    backgroundColor: colors.surface,
-    borderRadius: radius.lg,
-    borderWidth: 1,
-    borderColor: colors.border,
-    overflow: 'hidden',
-  },
-  settingsRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md,
-    padding: spacing.md,
-  },
-  settingsIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: radius.sm,
-    backgroundColor: colors.primarySoft,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  rowDivider: { height: 1, backgroundColor: colors.border, marginLeft: 68 },
-  dangerSection: { gap: spacing.sm },
-  dangerHeader: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
-  dangerGroup: {
-    backgroundColor: colors.surface,
-    borderRadius: radius.lg,
-    borderWidth: 1,
-    borderColor: `${colors.alert}44`,
-    overflow: 'hidden',
-  },
-  dangerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md,
-    padding: spacing.md,
-  },
-});
+function makeStyles(c: ColorPalette) {
+  return StyleSheet.create({
+    header: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingHorizontal: spacing.lg,
+      paddingVertical: spacing.md,
+      borderBottomWidth: 1,
+      borderBottomColor: c.border,
+    },
+    scroll: {
+      paddingHorizontal: spacing.lg,
+      paddingTop: spacing.lg,
+      paddingBottom: 60,
+      gap: spacing.md,
+    },
+    matchIdRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+    sportEmoji: { fontSize: 28, lineHeight: 36 },
+    badgeRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, flexWrap: 'wrap' },
+    settingsGroup: {
+      backgroundColor: c.surface,
+      borderRadius: radius.lg,
+      borderWidth: 1,
+      borderColor: c.border,
+      overflow: 'hidden',
+    },
+    settingsRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.md,
+      padding: spacing.md,
+    },
+    settingsIcon: {
+      width: 36,
+      height: 36,
+      borderRadius: radius.sm,
+      backgroundColor: c.primarySoft,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    rowDivider: { height: 1, backgroundColor: c.border, marginLeft: 68 },
+    dangerSection: { gap: spacing.sm },
+    dangerHeader: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
+    dangerGroup: {
+      backgroundColor: c.surface,
+      borderRadius: radius.lg,
+      borderWidth: 1,
+      borderColor: `${c.alert}44`,
+      overflow: 'hidden',
+    },
+    dangerRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.md,
+      padding: spacing.md,
+    },
+  });
+}

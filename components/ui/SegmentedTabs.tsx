@@ -1,6 +1,9 @@
+import { useMemo } from 'react';
 import { StyleSheet, View } from 'react-native';
 
-import { colors, radius, spacing } from '@/theme';
+import { useColors } from '@/hooks/useColors';
+import { radius, spacing } from '@/theme';
+import type { ColorPalette } from '@/theme/palettes';
 
 import { PressableScale } from './PressableScale';
 import { Text } from './Text';
@@ -17,6 +20,9 @@ interface Props<T extends string> {
 }
 
 export function SegmentedTabs<T extends string>({ options, value, onChange }: Props<T>) {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
+
   return (
     <View style={styles.wrap}>
       {options.map((opt) => {
@@ -41,24 +47,26 @@ export function SegmentedTabs<T extends string>({ options, value, onChange }: Pr
   );
 }
 
-const styles = StyleSheet.create({
-  wrap: {
-    flexDirection: 'row',
-    backgroundColor: colors.surface,
-    borderRadius: radius.full,
-    padding: 4,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  item: {
-    flex: 1,
-    paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.md,
-    borderRadius: radius.full,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  active: {
-    backgroundColor: colors.primary,
-  },
-});
+function makeStyles(c: ColorPalette) {
+  return StyleSheet.create({
+    wrap: {
+      flexDirection: 'row',
+      backgroundColor: c.surface,
+      borderRadius: radius.full,
+      padding: 4,
+      borderWidth: 1,
+      borderColor: c.border,
+    },
+    item: {
+      flex: 1,
+      paddingVertical: spacing.sm,
+      paddingHorizontal: spacing.md,
+      borderRadius: radius.full,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    active: {
+      backgroundColor: c.primary,
+    },
+  });
+}

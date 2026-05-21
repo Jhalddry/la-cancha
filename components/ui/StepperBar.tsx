@@ -1,7 +1,9 @@
-import { Fragment } from 'react';
+import { Fragment, useMemo } from 'react';
 import { StyleSheet, View } from 'react-native';
 
-import { colors, radius, spacing } from '@/theme';
+import { useColors } from '@/hooks/useColors';
+import { radius, spacing } from '@/theme';
+import type { ColorPalette } from '@/theme/palettes';
 
 import { Text } from './Text';
 
@@ -10,7 +12,12 @@ interface Props {
   current: number;
 }
 
+const SIZE = 26;
+
 export function StepperBar({ total, current }: Props) {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
+
   return (
     <View style={styles.row}>
       {Array.from({ length: total }).map((_, i) => {
@@ -41,35 +48,35 @@ export function StepperBar({ total, current }: Props) {
   );
 }
 
-const SIZE = 26;
-
-const styles = StyleSheet.create({
-  row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.xs,
-  },
-  dot: {
-    width: SIZE,
-    height: SIZE,
-    borderRadius: radius.full,
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexShrink: 0,
-  },
-  dotActive: { backgroundColor: colors.primary },
-  dotDone: { backgroundColor: colors.primaryDim },
-  dotPending: {
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  line: {
-    flex: 1,
-    height: 2,
-    borderRadius: 1,
-    minWidth: 12,
-  },
-  lineDone: { backgroundColor: colors.primaryDim },
-  linePending: { backgroundColor: colors.border },
-});
+function makeStyles(c: ColorPalette) {
+  return StyleSheet.create({
+    row: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.xs,
+    },
+    dot: {
+      width: SIZE,
+      height: SIZE,
+      borderRadius: radius.full,
+      alignItems: 'center',
+      justifyContent: 'center',
+      flexShrink: 0,
+    },
+    dotActive: { backgroundColor: c.primary },
+    dotDone: { backgroundColor: c.primaryDim },
+    dotPending: {
+      backgroundColor: c.surface,
+      borderWidth: 1,
+      borderColor: c.border,
+    },
+    line: {
+      flex: 1,
+      height: 2,
+      borderRadius: 1,
+      minWidth: 12,
+    },
+    lineDone: { backgroundColor: c.primaryDim },
+    linePending: { backgroundColor: c.border },
+  });
+}

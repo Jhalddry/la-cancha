@@ -17,12 +17,14 @@ import { PressableScale } from '@/components/ui/PressableScale';
 import { Screen } from '@/components/ui/Screen';
 import { Text } from '@/components/ui/Text';
 import { TextInput } from '@/components/ui/TextInput';
+import { useColors } from '@/hooks/useColors';
 import { useSession } from '@/store/session';
-import { colors, spacing } from '@/theme';
+import { spacing } from '@/theme';
 
 export default function LoginScreen() {
   const router = useRouter();
   const signIn = useSession((s) => s.signIn);
+  const c = useColors();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [secure, setSecure] = useState(true);
@@ -56,21 +58,21 @@ export default function LoginScreen() {
     <Screen edges={['top']}>
       <BackHeader transparent />
       <ScrollView
-        contentContainerStyle={styles.scroll}
+        contentContainerStyle={staticStyles.scroll}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
       >
-        <View style={styles.brandRow}>
+        <View style={staticStyles.brandRow}>
           <Crosshair size={48} />
         </View>
-        <Text variant="h1" color="textPrimary" style={styles.title}>
+        <Text variant="h1" color="textPrimary" style={staticStyles.title}>
           Iniciar sesión
         </Text>
-        <Text variant="body" color="textSecondary" style={styles.subtitle}>
+        <Text variant="body" color="textSecondary" style={staticStyles.subtitle}>
           Bienvenido de vuelta. Arma tu próxima partida.
         </Text>
 
-        <View style={styles.form}>
+        <View style={staticStyles.form}>
           <TextInput
             label="Correo electrónico"
             placeholder="tunombre@email.com"
@@ -78,7 +80,7 @@ export default function LoginScreen() {
             autoCapitalize="none"
             value={email}
             onChangeText={setEmail}
-            leading={<Envelope size={18} color={colors.textSecondary} weight="regular" />}
+            leading={<Envelope size={18} color={c.textSecondary} weight="regular" />}
             error={shown.email}
           />
           <TextInput
@@ -87,15 +89,15 @@ export default function LoginScreen() {
             secureTextEntry={secure}
             value={password}
             onChangeText={setPassword}
-            leading={<Lock size={18} color={colors.textSecondary} weight="regular" />}
+            leading={<Lock size={18} color={c.textSecondary} weight="regular" />}
             trailing={
               <PressableScale onPress={() => setSecure((s) => !s)} scaleTo={0.9}>
-                <EyeSlash size={18} color={colors.textTertiary} weight="regular" />
+                <EyeSlash size={18} color={c.textTertiary} weight="regular" />
               </PressableScale>
             }
             error={shown.password}
           />
-          <PressableScale scaleTo={0.97} style={styles.forgotBtn}>
+          <PressableScale scaleTo={0.97} style={staticStyles.forgotBtn}>
             <Text variant="smallMedium" color="primary">
               ¿Olvidaste tu contraseña?
             </Text>
@@ -104,20 +106,20 @@ export default function LoginScreen() {
 
         <Button label="Iniciar sesión" onPress={submit} />
 
-        <View style={styles.dividerRow}>
+        <View style={staticStyles.dividerRow}>
           <Divider />
-          <Text variant="caption" color="textTertiary" style={styles.dividerLabel}>
+          <Text variant="caption" color="textTertiary" style={staticStyles.dividerLabel}>
             O continuar con
           </Text>
           <Divider />
         </View>
 
-        <View style={styles.socialRow}>
+        <View style={staticStyles.socialRow}>
           <Button
             label="Google"
             variant="secondary"
             onPress={submitSocial}
-            leading={<GoogleLogo size={18} color={colors.textPrimary} weight="bold" />}
+            leading={<GoogleLogo size={18} color={c.textPrimary} weight="bold" />}
             fullWidth={false}
             style={{ flex: 1 }}
           />
@@ -125,13 +127,13 @@ export default function LoginScreen() {
             label="Apple"
             variant="secondary"
             onPress={submitSocial}
-            leading={<AppleLogo size={18} color={colors.textPrimary} weight="fill" />}
+            leading={<AppleLogo size={18} color={c.textPrimary} weight="fill" />}
             fullWidth={false}
             style={{ flex: 1 }}
           />
         </View>
 
-        <View style={styles.regRow}>
+        <View style={staticStyles.regRow}>
           <Text variant="small" color="textSecondary">
             ¿No tienes cuenta?{' '}
           </Text>
@@ -146,7 +148,7 @@ export default function LoginScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const staticStyles = StyleSheet.create({
   scroll: {
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.md,

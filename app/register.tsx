@@ -10,8 +10,10 @@ import { PressableScale } from '@/components/ui/PressableScale';
 import { Screen } from '@/components/ui/Screen';
 import { Text } from '@/components/ui/Text';
 import { TextInput } from '@/components/ui/TextInput';
+import { useColors } from '@/hooks/useColors';
+import type { ColorPalette } from '@/theme/palettes';
 import { useSession } from '@/store/session';
-import { colors, radius, spacing } from '@/theme';
+import { radius, spacing } from '@/theme';
 
 interface FieldErrors {
   name?: string;
@@ -23,6 +25,8 @@ interface FieldErrors {
 export default function RegisterScreen() {
   const router = useRouter();
   const signIn = useSession((s) => s.signIn);
+  const c = useColors();
+  const s = useMemo(() => makeStyles(c), [c]);
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -57,27 +61,27 @@ export default function RegisterScreen() {
     <Screen edges={['top']}>
       <BackHeader transparent />
       <ScrollView
-        contentContainerStyle={styles.scroll}
+        contentContainerStyle={staticStyles.scroll}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
       >
-        <View style={styles.brandRow}>
+        <View style={staticStyles.brandRow}>
           <Crosshair size={44} />
         </View>
-        <Text variant="h1" color="textPrimary" style={styles.title}>
+        <Text variant="h1" color="textPrimary" style={staticStyles.title}>
           Crear cuenta
         </Text>
-        <Text variant="body" color="textSecondary" style={styles.subtitle}>
+        <Text variant="body" color="textSecondary" style={staticStyles.subtitle}>
           Únete a la comunidad y arma tu próxima partida.
         </Text>
 
-        <View style={styles.form}>
+        <View style={staticStyles.form}>
           <TextInput
             label="Nombre"
             placeholder="Tu nombre"
             value={name}
             onChangeText={setName}
-            leading={<User size={18} color={colors.textSecondary} weight="regular" />}
+            leading={<User size={18} color={c.textSecondary} weight="regular" />}
             error={shown.name}
           />
           <TextInput
@@ -87,7 +91,7 @@ export default function RegisterScreen() {
             autoCapitalize="none"
             value={email}
             onChangeText={setEmail}
-            leading={<Envelope size={18} color={colors.textSecondary} weight="regular" />}
+            leading={<Envelope size={18} color={c.textSecondary} weight="regular" />}
             error={shown.email}
           />
           <TextInput
@@ -96,21 +100,21 @@ export default function RegisterScreen() {
             secureTextEntry
             value={password}
             onChangeText={setPassword}
-            leading={<Lock size={18} color={colors.textSecondary} weight="regular" />}
+            leading={<Lock size={18} color={c.textSecondary} weight="regular" />}
             error={shown.password}
           />
           <PressableScale
             onPress={() => setAccept((a) => !a)}
-            style={styles.termsRow}
+            style={staticStyles.termsRow}
             scaleTo={0.99}
           >
             <View
               style={[
-                styles.check,
-                accept ? styles.checkOn : null,
+                s.check,
+                accept ? s.checkOn : null,
               ]}
             >
-              {accept ? <Check size={14} color={colors.bg} weight="bold" /> : null}
+              {accept ? <Check size={14} color={c.bg} weight="bold" /> : null}
             </View>
             <Text variant="small" color="textSecondary" style={{ flex: 1 }}>
               Acepto los <Text color="primary" variant="smallMedium">Términos de servicio</Text> y la{' '}
@@ -126,7 +130,7 @@ export default function RegisterScreen() {
 
         <Button label="Crear cuenta" onPress={submit} />
 
-        <View style={styles.regRow}>
+        <View style={staticStyles.regRow}>
           <Text variant="small" color="textSecondary">
             ¿Ya tienes cuenta?{' '}
           </Text>
@@ -141,7 +145,7 @@ export default function RegisterScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const staticStyles = StyleSheet.create({
   scroll: {
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.md,
@@ -158,15 +162,20 @@ const styles = StyleSheet.create({
     gap: spacing.md,
     paddingVertical: spacing.sm,
   },
-  check: {
-    width: 22,
-    height: 22,
-    borderRadius: radius.sm,
-    borderWidth: 1.5,
-    borderColor: colors.border,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  checkOn: { backgroundColor: colors.primary, borderColor: colors.primary },
   regRow: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center' },
 });
+
+function makeStyles(c: ColorPalette) {
+  return StyleSheet.create({
+    check: {
+      width: 22,
+      height: 22,
+      borderRadius: radius.sm,
+      borderWidth: 1.5,
+      borderColor: c.border,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    checkOn: { backgroundColor: c.primary, borderColor: c.primary },
+  });
+}

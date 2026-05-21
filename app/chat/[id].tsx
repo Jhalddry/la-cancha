@@ -8,6 +8,7 @@ import {
   StyleSheet,
   View,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Avatar } from '@/components/ui/Avatar';
 import { BackHeader } from '@/components/ui/BackHeader';
@@ -17,12 +18,17 @@ import { Text } from '@/components/ui/Text';
 import { TextInput } from '@/components/ui/TextInput';
 import { mockChatThreads, mockMessages } from '@/data/chats';
 import { mockCurrentUser } from '@/data/players';
+import { useColors } from '@/hooks/useColors';
 import { timeOnly } from '@/lib/time';
-import { colors, radius, spacing } from '@/theme';
+import { radius, spacing } from '@/theme';
+import type { ColorPalette } from '@/theme/palettes';
 import type { Message } from '@/types/chat';
 
 export default function ChatScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
+  const c = useColors();
+  const insets = useSafeAreaInsets();
+  const s = useMemo(() => makeStyles(c, insets.bottom), [c, insets.bottom]);
   const thread = mockChatThreads.find((t) => t.id === id) ?? mockChatThreads[0];
   const initial = mockMessages[thread.id] ?? [];
   const [messages, setMessages] = useState<Message[]>(initial);
@@ -57,32 +63,32 @@ export default function ChatScreen() {
         }
       />
       <KeyboardAvoidingView
-        style={styles.flex}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
+        style={s.flex}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={0}
       >
         <ScrollView
           ref={scrollRef}
-          contentContainerStyle={styles.scroll}
+          contentContainerStyle={s.scroll}
           onContentSizeChange={() => scrollRef.current?.scrollToEnd({ animated: false })}
         >
           {grouped.map(({ day, items }) => (
-            <View key={day} style={styles.group}>
-              <View style={styles.daySep}>
-                <View style={styles.dayLine} />
+            <View key={day} style={s.group}>
+              <View style={s.daySep}>
+                <View style={s.dayLine} />
                 <Text variant="caption" color="textTertiary">
                   {day}
                 </Text>
-                <View style={styles.dayLine} />
+                <View style={s.dayLine} />
               </View>
               {items.map((msg) => (
-                <Bubble key={msg.id} message={msg} thread={thread} />
+                <Bubble key={msg.id} message={msg} thread={thread} c={c} />
               ))}
             </View>
           ))}
         </ScrollView>
 
-        <View style={styles.composer}>
+        <View style={s.composer}>
           <TextInput
             placeholder="Escribe un mensaje"
             value={text}
@@ -95,12 +101,12 @@ export default function ChatScreen() {
             onPress={send}
             disabled={!text.trim()}
             style={[
-              styles.sendBtn,
+              s.sendBtn,
               text.trim() ? null : { opacity: 0.4 },
             ]}
             scaleTo={0.9}
           >
-            <PaperPlaneTilt size={20} color={colors.bg} weight="fill" />
+            <PaperPlaneTilt size={20} color={c.bg} weight="fill" />
           </PressableScale>
         </View>
       </KeyboardAvoidingView>
@@ -111,35 +117,38 @@ export default function ChatScreen() {
 function Bubble({
   message,
   thread,
+  c,
 }: {
   message: Message;
   thread: (typeof mockChatThreads)[number];
+  c: ColorPalette;
 }) {
+  const s = useMemo(() => makeStyles(c, 0), [c]);
   const isMe = message.authorId === mockCurrentUser.id;
   const author = thread.participants.find((p) => p.id === message.authorId);
   return (
-    <View style={[styles.bubbleRow, isMe ? styles.alignRight : styles.alignLeft]}>
+    <View style={[s.bubbleRow, isMe ? s.alignRight : s.alignLeft]}>
       {!isMe ? <Avatar name={author?.name ?? '?'} size={28} /> : null}
-      <View style={styles.bubbleCol}>
+      <View style={s.bubbleCol}>
         {!isMe && author ? (
-          <Text variant="caption" color="textTertiary" style={styles.author}>
+          <Text variant="caption" color="textTertiary" style={s.author}>
             {author.name}
           </Text>
         ) : null}
         <View
           style={[
-            styles.bubble,
-            isMe ? styles.bubbleMine : styles.bubbleOther,
+            s.bubble,
+            isMe ? s.bubbleMine : s.bubbleOther,
           ]}
         >
-          <Text variant="body" color={isMe ? 'bg' : 'textPrimary'}>
+          <Text variant="body" color={isMe ? 'surface' : 'textPrimary'}>
             {message.body}
           </Text>
         </View>
         <Text
           variant="caption"
           color="textTertiary"
-          style={[styles.timeText, isMe ? styles.timeRight : styles.timeLeft]}
+          style={[s.timeText, isMe ? s.timeRight : s.timeLeft]}
         >
           {timeOnly(message.sentAt)}
         </Text>
@@ -166,64 +175,66 @@ function labelDay(d: Date): string {
   return d.toLocaleDateString('es-VE', { day: 'numeric', month: 'short' });
 }
 
-const styles = StyleSheet.create({
-  flex: { flex: 1 },
-  scroll: {
-    padding: spacing.lg,
-    gap: spacing.sm,
-  },
-  group: { gap: spacing.sm },
-  daySep: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md,
-    paddingVertical: spacing.sm,
-  },
-  dayLine: { flex: 1, height: 1, backgroundColor: colors.border },
-  bubbleRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    gap: spacing.sm,
-    maxWidth: '85%',
-  },
-  alignRight: { alignSelf: 'flex-end', justifyContent: 'flex-end' },
-  alignLeft: { alignSelf: 'flex-start' },
-  bubbleCol: { flexShrink: 1 },
-  author: { marginBottom: 2, marginLeft: spacing.sm },
-  bubble: {
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm + 2,
-    borderRadius: radius.lg,
-  },
-  bubbleMine: {
-    backgroundColor: colors.primary,
-    borderBottomRightRadius: 4,
-  },
-  bubbleOther: {
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderBottomLeftRadius: 4,
-  },
-  timeText: { marginTop: 2 },
-  timeRight: { textAlign: 'right' },
-  timeLeft: { textAlign: 'left', marginLeft: spacing.sm },
-  composer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-    padding: spacing.md,
-    paddingBottom: spacing.lg,
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
-    backgroundColor: colors.bg,
-  },
-  sendBtn: {
-    width: 48,
-    height: 48,
-    borderRadius: radius.full,
-    backgroundColor: colors.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-});
+function makeStyles(c: ColorPalette, bottomInset: number = 0) {
+  return StyleSheet.create({
+    flex: { flex: 1 },
+    scroll: {
+      padding: spacing.lg,
+      gap: spacing.sm,
+    },
+    group: { gap: spacing.sm },
+    daySep: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.md,
+      paddingVertical: spacing.sm,
+    },
+    dayLine: { flex: 1, height: 1, backgroundColor: c.border },
+    bubbleRow: {
+      flexDirection: 'row',
+      alignItems: 'flex-end',
+      gap: spacing.sm,
+      maxWidth: '85%',
+    },
+    alignRight: { alignSelf: 'flex-end', justifyContent: 'flex-end' },
+    alignLeft: { alignSelf: 'flex-start' },
+    bubbleCol: { flexShrink: 1 },
+    author: { marginBottom: 2, marginLeft: spacing.sm },
+    bubble: {
+      paddingHorizontal: spacing.md,
+      paddingVertical: spacing.sm + 2,
+      borderRadius: radius.lg,
+    },
+    bubbleMine: {
+      backgroundColor: c.primary,
+      borderBottomRightRadius: 4,
+    },
+    bubbleOther: {
+      backgroundColor: c.surface,
+      borderWidth: 1,
+      borderColor: c.border,
+      borderBottomLeftRadius: 4,
+    },
+    timeText: { marginTop: 2 },
+    timeRight: { textAlign: 'right' },
+    timeLeft: { textAlign: 'left', marginLeft: spacing.sm },
+    composer: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.sm,
+      padding: spacing.md,
+      paddingBottom: Math.max(spacing.md, bottomInset),
+      borderTopWidth: 1,
+      borderTopColor: c.border,
+      backgroundColor: c.bg,
+    },
+    sendBtn: {
+      width: 48,
+      height: 48,
+      borderRadius: radius.full,
+      backgroundColor: c.primary,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+  });
+}

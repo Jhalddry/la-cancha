@@ -6,7 +6,7 @@ import {
   Star,
   Warning,
 } from 'phosphor-react-native';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 
 import { BackHeader } from '@/components/ui/BackHeader';
@@ -14,7 +14,9 @@ import { IconCircle } from '@/components/ui/IconCircle';
 import { PressableScale } from '@/components/ui/PressableScale';
 import { Screen } from '@/components/ui/Screen';
 import { Text } from '@/components/ui/Text';
-import { colors, spacing, radius } from '@/theme';
+import { useColors } from '@/hooks/useColors';
+import type { ColorPalette } from '@/theme/palettes';
+import { spacing, radius } from '@/theme';
 
 interface Notification {
   id: string;
@@ -34,9 +36,10 @@ const INITIAL_NOTIFICATIONS: Notification[] = [
 ];
 
 function NotifIcon({ icon, read }: { icon: Notification['icon']; read: boolean }) {
-  const bg = read ? colors.surface : colors.primarySoft;
-  const border = read ? colors.border : colors.primary;
-  const iconColor = read ? colors.textSecondary : colors.primary;
+  const c = useColors();
+  const bg = read ? c.surface : c.primarySoft;
+  const border = read ? c.border : c.primary;
+  const iconColor = read ? c.textSecondary : c.primary;
   const size = 20;
 
   return (
@@ -52,6 +55,8 @@ function NotifIcon({ icon, read }: { icon: Notification['icon']; read: boolean }
 
 export default function NotificacionesScreen() {
   const router = useRouter();
+  const c = useColors();
+  const s = useMemo(() => makeStyles(c), [c]);
   const [notifications, setNotifications] = useState<Notification[]>(INITIAL_NOTIFICATIONS);
 
   const markAllRead = () => {
@@ -72,13 +77,13 @@ export default function NotificacionesScreen() {
         }
       />
       <ScrollView
-        contentContainerStyle={styles.content}
+        contentContainerStyle={s.content}
         showsVerticalScrollIndicator={false}
       >
         {notifications.map((notif) => (
-          <PressableScale key={notif.id} onPress={() => {}} scaleTo={0.98} style={styles.row}>
+          <PressableScale key={notif.id} onPress={() => {}} scaleTo={0.98} style={s.row}>
             <NotifIcon icon={notif.icon} read={notif.read} />
-            <View style={styles.textBlock}>
+            <View style={staticStyles.textBlock}>
               <Text
                 variant="bodyMedium"
                 color={notif.read ? 'textSecondary' : 'textPrimary'}
@@ -89,12 +94,12 @@ export default function NotificacionesScreen() {
               <Text
                 variant="caption"
                 color="textTertiary"
-                style={notif.read ? styles.dimTimestamp : undefined}
+                style={notif.read ? staticStyles.dimTimestamp : undefined}
               >
                 {notif.timestamp}
               </Text>
             </View>
-            {!notif.read && <View style={styles.unreadDot} />}
+            {!notif.read && <View style={s.unreadDot} />}
           </PressableScale>
         ))}
       </ScrollView>
@@ -102,24 +107,7 @@ export default function NotificacionesScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  content: {
-    paddingHorizontal: spacing.lg,
-    paddingTop: spacing.md,
-    paddingBottom: spacing.huge,
-    gap: spacing.xs,
-  },
-  row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md,
-    paddingVertical: spacing.md,
-    paddingHorizontal: spacing.md,
-    backgroundColor: colors.surface,
-    borderRadius: radius.lg,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
+const staticStyles = StyleSheet.create({
   textBlock: {
     flex: 1,
     gap: spacing.xs,
@@ -127,10 +115,32 @@ const styles = StyleSheet.create({
   dimTimestamp: {
     opacity: 0.6,
   },
-  unreadDot: {
-    width: 8,
-    height: 8,
-    borderRadius: radius.full,
-    backgroundColor: colors.primary,
-  },
 });
+
+function makeStyles(c: ColorPalette) {
+  return StyleSheet.create({
+    content: {
+      paddingHorizontal: spacing.lg,
+      paddingTop: spacing.md,
+      paddingBottom: spacing.huge,
+      gap: spacing.xs,
+    },
+    row: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.md,
+      paddingVertical: spacing.md,
+      paddingHorizontal: spacing.md,
+      backgroundColor: c.surface,
+      borderRadius: radius.lg,
+      borderWidth: 1,
+      borderColor: c.border,
+    },
+    unreadDot: {
+      width: 8,
+      height: 8,
+      borderRadius: radius.full,
+      backgroundColor: c.primary,
+    },
+  });
+}

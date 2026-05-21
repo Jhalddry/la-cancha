@@ -1,16 +1,27 @@
 import { useRouter } from 'expo-router';
-import type { ReactNode } from 'react';
+import { useMemo, type ReactNode } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 
 import { BackHeader } from '@/components/ui/BackHeader';
 import { Screen } from '@/components/ui/Screen';
 import { Text } from '@/components/ui/Text';
-import { colors, spacing } from '@/theme';
+import { useColors } from '@/hooks/useColors';
+import { spacing } from '@/theme';
+import type { ColorPalette } from '@/theme/palettes';
+
+const staticStyles = StyleSheet.create({
+  section: { gap: spacing.md },
+  sectionTitle: { marginBottom: spacing.xs },
+  paragraph: { lineHeight: 22 },
+  bulletRow: { flexDirection: 'row', gap: spacing.sm, paddingLeft: spacing.sm },
+  bulletDot: { lineHeight: 22 },
+  bulletText: { flex: 1, lineHeight: 22 },
+});
 
 function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
-    <View style={styles.section}>
-      <Text variant="bodySemibold" color="textPrimary" style={styles.sectionTitle}>
+    <View style={staticStyles.section}>
+      <Text variant="bodySemibold" color="textPrimary" style={staticStyles.sectionTitle}>
         {title}
       </Text>
       {children}
@@ -20,7 +31,7 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
 
 function Paragraph({ children }: { children: string }) {
   return (
-    <Text variant="body" color="textSecondary" style={styles.paragraph}>
+    <Text variant="body" color="textSecondary" style={staticStyles.paragraph}>
       {children}
     </Text>
   );
@@ -28,11 +39,11 @@ function Paragraph({ children }: { children: string }) {
 
 function Bullet({ children }: { children: string }) {
   return (
-    <View style={styles.bulletRow}>
-      <Text variant="body" color="primary" style={styles.bulletDot}>
+    <View style={staticStyles.bulletRow}>
+      <Text variant="body" color="primary" style={staticStyles.bulletDot}>
         •
       </Text>
-      <Text variant="body" color="textSecondary" style={styles.bulletText}>
+      <Text variant="body" color="textSecondary" style={staticStyles.bulletText}>
         {children}
       </Text>
     </View>
@@ -41,15 +52,17 @@ function Bullet({ children }: { children: string }) {
 
 export default function TerminosScreen() {
   const router = useRouter();
+  const c = useColors();
+  const s = useMemo(() => makeStyles(c), [c]);
 
   return (
     <Screen>
       <BackHeader title="Términos de Servicio" onBack={() => router.back()} />
       <ScrollView
-        contentContainerStyle={styles.content}
+        contentContainerStyle={s.content}
         showsVerticalScrollIndicator={false}
       >
-        <Text variant="caption" color="textTertiary" style={styles.lastUpdated}>
+        <Text variant="caption" color="textTertiary" style={s.lastUpdated}>
           Última actualización: 1 de Enero, 2025
         </Text>
 
@@ -96,7 +109,7 @@ export default function TerminosScreen() {
           <Paragraph>
             Si tienes preguntas sobre estos Términos de Servicio, puedes contactarnos en:
           </Paragraph>
-          <View style={styles.contactBox}>
+          <View style={s.contactBox}>
             <Text variant="bodyMedium" color="primary">
               soporte@lacancha.app
             </Text>
@@ -107,43 +120,22 @@ export default function TerminosScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  content: {
-    paddingHorizontal: spacing.lg,
-    paddingTop: spacing.md,
-    paddingBottom: spacing.huge,
-    gap: spacing.xl,
-  },
-  lastUpdated: {
-    marginBottom: spacing.sm,
-  },
-  section: {
-    gap: spacing.md,
-  },
-  sectionTitle: {
-    marginBottom: spacing.xs,
-  },
-  paragraph: {
-    lineHeight: 22,
-  },
-  bulletRow: {
-    flexDirection: 'row',
-    gap: spacing.sm,
-    paddingLeft: spacing.sm,
-  },
-  bulletDot: {
-    lineHeight: 22,
-  },
-  bulletText: {
-    flex: 1,
-    lineHeight: 22,
-  },
-  contactBox: {
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 12,
-    padding: spacing.lg,
-    alignItems: 'center',
-  },
-});
+function makeStyles(c: ColorPalette) {
+  return StyleSheet.create({
+    content: {
+      paddingHorizontal: spacing.lg,
+      paddingTop: spacing.md,
+      paddingBottom: spacing.huge,
+      gap: spacing.xl,
+    },
+    lastUpdated: { marginBottom: spacing.sm },
+    contactBox: {
+      backgroundColor: c.surface,
+      borderWidth: 1,
+      borderColor: c.border,
+      borderRadius: 12,
+      padding: spacing.lg,
+      alignItems: 'center',
+    },
+  });
+}

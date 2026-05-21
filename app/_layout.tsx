@@ -144,6 +144,14 @@ export default function RootLayout() {
                 name="privacidad"
                 options={{ animation: 'slide_from_right' }}
               />
+              <Stack.Screen
+                name="cuenta/correo"
+                options={{ animation: 'slide_from_right' }}
+              />
+              <Stack.Screen
+                name="cuenta/contrasena"
+                options={{ animation: 'slide_from_right' }}
+              />
             </Stack>
             <StatusBar style="auto" />
           </View>

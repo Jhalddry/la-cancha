@@ -1,6 +1,9 @@
+import { useMemo } from 'react';
 import { Image, StyleSheet, View } from 'react-native';
 
-import { colors, radius } from '@/theme';
+import { useColors } from '@/hooks/useColors';
+import { radius } from '@/theme';
+import type { ColorPalette } from '@/theme/palettes';
 
 import { Text } from './Text';
 
@@ -12,6 +15,9 @@ interface Props {
 }
 
 export function Avatar({ name, uri, size = 40, bordered }: Props) {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
+
   const initials = getInitials(name);
   const dim = { width: size, height: size, borderRadius: size / 2 };
   return (
@@ -19,7 +25,7 @@ export function Avatar({ name, uri, size = 40, bordered }: Props) {
       style={[
         styles.base,
         dim,
-        bordered && { borderWidth: 2, borderColor: colors.bg },
+        bordered && { borderWidth: 2, borderColor: c.bg },
       ]}
     >
       {uri ? (
@@ -38,12 +44,14 @@ function getInitials(name: string): string {
   return parts.map((p) => p[0]?.toUpperCase() ?? '').join('') || '?';
 }
 
-const styles = StyleSheet.create({
-  base: {
-    backgroundColor: colors.surfaceElevated,
-    borderRadius: radius.full,
-    alignItems: 'center',
-    justifyContent: 'center',
-    overflow: 'hidden',
-  },
-});
+function makeStyles(c: ColorPalette) {
+  return StyleSheet.create({
+    base: {
+      backgroundColor: c.surfaceElevated,
+      borderRadius: radius.full,
+      alignItems: 'center',
+      justifyContent: 'center',
+      overflow: 'hidden',
+    },
+  });
+}

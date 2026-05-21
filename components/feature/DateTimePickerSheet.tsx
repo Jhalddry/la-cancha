@@ -1,5 +1,5 @@
 import DateTimePicker from '@react-native-community/datetimepicker';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Platform, StyleSheet, View } from 'react-native';
 
 import { Button } from '@/components/ui/Button';
@@ -7,7 +7,9 @@ import { PressableScale } from '@/components/ui/PressableScale';
 import { Sheet } from '@/components/ui/Sheet';
 import { Text } from '@/components/ui/Text';
 import { TextInput } from '@/components/ui/TextInput';
-import { colors, radius, spacing } from '@/theme';
+import { useColors } from '@/hooks/useColors';
+import { radius, spacing } from '@/theme';
+import type { ColorPalette } from '@/theme/palettes';
 
 interface Props {
   visible: boolean;
@@ -26,6 +28,8 @@ export function DateTimePickerSheet({
   mode,
   title,
 }: Props) {
+  const c = useColors();
+  const s = useMemo(() => makeStyles(c), [c]);
   const minimumDate = mode === 'date' ? new Date() : undefined;
 
   return (
@@ -34,7 +38,7 @@ export function DateTimePickerSheet({
       onClose={onClose}
       title={title ?? (mode === 'date' ? 'Selecciona fecha' : 'Selecciona hora')}
     >
-      <View style={styles.wrap}>
+      <View style={s.wrap}>
         <DateTimePicker
           value={value}
           mode={mode}
@@ -44,7 +48,7 @@ export function DateTimePickerSheet({
             if (Platform.OS !== 'ios') onClose();
           }}
           minimumDate={minimumDate}
-          textColor={colors.textPrimary}
+          textColor={c.textPrimary}
           themeVariant="dark"
         />
         {Platform.OS === 'ios' ? (
@@ -70,6 +74,8 @@ export function DurationPickerSheet({
   value,
   onChange,
 }: DurationProps) {
+  const c = useColors();
+  const s = useMemo(() => makeStyles(c), [c]);
   const isPreset = DURATION_PRESETS.includes(value);
   const [customMode, setCustomMode] = useState(!isPreset);
   const [customValue, setCustomValue] = useState(
@@ -99,7 +105,7 @@ export function DurationPickerSheet({
 
   return (
     <Sheet visible={visible} onClose={handleClose} title="Duración estimada">
-      <View style={styles.durationList}>
+      <View style={s.durationList}>
         {DURATION_PRESETS.map((d) => {
           const active = d === value && !customMode;
           return (
@@ -111,8 +117,8 @@ export function DurationPickerSheet({
                 onClose();
               }}
               style={[
-                styles.durationRow,
-                active ? styles.durationRowActive : null,
+                s.durationRow,
+                active ? s.durationRowActive : null,
               ]}
               scaleTo={0.98}
             >
@@ -134,8 +140,8 @@ export function DurationPickerSheet({
         <PressableScale
           onPress={() => setCustomMode(true)}
           style={[
-            styles.durationRow,
-            customMode ? styles.durationRowActive : null,
+            s.durationRow,
+            customMode ? s.durationRowActive : null,
           ]}
           scaleTo={0.98}
         >
@@ -148,7 +154,7 @@ export function DurationPickerSheet({
         </PressableScale>
 
         {customMode ? (
-          <View style={styles.customWrap}>
+          <View style={s.customWrap}>
             <TextInput
               label="Minutos"
               placeholder="Ej: 75"
@@ -168,26 +174,28 @@ export function DurationPickerSheet({
   );
 }
 
-const styles = StyleSheet.create({
-  wrap: { gap: spacing.md, alignItems: 'stretch' },
-  durationList: { gap: spacing.xs },
-  durationRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.md,
-    backgroundColor: colors.surface,
-    borderRadius: radius.md,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  durationRowActive: {
-    backgroundColor: colors.primarySoft,
-    borderColor: colors.primary,
-  },
-  customWrap: {
-    gap: spacing.sm,
-    marginTop: spacing.sm,
-  },
-});
+function makeStyles(c: ColorPalette) {
+  return StyleSheet.create({
+    wrap: { gap: spacing.md, alignItems: 'stretch' },
+    durationList: { gap: spacing.xs },
+    durationRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingHorizontal: spacing.md,
+      paddingVertical: spacing.md,
+      backgroundColor: c.surface,
+      borderRadius: radius.md,
+      borderWidth: 1,
+      borderColor: c.border,
+    },
+    durationRowActive: {
+      backgroundColor: c.primarySoft,
+      borderColor: c.primary,
+    },
+    customWrap: {
+      gap: spacing.sm,
+      marginTop: spacing.sm,
+    },
+  });
+}

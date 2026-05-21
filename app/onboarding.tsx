@@ -1,6 +1,6 @@
 import { useRouter } from 'expo-router';
 import { MagnifyingGlass, ShieldCheck, UsersThree } from 'phosphor-react-native';
-import { useRef, useState, type ReactNode } from 'react';
+import { useMemo, useRef, useState, type ReactNode } from 'react';
 import {
   Dimensions,
   ScrollView,
@@ -16,29 +16,31 @@ import { PressableScale } from '@/components/ui/PressableScale';
 import { ProgressDots } from '@/components/ui/ProgressDots';
 import { Screen } from '@/components/ui/Screen';
 import { Text } from '@/components/ui/Text';
-import { colors, radius, spacing } from '@/theme';
+import { useColors } from '@/hooks/useColors';
+import type { ColorPalette } from '@/theme/palettes';
+import { radius, spacing } from '@/theme';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 interface Slide {
-  icon: ReactNode;
+  icon: (c: ColorPalette) => ReactNode;
   title: string;
   description: string;
 }
 
 const SLIDES: Slide[] = [
   {
-    icon: <MagnifyingGlass size={56} color={colors.primary} weight="bold" />,
+    icon: (c) => <MagnifyingGlass size={56} color={c.primary} weight="bold" />,
     title: 'Encuentra tu partida',
     description: 'Busca partidas cerca de ti por deporte, nivel y horario. Únete con un toque.',
   },
   {
-    icon: <UsersThree size={56} color={colors.primary} weight="fill" />,
+    icon: (c) => <UsersThree size={56} color={c.primary} weight="fill" />,
     title: 'Conecta con jugadores',
     description: 'Arma equipo con gente verificada que comparte tu nivel y tus ganas de jugar.',
   },
   {
-    icon: <ShieldCheck size={56} color={colors.primary} weight="fill" />,
+    icon: (c) => <ShieldCheck size={56} color={c.primary} weight="fill" />,
     title: 'Juega seguro',
     description: 'Perfiles verificados, pagos transparentes y reglas claras. Concéntrate en jugar.',
   },
@@ -46,6 +48,8 @@ const SLIDES: Slide[] = [
 
 export default function OnboardingScreen() {
   const router = useRouter();
+  const c = useColors();
+  const s = useMemo(() => makeStyles(c), [c]);
   const scrollRef = useRef<ScrollView>(null);
   const [index, setIndex] = useState(0);
 
@@ -66,16 +70,16 @@ export default function OnboardingScreen() {
 
   return (
     <Screen>
-      <View style={styles.topBar}>
+      <View style={staticStyles.topBar}>
         <Crosshair size={32} />
         {index < SLIDES.length - 1 ? (
-          <PressableScale onPress={skip} scaleTo={0.95} style={styles.skipBtn}>
+          <PressableScale onPress={skip} scaleTo={0.95} style={s.skipBtn}>
             <Text variant="smallMedium" color="textSecondary">
               Saltar
             </Text>
           </PressableScale>
         ) : (
-          <View style={styles.skipBtn} />
+          <View style={s.skipBtn} />
         )}
       </View>
 
@@ -86,22 +90,22 @@ export default function OnboardingScreen() {
         showsHorizontalScrollIndicator={false}
         onScroll={onScroll}
         scrollEventThrottle={16}
-        style={styles.scroll}
+        style={staticStyles.scroll}
       >
-        {SLIDES.map((s, i) => (
-          <View key={i} style={[styles.slide, { width: SCREEN_WIDTH }]}>
-            <View style={styles.iconHero}>{s.icon}</View>
-            <Text variant="h1" color="textPrimary" style={styles.title}>
-              {s.title}
+        {SLIDES.map((slide, i) => (
+          <View key={i} style={[staticStyles.slide, { width: SCREEN_WIDTH }]}>
+            <View style={s.iconHero}>{slide.icon(c)}</View>
+            <Text variant="h1" color="textPrimary" style={staticStyles.title}>
+              {slide.title}
             </Text>
-            <Text variant="body" color="textSecondary" style={styles.desc}>
-              {s.description}
+            <Text variant="body" color="textSecondary" style={staticStyles.desc}>
+              {slide.description}
             </Text>
           </View>
         ))}
       </ScrollView>
 
-      <View style={styles.footer}>
+      <View style={staticStyles.footer}>
         <ProgressDots total={SLIDES.length} current={index} />
         <Button
           label={index === SLIDES.length - 1 ? 'Empezar' : 'Siguiente'}
@@ -112,21 +116,13 @@ export default function OnboardingScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const staticStyles = StyleSheet.create({
   topBar: {
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.md,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-  },
-  skipBtn: {
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    borderRadius: radius.full,
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
   },
   scroll: { flex: 1 },
   slide: {
@@ -135,17 +131,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingHorizontal: spacing.xxxl,
     gap: spacing.lg,
-  },
-  iconHero: {
-    width: 160,
-    height: 160,
-    borderRadius: 80,
-    backgroundColor: colors.primarySoft,
-    borderWidth: 1,
-    borderColor: colors.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: spacing.lg,
   },
   title: { textAlign: 'center' },
   desc: { textAlign: 'center' },
@@ -156,3 +141,27 @@ const styles = StyleSheet.create({
     alignItems: 'stretch',
   },
 });
+
+function makeStyles(c: ColorPalette) {
+  return StyleSheet.create({
+    skipBtn: {
+      paddingHorizontal: spacing.md,
+      paddingVertical: spacing.sm,
+      borderRadius: radius.full,
+      backgroundColor: c.surface,
+      borderWidth: 1,
+      borderColor: c.border,
+    },
+    iconHero: {
+      width: 160,
+      height: 160,
+      borderRadius: 80,
+      backgroundColor: c.primarySoft,
+      borderWidth: 1,
+      borderColor: c.primary,
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginBottom: spacing.lg,
+    },
+  });
+}

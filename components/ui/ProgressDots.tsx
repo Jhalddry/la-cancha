@@ -1,6 +1,9 @@
+import { useMemo } from 'react';
 import { StyleSheet, View } from 'react-native';
 
-import { colors, spacing } from '@/theme';
+import { useColors } from '@/hooks/useColors';
+import { spacing } from '@/theme';
+import type { ColorPalette } from '@/theme/palettes';
 
 interface Props {
   total: number;
@@ -8,6 +11,8 @@ interface Props {
 }
 
 export function ProgressDots({ total, current }: Props) {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
   return (
     <View style={styles.row}>
       {Array.from({ length: total }).map((_, i) => {
@@ -26,16 +31,18 @@ export function ProgressDots({ total, current }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
-  row: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
-  dot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: colors.border,
-  },
-  active: {
-    width: 22,
-    backgroundColor: colors.primary,
-  },
-});
+function makeStyles(c: ColorPalette) {
+  return StyleSheet.create({
+    row: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
+    dot: {
+      width: 8,
+      height: 8,
+      borderRadius: 4,
+      backgroundColor: c.border,
+    },
+    active: {
+      width: 22,
+      backgroundColor: c.primary,
+    },
+  });
+}

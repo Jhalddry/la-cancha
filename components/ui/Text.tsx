@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import {
   Text as RNText,
   type StyleProp,
@@ -5,11 +6,13 @@ import {
   type TextStyle,
 } from 'react-native';
 
-import { colors, text, type TextVariant } from '@/theme';
+import { useColors } from '@/hooks/useColors';
+import { text, type TextVariant } from '@/theme';
+import type { ColorPalette } from '@/theme/palettes';
 
 interface Props extends Omit<RNTextProps, 'style'> {
   variant?: TextVariant;
-  color?: keyof typeof colors;
+  color?: keyof ColorPalette;
   style?: StyleProp<TextStyle>;
 }
 
@@ -20,12 +23,13 @@ export function Text({
   children,
   ...rest
 }: Props) {
+  const c = useColors();
   const variantStyle = text[variant] as TextStyle;
   return (
     <RNText
       allowFontScaling
       {...rest}
-      style={[variantStyle, { color: colors[color] }, style]}
+      style={[variantStyle, { color: c[color] }, style]}
     >
       {children}
     </RNText>

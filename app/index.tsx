@@ -1,5 +1,5 @@
 import { useRouter } from 'expo-router';
-import { useEffect } from 'react';
+import { useEffect, useMemo } from 'react';
 import { StyleSheet, View } from 'react-native';
 import Animated, {
   Easing,
@@ -13,7 +13,9 @@ import Animated, {
 import Svg, { Circle, Line } from 'react-native-svg';
 
 import { Text } from '@/components/ui/Text';
-import { colors, spacing } from '@/theme';
+import { useColors } from '@/hooks/useColors';
+import { spacing } from '@/theme';
+import type { ColorPalette } from '@/theme/palettes';
 
 const AnimatedCircle = Animated.createAnimatedComponent(Circle);
 
@@ -25,6 +27,8 @@ const STROKE_WIDTH = 10;
 
 export default function SplashRoute() {
   const router = useRouter();
+  const c = useColors();
+  const s = useMemo(() => makeStyles(c), [c]);
 
   const dotScale = useSharedValue(0);
   const dotOpacity = useSharedValue(0);
@@ -99,16 +103,16 @@ export default function SplashRoute() {
   }));
 
   return (
-    <View style={styles.root}>
-      <View style={styles.center}>
-        <View style={styles.svgWrap}>
-          <Animated.View style={[StyleSheet.absoluteFill, styles.glow, glowStyle]} />
+    <View style={s.root}>
+      <View style={s.center}>
+        <View style={s.svgWrap}>
+          <Animated.View style={[StyleSheet.absoluteFill, s.glow, glowStyle]} />
           <Svg width={SIZE} height={SIZE} viewBox="0 0 200 200">
             <AnimatedCircle
               cx={CENTER}
               cy={CENTER}
               r={RADIUS}
-              stroke={colors.primary}
+              stroke={c.primary}
               strokeWidth={STROKE_WIDTH}
               fill="none"
               strokeDasharray={CIRCUMFERENCE}
@@ -119,18 +123,18 @@ export default function SplashRoute() {
             <AnimatedCircle
               cx={CENTER}
               cy={CENTER}
-              fill={colors.primary}
+              fill={c.primary}
               animatedProps={dotAnimatedProps}
             />
           </Svg>
-          <Animated.View style={[StyleSheet.absoluteFill, styles.arms, armStyle]}>
+          <Animated.View style={[StyleSheet.absoluteFill, s.arms, armStyle]}>
             <Svg width={SIZE} height={SIZE} viewBox="0 0 200 200">
               <Line
                 x1={4}
                 y1={CENTER}
                 x2={28}
                 y2={CENTER}
-                stroke={colors.primary}
+                stroke={c.primary}
                 strokeWidth={STROKE_WIDTH}
                 strokeLinecap="round"
               />
@@ -139,7 +143,7 @@ export default function SplashRoute() {
                 y1={CENTER}
                 x2={196}
                 y2={CENTER}
-                stroke={colors.primary}
+                stroke={c.primary}
                 strokeWidth={STROKE_WIDTH}
                 strokeLinecap="round"
               />
@@ -148,7 +152,7 @@ export default function SplashRoute() {
                 y1={4}
                 x2={CENTER}
                 y2={28}
-                stroke={colors.primary}
+                stroke={c.primary}
                 strokeWidth={STROKE_WIDTH}
                 strokeLinecap="round"
               />
@@ -157,7 +161,7 @@ export default function SplashRoute() {
                 y1={172}
                 x2={CENTER}
                 y2={196}
-                stroke={colors.primary}
+                stroke={c.primary}
                 strokeWidth={STROKE_WIDTH}
                 strokeLinecap="round"
               />
@@ -165,7 +169,7 @@ export default function SplashRoute() {
                 cx={CENTER}
                 cy={CENTER}
                 r={11}
-                stroke={colors.primary}
+                stroke={c.primary}
                 strokeWidth={STROKE_WIDTH - 3}
                 fill="none"
               />
@@ -173,7 +177,7 @@ export default function SplashRoute() {
           </Animated.View>
         </View>
 
-        <Animated.View style={[styles.wordmark, wordmarkStyle]}>
+        <Animated.View style={[s.wordmark, wordmarkStyle]}>
           <Text variant="display" color="textPrimary">
             LA{' '}
           </Text>
@@ -182,7 +186,7 @@ export default function SplashRoute() {
           </Text>
         </Animated.View>
         <Animated.View style={wordmarkStyle}>
-          <Text variant="caption" color="textSecondary" style={styles.tagline}>
+          <Text variant="caption" color="textSecondary" style={s.tagline}>
             Arma tu partida en segundos
           </Text>
         </Animated.View>
@@ -191,17 +195,19 @@ export default function SplashRoute() {
   );
 }
 
-const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: colors.bg, alignItems: 'center', justifyContent: 'center' },
-  center: { alignItems: 'center', gap: spacing.xxl },
-  svgWrap: { width: SIZE, height: SIZE, alignItems: 'center', justifyContent: 'center' },
-  arms: { alignItems: 'center', justifyContent: 'center' },
-  glow: {
-    backgroundColor: colors.primary,
-    borderRadius: SIZE / 2,
-    opacity: 0,
-    margin: SIZE * 0.2,
-  },
-  wordmark: { flexDirection: 'row', alignItems: 'baseline' },
-  tagline: { marginTop: spacing.xs, textAlign: 'center' },
-});
+function makeStyles(c: ColorPalette) {
+  return StyleSheet.create({
+    root: { flex: 1, backgroundColor: c.bg, alignItems: 'center', justifyContent: 'center' },
+    center: { alignItems: 'center', gap: spacing.xxl },
+    svgWrap: { width: SIZE, height: SIZE, alignItems: 'center', justifyContent: 'center' },
+    arms: { alignItems: 'center', justifyContent: 'center' },
+    glow: {
+      backgroundColor: c.primary,
+      borderRadius: SIZE / 2,
+      opacity: 0,
+      margin: SIZE * 0.2,
+    },
+    wordmark: { flexDirection: 'row', alignItems: 'baseline' },
+    tagline: { marginTop: spacing.xs, textAlign: 'center' },
+  });
+}

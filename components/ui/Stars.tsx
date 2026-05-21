@@ -1,7 +1,7 @@
 import { Star } from 'phosphor-react-native';
 import { StyleSheet, View } from 'react-native';
 
-import { colors } from '@/theme';
+import { useColors } from '@/hooks/useColors';
 import type { SkillLevel } from '@/types/domain';
 
 interface Props {
@@ -11,22 +11,20 @@ interface Props {
   emptyColor?: string;
 }
 
-export function Stars({
-  level,
-  size = 14,
-  filledColor = colors.primary,
-  emptyColor = colors.border,
-}: Props) {
+export function Stars({ level, size = 14, filledColor, emptyColor }: Props) {
+  const c = useColors();
+  const filled = filledColor ?? c.primary;
+  const empty = emptyColor ?? c.border;
   return (
     <View style={styles.row}>
       {[1, 2, 3, 4, 5].map((i) => {
-        const filled = i <= level;
+        const isFilled = i <= level;
         return (
           <Star
             key={i}
             size={size}
-            weight={filled ? 'fill' : 'regular'}
-            color={filled ? filledColor : emptyColor}
+            weight={isFilled ? 'fill' : 'regular'}
+            color={isFilled ? filled : empty}
           />
         );
       })}

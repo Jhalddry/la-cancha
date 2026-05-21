@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { useMemo } from 'react';
 import {
   ActivityIndicator,
   StyleSheet,
@@ -7,7 +8,9 @@ import {
   type ViewStyle,
 } from 'react-native';
 
-import { colors, radius, spacing } from '@/theme';
+import { useColors } from '@/hooks/useColors';
+import { radius, spacing } from '@/theme';
+import type { ColorPalette } from '@/theme/palettes';
 
 import { PressableScale } from './PressableScale';
 import { Text } from './Text';
@@ -40,11 +43,14 @@ export function Button({
   fullWidth = true,
   style,
 }: Props) {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
+
   const base = styles.base;
-  const variantStyle = variants[variant];
-  const sizeStyle = sizes[size];
-  const labelColor: keyof typeof colors =
-    variant === 'primary' ? 'bg' : variant === 'ghost' ? 'primary' : 'textPrimary';
+  const variantStyle = styles.variants[variant];
+  const sizeStyle = styles.sizes[size];
+  const labelColor: keyof ColorPalette =
+    variant === 'primary' ? 'textOnPrimary' : variant === 'ghost' ? 'primary' : 'textPrimary';
 
   return (
     <PressableScale
@@ -62,7 +68,7 @@ export function Button({
     >
       <View style={styles.row}>
         {loading ? (
-          <ActivityIndicator color={variant === 'primary' ? colors.bg : colors.primary} />
+          <ActivityIndicator color={variant === 'primary' ? c.textOnPrimary : c.primary} />
         ) : (
           <>
             {leading}
@@ -77,30 +83,32 @@ export function Button({
   );
 }
 
-const styles = StyleSheet.create({
-  base: {
-    borderRadius: radius.md,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-  },
-  full: { alignSelf: 'stretch' },
-  disabled: { opacity: 0.4 },
-});
-
-const variants = StyleSheet.create({
-  primary: { backgroundColor: colors.primary },
-  secondary: { backgroundColor: colors.surfaceElevated, borderWidth: 1, borderColor: colors.border },
-  ghost: { backgroundColor: 'transparent' },
-  outline: { backgroundColor: 'transparent', borderWidth: 1.5, borderColor: colors.primary },
-});
-
-const sizes = StyleSheet.create({
-  sm: { paddingVertical: spacing.sm, paddingHorizontal: spacing.lg, minHeight: 36 },
-  md: { paddingVertical: spacing.md, paddingHorizontal: spacing.xl, minHeight: 48 },
-  lg: { paddingVertical: spacing.lg, paddingHorizontal: spacing.xxl, minHeight: 56 },
-});
+function makeStyles(c: ColorPalette) {
+  return {
+    base: {
+      borderRadius: radius.md,
+      alignItems: 'center' as const,
+      justifyContent: 'center' as const,
+    },
+    row: StyleSheet.create({
+      row: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: spacing.sm,
+      },
+    }).row,
+    full: { alignSelf: 'stretch' as const },
+    disabled: { opacity: 0.4 },
+    variants: StyleSheet.create({
+      primary: { backgroundColor: c.primaryBg },
+      secondary: { backgroundColor: c.surfaceElevated, borderWidth: 1, borderColor: c.border },
+      ghost: { backgroundColor: 'transparent' },
+      outline: { backgroundColor: 'transparent', borderWidth: 1.5, borderColor: c.primary },
+    }),
+    sizes: StyleSheet.create({
+      sm: { paddingVertical: spacing.sm, paddingHorizontal: spacing.lg, minHeight: 36 },
+      md: { paddingVertical: spacing.md, paddingHorizontal: spacing.xl, minHeight: 48 },
+      lg: { paddingVertical: spacing.lg, paddingHorizontal: spacing.xxl, minHeight: 56 },
+    }),
+  };
+}

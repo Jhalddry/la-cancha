@@ -1,6 +1,6 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { House, Star } from 'phosphor-react-native';
-import { useEffect, useState } from 'react';
+import { Check, House, Star } from 'phosphor-react-native';
+import { useEffect, useMemo, useState } from 'react';
 import { ScrollView, StyleSheet, TextInput as RNTextInput, View } from 'react-native';
 import Animated, {
   useAnimatedStyle,
@@ -16,7 +16,9 @@ import { Screen } from '@/components/ui/Screen';
 import { Stars } from '@/components/ui/Stars';
 import { Text } from '@/components/ui/Text';
 import { mockCurrentUser, mockPlayers } from '@/data/players';
-import { colors, fonts, radius, spacing } from '@/theme';
+import { useColors } from '@/hooks/useColors';
+import { fonts, radius, spacing } from '@/theme';
+import type { ColorPalette } from '@/theme/palettes';
 
 const TOTAL_STEPS = 3;
 
@@ -36,6 +38,8 @@ const MAX_COMMENT = 200;
 export default function CalificarScreen() {
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
+  const c = useColors();
+  const s = useMemo(() => makeStyles(c), [c]);
   const all = [...mockPlayers, mockCurrentUser];
   const player = all.find((p) => p.id === id) ?? mockPlayers[0];
 
@@ -58,7 +62,7 @@ export default function CalificarScreen() {
 
   return (
     <Screen edges={['top']}>
-      <View style={styles.header}>
+      <View style={s.header}>
         <PressableScale onPress={() => (step === 1 ? router.back() : setStep(step - 1))} scaleTo={0.9}>
           <Text variant="bodyMedium" color="textTertiary">
             {step === 1 ? 'Cancelar' : 'Atrás'}
@@ -69,25 +73,25 @@ export default function CalificarScreen() {
       </View>
 
       {/* Step indicator dots */}
-      <View style={styles.dotsRow}>
+      <View style={s.dotsRow}>
         {Array.from({ length: TOTAL_STEPS }, (_, i) => (
-          <View key={i} style={[styles.dot, i < step ? styles.dotActive : null]} />
+          <View key={i} style={[s.dot, i < step ? s.dotActive : null]} />
         ))}
       </View>
 
-      <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
+      <ScrollView contentContainerStyle={s.scroll} showsVerticalScrollIndicator={false}>
         {step === 1 ? (
-          <RatingStep player={player} rating={rating} onRate={setRating} />
+          <RatingStep c={c} player={player} rating={rating} onRate={setRating} />
         ) : null}
         {step === 2 ? (
-          <TagsStep tags={tags} onToggle={toggleTag} />
+          <TagsStep c={c} tags={tags} onToggle={toggleTag} />
         ) : null}
         {step === 3 ? (
-          <CommentStep comment={comment} onChange={setComment} />
+          <CommentStep c={c} comment={comment} onChange={setComment} />
         ) : null}
       </ScrollView>
 
-      <View style={styles.footer}>
+      <View style={s.footer}>
         {step < TOTAL_STEPS ? (
           <Button
             label="Continuar"
@@ -114,17 +118,20 @@ export default function CalificarScreen() {
 // ---------------------------------------------------------------------------
 
 function RatingStep({
+  c,
   player,
   rating,
   onRate,
 }: {
+  c: ColorPalette;
   player: (typeof mockPlayers)[0];
   rating: number;
   onRate: (r: number) => void;
 }) {
+  const s = useMemo(() => makeStyles(c), [c]);
   return (
-    <View style={styles.step}>
-      <View style={styles.stepHeader}>
+    <View style={s.step}>
+      <View style={s.stepHeader}>
         <Text variant="h2" style={{ textAlign: 'center' }}>
           ¿Cómo fue tu experiencia
         </Text>
@@ -136,19 +143,19 @@ function RatingStep({
         </Text>
       </View>
 
-      <View style={styles.avatarWrap}>
+      <View style={s.avatarWrap}>
         <Avatar name={player.name} size={80} />
         {player.verified ? (
-          <View style={styles.verifiedDot} />
+          <View style={s.verifiedDot} />
         ) : null}
       </View>
 
-      <View style={styles.starsRow}>
+      <View style={s.starsRow}>
         {[1, 2, 3, 4, 5].map((n) => (
           <PressableScale key={n} onPress={() => onRate(n)} scaleTo={0.85}>
             <Star
               size={48}
-              color={n <= rating ? '#FFD93D' : colors.border}
+              color={n <= rating ? '#FFD93D' : c.border}
               weight={n <= rating ? 'fill' : 'regular'}
             />
           </PressableScale>
@@ -173,15 +180,18 @@ function RatingStep({
 // ---------------------------------------------------------------------------
 
 function TagsStep({
+  c,
   tags,
   onToggle,
 }: {
+  c: ColorPalette;
   tags: Set<string>;
   onToggle: (t: string) => void;
 }) {
+  const s = useMemo(() => makeStyles(c), [c]);
   return (
-    <View style={styles.step}>
-      <View style={styles.stepHeader}>
+    <View style={s.step}>
+      <View style={s.stepHeader}>
         <Text variant="h2" style={{ textAlign: 'center' }}>
           ¿Qué destacarías?
         </Text>
@@ -190,24 +200,24 @@ function TagsStep({
         </Text>
       </View>
 
-      <View style={styles.tagsSection}>
-        <Text variant="caption" color="textSecondary" style={styles.tagsGroupLabel}>
+      <View style={s.tagsSection}>
+        <Text variant="caption" color="textSecondary" style={s.tagsGroupLabel}>
           Positivo
         </Text>
-        <View style={styles.tagsWrap}>
+        <View style={s.tagsWrap}>
           {POSITIVE_TAGS.map((t) => (
-            <TagChip key={t} label={t} selected={tags.has(t)} onPress={() => onToggle(t)} positive />
+            <TagChip c={c} key={t} label={t} selected={tags.has(t)} onPress={() => onToggle(t)} positive />
           ))}
         </View>
       </View>
 
-      <View style={styles.tagsSection}>
-        <Text variant="caption" color="textSecondary" style={styles.tagsGroupLabel}>
+      <View style={s.tagsSection}>
+        <Text variant="caption" color="textSecondary" style={s.tagsGroupLabel}>
           Negativo
         </Text>
-        <View style={styles.tagsWrap}>
+        <View style={s.tagsWrap}>
           {NEGATIVE_TAGS.map((t) => (
-            <TagChip key={t} label={t} selected={tags.has(t)} onPress={() => onToggle(t)} positive={false} />
+            <TagChip c={c} key={t} label={t} selected={tags.has(t)} onPress={() => onToggle(t)} positive={false} />
           ))}
         </View>
       </View>
@@ -220,15 +230,18 @@ function TagsStep({
 // ---------------------------------------------------------------------------
 
 function CommentStep({
+  c,
   comment,
   onChange,
 }: {
+  c: ColorPalette;
   comment: string;
-  onChange: (c: string) => void;
+  onChange: (v: string) => void;
 }) {
+  const s = useMemo(() => makeStyles(c), [c]);
   return (
-    <View style={styles.step}>
-      <View style={styles.stepHeader}>
+    <View style={s.step}>
+      <View style={s.stepHeader}>
         <Text variant="h2" style={{ textAlign: 'center' }}>
           Comentario opcional
         </Text>
@@ -237,18 +250,18 @@ function CommentStep({
         </Text>
       </View>
 
-      <View style={styles.textareaWrap}>
+      <View style={s.textareaWrap}>
         <RNTextInput
-          style={styles.textarea}
+          style={s.textarea}
           placeholder="Gran partido, todos muy respetuosos..."
-          placeholderTextColor={colors.textTertiary}
+          placeholderTextColor={c.textTertiary}
           multiline
           numberOfLines={5}
           value={comment}
           onChangeText={(v) => onChange(v.slice(0, MAX_COMMENT))}
           textAlignVertical="top"
         />
-        <Text variant="caption" color="textTertiary" style={styles.charCount}>
+        <Text variant="caption" color="textTertiary" style={s.charCount}>
           {comment.length}/{MAX_COMMENT}
         </Text>
       </View>
@@ -269,6 +282,8 @@ function SuccessStep({
   rating: number;
   router: ReturnType<typeof useRouter>;
 }) {
+  const c = useColors();
+  const s = useMemo(() => makeStyles(c), [c]);
   const scale = useSharedValue(0);
   const opacity = useSharedValue(0);
 
@@ -282,14 +297,14 @@ function SuccessStep({
 
   return (
     <Screen edges={['top', 'bottom']}>
-      <View style={styles.successWrap}>
-        <ConfettiDecor />
+      <View style={s.successWrap}>
+        <ConfettiDecor c={c} />
 
-        <Animated.View style={[styles.checkCircle, checkStyle]}>
-          <Text style={{ fontSize: 48 }}>✓</Text>
+        <Animated.View style={[s.checkCircle, checkStyle]}>
+          <Check size={52} color={c.bg} weight="bold" />
         </Animated.View>
 
-        <Animated.View style={[styles.successContent, contentStyle]}>
+        <Animated.View style={[s.successContent, contentStyle]}>
           <Text variant="h1" color="textPrimary">
             ¡Gracias!
           </Text>
@@ -297,7 +312,7 @@ function SuccessStep({
             Tu calificación ha sido enviada.
           </Text>
 
-          <View style={styles.ratedCard}>
+          <View style={s.ratedCard}>
             <Avatar name={player.name} size={48} />
             <View style={{ flex: 1 }}>
               <Text variant="bodySemibold" color="textPrimary">
@@ -317,7 +332,7 @@ function SuccessStep({
           <Button
             label="Volver al inicio"
             onPress={() => router.replace('/(tabs)')}
-            leading={<House size={18} color={colors.bg} weight="fill" />}
+            leading={<House size={18} color={c.bg} weight="fill" />}
           />
         </Animated.View>
       </View>
@@ -330,23 +345,26 @@ function SuccessStep({
 // ---------------------------------------------------------------------------
 
 function TagChip({
+  c,
   label,
   selected,
   positive,
   onPress,
 }: {
+  c: ColorPalette;
   label: string;
   selected: boolean;
   positive: boolean;
   onPress: () => void;
 }) {
-  const activeColor = positive ? colors.primary : colors.alert;
+  const s = useMemo(() => makeStyles(c), [c]);
+  const activeColor = positive ? c.primary : c.alert;
   return (
     <PressableScale
       onPress={onPress}
       scaleTo={0.93}
       style={[
-        styles.tagChip,
+        s.tagChip,
         selected
           ? { borderColor: activeColor, backgroundColor: `${activeColor}18` }
           : null,
@@ -354,7 +372,7 @@ function TagChip({
     >
       <Text
         variant="smallMedium"
-        style={{ color: selected ? activeColor : colors.textSecondary }}
+        style={{ color: selected ? activeColor : c.textSecondary }}
       >
         {label}
       </Text>
@@ -362,14 +380,14 @@ function TagChip({
   );
 }
 
-function ConfettiDecor() {
+function ConfettiDecor({ c }: { c: ColorPalette }) {
   const dots = [
-    { top: 40, left: 30, size: 10, color: colors.primary },
+    { top: 40, left: 30, size: 10, color: c.primary },
     { top: 80, left: 55, size: 7, color: '#FF6B6B' },
     { top: 55, right: 40, size: 12, color: '#FFD93D' },
     { top: 110, left: 20, size: 8, color: '#4D96FF' },
     { top: 30, right: 65, size: 9, color: '#FF6B6B' },
-    { top: 95, right: 25, size: 7, color: colors.primary },
+    { top: 95, right: 25, size: 7, color: c.primary },
     { top: 140, left: 75, size: 6, color: '#FFD93D' },
     { top: 125, right: 55, size: 10, color: '#4D96FF' },
   ] as const;
@@ -393,114 +411,116 @@ function ConfettiDecor() {
   );
 }
 
-const styles = StyleSheet.create({
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-  },
-  dotsRow: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    gap: spacing.sm,
-    paddingVertical: spacing.md,
-  },
-  dot: {
-    width: 28,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: colors.border,
-  },
-  dotActive: { backgroundColor: colors.primary },
-  scroll: {
-    paddingHorizontal: spacing.lg,
-    paddingBottom: 120,
-  },
-  step: { gap: spacing.xl, paddingTop: spacing.lg },
-  stepHeader: { gap: spacing.xs },
-  avatarWrap: { alignSelf: 'center' },
-  verifiedDot: {
-    position: 'absolute',
-    bottom: 2,
-    right: 2,
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    backgroundColor: colors.primary,
-  },
-  starsRow: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    gap: spacing.sm,
-  },
-  tagsSection: { gap: spacing.sm },
-  tagsGroupLabel: { marginBottom: 2 },
-  tagsWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
-  tagChip: {
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    borderRadius: radius.full,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.surface,
-  },
-  textareaWrap: {
-    backgroundColor: colors.surface,
-    borderRadius: radius.lg,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: spacing.md,
-    gap: spacing.sm,
-  },
-  textarea: {
-    color: colors.textPrimary,
-    fontFamily: fonts.regular,
-    fontSize: 15,
-    minHeight: 120,
-  },
-  charCount: { alignSelf: 'flex-end' },
-  footer: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 0,
-    padding: spacing.lg,
-    paddingBottom: spacing.xxl,
-    backgroundColor: colors.bg,
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
-    gap: spacing.sm,
-  },
-  // Success
-  successWrap: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: spacing.lg,
-  },
-  checkCircle: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    backgroundColor: colors.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: spacing.xl,
-  },
-  successContent: { width: '100%', alignItems: 'center', gap: spacing.lg },
-  ratedCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md,
-    padding: spacing.md,
-    backgroundColor: colors.surface,
-    borderRadius: radius.lg,
-    borderWidth: 1,
-    borderColor: colors.border,
-    width: '100%',
-  },
-});
+function makeStyles(c: ColorPalette) {
+  return StyleSheet.create({
+    header: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingHorizontal: spacing.lg,
+      paddingVertical: spacing.md,
+      borderBottomWidth: 1,
+      borderBottomColor: c.border,
+    },
+    dotsRow: {
+      flexDirection: 'row',
+      justifyContent: 'center',
+      gap: spacing.sm,
+      paddingVertical: spacing.md,
+    },
+    dot: {
+      width: 28,
+      height: 4,
+      borderRadius: 2,
+      backgroundColor: c.border,
+    },
+    dotActive: { backgroundColor: c.primary },
+    scroll: {
+      paddingHorizontal: spacing.lg,
+      paddingBottom: 120,
+    },
+    step: { gap: spacing.xl, paddingTop: spacing.lg },
+    stepHeader: { gap: spacing.xs },
+    avatarWrap: { alignSelf: 'center' },
+    verifiedDot: {
+      position: 'absolute',
+      bottom: 2,
+      right: 2,
+      width: 20,
+      height: 20,
+      borderRadius: 10,
+      backgroundColor: c.primary,
+    },
+    starsRow: {
+      flexDirection: 'row',
+      justifyContent: 'center',
+      gap: spacing.sm,
+    },
+    tagsSection: { gap: spacing.sm },
+    tagsGroupLabel: { marginBottom: 2 },
+    tagsWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
+    tagChip: {
+      paddingHorizontal: spacing.md,
+      paddingVertical: spacing.sm,
+      borderRadius: radius.full,
+      borderWidth: 1,
+      borderColor: c.border,
+      backgroundColor: c.surface,
+    },
+    textareaWrap: {
+      backgroundColor: c.surface,
+      borderRadius: radius.lg,
+      borderWidth: 1,
+      borderColor: c.border,
+      padding: spacing.md,
+      gap: spacing.sm,
+    },
+    textarea: {
+      color: c.textPrimary,
+      fontFamily: fonts.regular,
+      fontSize: 15,
+      minHeight: 120,
+    },
+    charCount: { alignSelf: 'flex-end' },
+    footer: {
+      position: 'absolute',
+      left: 0,
+      right: 0,
+      bottom: 0,
+      padding: spacing.lg,
+      paddingBottom: spacing.xxl,
+      backgroundColor: c.bg,
+      borderTopWidth: 1,
+      borderTopColor: c.border,
+      gap: spacing.sm,
+    },
+    // Success
+    successWrap: {
+      flex: 1,
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingHorizontal: spacing.lg,
+    },
+    checkCircle: {
+      width: 100,
+      height: 100,
+      borderRadius: 50,
+      backgroundColor: c.primary,
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginBottom: spacing.xl,
+    },
+    successContent: { width: '100%', alignItems: 'center', gap: spacing.lg },
+    ratedCard: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.md,
+      padding: spacing.md,
+      backgroundColor: c.surface,
+      borderRadius: radius.lg,
+      borderWidth: 1,
+      borderColor: c.border,
+      width: '100%',
+    },
+  });
+}

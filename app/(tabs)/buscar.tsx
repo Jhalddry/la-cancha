@@ -26,7 +26,9 @@ import {
   footballPositionsByModality,
 } from '@/features/match/helpers';
 import { labelPosition, labelSkill, labelSport } from '@/lib/format';
-import { colors, radius, spacing } from '@/theme';
+import { useColors } from '@/hooks/useColors';
+import { radius, spacing } from '@/theme';
+import type { ColorPalette } from '@/theme/palettes';
 import type { MatchType, Position, SkillLevel, Sport } from '@/types/domain';
 
 type SportFilter = 'all' | Sport;
@@ -60,22 +62,26 @@ function FilterPill({
   value,
   active,
   onPress,
+  c,
+  s,
 }: {
   icon: React.ReactNode;
   label: string;
   value: string;
   active: boolean;
   onPress: () => void;
+  c: ColorPalette;
+  s: ReturnType<typeof makeStyles>;
 }) {
   return (
     <PressableScale
-      style={[styles.pill, active ? styles.pillActive : null]}
+      style={[s.pill, active ? s.pillActive : null]}
       scaleTo={0.96}
       onPress={onPress}
     >
       {icon}
       <View style={{ flex: 1, gap: 1 }}>
-        <Text variant="caption" color="textTertiary" style={styles.pillLabel}>
+        <Text variant="caption" color="textTertiary" style={s.pillLabel}>
           {label}
         </Text>
         <Text
@@ -88,7 +94,7 @@ function FilterPill({
       </View>
       <CaretDown
         size={11}
-        color={active ? colors.primary : colors.textTertiary}
+        color={active ? c.primary : c.textTertiary}
         weight="bold"
       />
     </PressableScale>
@@ -105,6 +111,8 @@ export default function BuscarScreen() {
   const [distance, setDistance] = useState<number | null>(null);
   const [position, setPosition] = useState<Position | null>(null);
   const [sortBy, setSortBy] = useState<SortOption>('recientes');
+  const c = useColors();
+  const s = useMemo(() => makeStyles(c), [c]);
 
   const positionsForSport: Position[] | null =
     sport === 'futbol'
@@ -140,26 +148,26 @@ export default function BuscarScreen() {
   const typeLabel = type ? matchTypeMeta[type].label : 'Todos';
   const levelLabel = level ? labelSkill(level) : 'Todos';
   const distanceLabel = distance ? `${distance} km` : 'Cerca de ti';
-  const sortLabel = SORT_OPTIONS.find((s) => s.value === sortBy)?.label ?? 'Más recientes';
+  const sortLabel = SORT_OPTIONS.find((opt) => opt.value === sortBy)?.label ?? 'Más recientes';
 
   return (
     <Screen>
       {/* Header */}
-      <View style={styles.head}>
+      <View style={s.head}>
         <Text variant="h2">Buscar partida</Text>
       </View>
 
       {/* Search */}
-      <View style={styles.searchWrap}>
+      <View style={s.searchWrap}>
         <TextInput
           placeholder="Buscar por deporte, ubicación o cancha..."
           value={query}
           onChangeText={setQuery}
-          leading={<MagnifyingGlass size={18} color={colors.textSecondary} weight="regular" />}
+          leading={<MagnifyingGlass size={18} color={c.textSecondary} weight="regular" />}
           trailing={
             query ? (
               <PressableScale onPress={() => setQuery('')} scaleTo={0.9}>
-                <X size={16} color={colors.textTertiary} weight="bold" />
+                <X size={16} color={c.textTertiary} weight="bold" />
               </PressableScale>
             ) : null
           }
@@ -167,54 +175,64 @@ export default function BuscarScreen() {
       </View>
 
       {/* Filter pill rows */}
-      <View style={styles.filterRows}>
-        <View style={styles.pillRow}>
+      <View style={s.filterRows}>
+        <View style={s.pillRow}>
           <FilterPill
-            icon={<Text style={styles.pillEmoji}>⚽</Text>}
+            icon={<Text style={s.pillEmoji}>⚽</Text>}
             label="Deporte"
             value={sportLabel}
             active={sport !== 'all'}
             onPress={() => setOpenFilter('sport')}
+            c={c}
+            s={s}
           />
           <FilterPill
-            icon={<Text style={styles.pillEmoji}>😎</Text>}
+            icon={<Text style={s.pillEmoji}>😎</Text>}
             label="Tipo"
             value={typeLabel}
             active={type !== null}
             onPress={() => setOpenFilter('type')}
+            c={c}
+            s={s}
           />
           <FilterPill
-            icon={<Star size={13} color={colors.textTertiary} weight="fill" />}
+            icon={<Star size={13} color={c.textTertiary} weight="fill" />}
             label="Nivel"
             value={levelLabel}
             active={level !== null}
             onPress={() => setOpenFilter('level')}
+            c={c}
+            s={s}
           />
         </View>
-        <View style={styles.pillRow}>
+        <View style={s.pillRow}>
           <FilterPill
-            icon={<MapPin size={13} color={colors.textTertiary} weight="fill" />}
+            icon={<MapPin size={13} color={c.textTertiary} weight="fill" />}
             label="Distancia"
             value={distanceLabel}
             active={distance !== null}
             onPress={() => setOpenFilter('distance')}
+            c={c}
+            s={s}
           />
           <FilterPill
-            icon={<ArrowsDownUp size={13} color={colors.textTertiary} weight="bold" />}
+            icon={<ArrowsDownUp size={13} color={c.textTertiary} weight="bold" />}
             label="Ordenar"
             value={sortLabel}
             active={sortBy !== 'recientes'}
             onPress={() => setOpenFilter('sort')}
+            c={c}
+            s={s}
           />
         </View>
       </View>
 
       {/* Results */}
       <ScrollView
-        contentContainerStyle={styles.scroll}
+        contentContainerStyle={s.scroll}
         showsVerticalScrollIndicator={false}
       >
-        <View style={styles.headerRow}>
+        <View style={s.headerRow}>
           <Text variant="caption" color="textSecondary">
             Partidas cerca de ti
           </Text>
@@ -223,15 +241,15 @@ export default function BuscarScreen() {
           </Text>
         </View>
         {filtered.length === 0 ? (
-          <View style={styles.empty}>
+          <View style={s.empty}>
             <EmptyState
-              icon={<MagnifyingGlass size={36} color={colors.primary} weight="bold" />}
+              icon={<MagnifyingGlass size={36} color={c.primary} weight="bold" />}
               title="Sin resultados"
               description="Ajusta tus filtros o intenta otra búsqueda."
             />
           </View>
         ) : (
-          <View style={styles.list}>
+          <View style={s.list}>
             {filtered.map((m) => (
               <MatchCard
                 key={m.id}
@@ -250,23 +268,23 @@ export default function BuscarScreen() {
         title={openFilter ? FILTER_TITLES[openFilter] : ''}
       >
         {openFilter === 'sport' ? (
-          <View style={styles.sheetContent}>
-            {SPORT_OPTIONS.map((s) => (
+          <View style={s.sheetContent}>
+            {SPORT_OPTIONS.map((sp) => (
               <PressableScale
-                key={s}
-                style={[styles.optionRow, sport === s ? styles.optionRowActive : null]}
+                key={sp}
+                style={[s.optionRow, sport === sp ? s.optionRowActive : null]}
                 scaleTo={0.98}
                 onPress={() => {
-                  setSport(s);
-                  if (s !== 'futbol' && s !== 'basket') setPosition(null);
+                  setSport(sp);
+                  if (sp !== 'futbol' && sp !== 'basket') setPosition(null);
                   setOpenFilter(null);
                 }}
               >
-                <Text variant="body" color={sport === s ? 'primary' : 'textPrimary'}>
-                  {s === 'all' ? 'Todos los deportes' : labelSport(s)}
+                <Text variant="body" color={sport === sp ? 'primary' : 'textPrimary'}>
+                  {sp === 'all' ? 'Todos los deportes' : labelSport(sp)}
                 </Text>
-                {sport === s ? (
-                  <View style={styles.activeDot} />
+                {sport === sp ? (
+                  <View style={s.activeDot} />
                 ) : null}
               </PressableScale>
             ))}
@@ -274,30 +292,30 @@ export default function BuscarScreen() {
         ) : null}
 
         {openFilter === 'type' ? (
-          <View style={styles.sheetContent}>
+          <View style={s.sheetContent}>
             <PressableScale
-              style={[styles.optionRow, type === null ? styles.optionRowActive : null]}
+              style={[s.optionRow, type === null ? s.optionRowActive : null]}
               scaleTo={0.98}
               onPress={() => { setType(null); setOpenFilter(null); }}
             >
               <Text variant="body" color={type === null ? 'primary' : 'textPrimary'}>
                 Todos los tipos
               </Text>
-              {type === null ? <View style={styles.activeDot} /> : null}
+              {type === null ? <View style={s.activeDot} /> : null}
             </PressableScale>
             {TYPE_OPTIONS.map((t) => {
               const m = matchTypeMeta[t];
               return (
                 <PressableScale
                   key={t}
-                  style={[styles.optionRow, type === t ? styles.optionRowActive : null]}
+                  style={[s.optionRow, type === t ? s.optionRowActive : null]}
                   scaleTo={0.98}
                   onPress={() => { setType(t); setOpenFilter(null); }}
                 >
                   <Text variant="body" color={type === t ? 'primary' : 'textPrimary'} style={{ flex: 1 }}>
                     {m.label}
                   </Text>
-                  {type === t ? <View style={styles.activeDot} /> : null}
+                  {type === t ? <View style={s.activeDot} /> : null}
                 </PressableScale>
               );
             })}
@@ -305,21 +323,21 @@ export default function BuscarScreen() {
         ) : null}
 
         {openFilter === 'level' ? (
-          <View style={styles.sheetContent}>
+          <View style={s.sheetContent}>
             <PressableScale
-              style={[styles.optionRow, level === null ? styles.optionRowActive : null]}
+              style={[s.optionRow, level === null ? s.optionRowActive : null]}
               scaleTo={0.98}
               onPress={() => { setLevel(null); setOpenFilter(null); }}
             >
               <Text variant="body" color={level === null ? 'primary' : 'textPrimary'}>
                 Todos los niveles
               </Text>
-              {level === null ? <View style={styles.activeDot} /> : null}
+              {level === null ? <View style={s.activeDot} /> : null}
             </PressableScale>
             {LEVEL_OPTIONS.map((lvl) => (
               <PressableScale
                 key={lvl}
-                style={[styles.optionRow, level === lvl ? styles.optionRowActive : null]}
+                style={[s.optionRow, level === lvl ? s.optionRowActive : null]}
                 scaleTo={0.98}
                 onPress={() => { setLevel(lvl); setOpenFilter(null); }}
               >
@@ -327,55 +345,55 @@ export default function BuscarScreen() {
                 <Text variant="body" color={level === lvl ? 'primary' : 'textPrimary'} style={{ flex: 1 }}>
                   {labelSkill(lvl)}
                 </Text>
-                {level === lvl ? <View style={styles.activeDot} /> : null}
+                {level === lvl ? <View style={s.activeDot} /> : null}
               </PressableScale>
             ))}
           </View>
         ) : null}
 
         {openFilter === 'distance' ? (
-          <View style={styles.sheetContent}>
+          <View style={s.sheetContent}>
             <PressableScale
-              style={[styles.optionRow, distance === null ? styles.optionRowActive : null]}
+              style={[s.optionRow, distance === null ? s.optionRowActive : null]}
               scaleTo={0.98}
               onPress={() => { setDistance(null); setOpenFilter(null); }}
             >
               <Text variant="body" color={distance === null ? 'primary' : 'textPrimary'}>
                 Cerca de ti
               </Text>
-              {distance === null ? <View style={styles.activeDot} /> : null}
+              {distance === null ? <View style={s.activeDot} /> : null}
             </PressableScale>
             {DISTANCE_OPTIONS.map((d) => (
               <PressableScale
                 key={d}
-                style={[styles.optionRow, distance === d ? styles.optionRowActive : null]}
+                style={[s.optionRow, distance === d ? s.optionRowActive : null]}
                 scaleTo={0.98}
                 onPress={() => { setDistance(d); setOpenFilter(null); }}
               >
                 <Text variant="body" color={distance === d ? 'primary' : 'textPrimary'}>
                   Menos de {d} km
                 </Text>
-                {distance === d ? <View style={styles.activeDot} /> : null}
+                {distance === d ? <View style={s.activeDot} /> : null}
               </PressableScale>
             ))}
 
             {positionsForSport ? (
               <>
-                <View style={styles.divider} />
-                <Text variant="caption" color="textSecondary" style={styles.subLabel}>
+                <View style={s.divider} />
+                <Text variant="caption" color="textSecondary" style={s.subLabel}>
                   Posición que buscas
                 </Text>
                 {positionsForSport.map((p) => (
                   <PressableScale
                     key={p}
-                    style={[styles.optionRow, position === p ? styles.optionRowActive : null]}
+                    style={[s.optionRow, position === p ? s.optionRowActive : null]}
                     scaleTo={0.98}
                     onPress={() => setPosition((cur) => (cur === p ? null : p))}
                   >
                     <Text variant="body" color={position === p ? 'primary' : 'textPrimary'}>
                       {labelPosition(p)}
                     </Text>
-                    {position === p ? <View style={styles.activeDot} /> : null}
+                    {position === p ? <View style={s.activeDot} /> : null}
                   </PressableScale>
                 ))}
               </>
@@ -384,18 +402,18 @@ export default function BuscarScreen() {
         ) : null}
 
         {openFilter === 'sort' ? (
-          <View style={styles.sheetContent}>
-            {SORT_OPTIONS.map((s) => (
+          <View style={s.sheetContent}>
+            {SORT_OPTIONS.map((opt) => (
               <PressableScale
-                key={s.value}
-                style={[styles.optionRow, sortBy === s.value ? styles.optionRowActive : null]}
+                key={opt.value}
+                style={[s.optionRow, sortBy === opt.value ? s.optionRowActive : null]}
                 scaleTo={0.98}
-                onPress={() => { setSortBy(s.value); setOpenFilter(null); }}
+                onPress={() => { setSortBy(opt.value); setOpenFilter(null); }}
               >
-                <Text variant="body" color={sortBy === s.value ? 'primary' : 'textPrimary'}>
-                  {s.label}
+                <Text variant="body" color={sortBy === opt.value ? 'primary' : 'textPrimary'}>
+                  {opt.label}
                 </Text>
-                {sortBy === s.value ? <View style={styles.activeDot} /> : null}
+                {sortBy === opt.value ? <View style={s.activeDot} /> : null}
               </PressableScale>
             ))}
           </View>
@@ -405,70 +423,72 @@ export default function BuscarScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  head: {
-    paddingHorizontal: spacing.lg,
-    paddingTop: spacing.md,
-    paddingBottom: spacing.sm,
-  },
-  searchWrap: { paddingHorizontal: spacing.lg, marginBottom: spacing.sm },
-  filterRows: {
-    paddingHorizontal: spacing.lg,
-    gap: spacing.sm,
-    marginBottom: spacing.sm,
-  },
-  pillRow: { flexDirection: 'row', gap: spacing.sm },
-  pill: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.xs,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.xs,
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radius.md,
-    minHeight: 46,
-  },
-  pillActive: {
-    borderColor: colors.primary,
-    backgroundColor: colors.primarySoft,
-  },
-  pillEmoji: { fontSize: 13 },
-  pillLabel: { fontSize: 10, lineHeight: 13 },
-  scroll: {
-    paddingHorizontal: spacing.lg,
-    paddingTop: spacing.sm,
-    paddingBottom: 160,
-    gap: spacing.md,
-  },
-  headerRow: { flexDirection: 'row', justifyContent: 'space-between' },
-  list: { gap: spacing.md },
-  empty: { height: 320 },
-  sheetContent: { gap: spacing.xs, paddingBottom: spacing.lg },
-  optionRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md,
-    paddingVertical: spacing.md,
-    paddingHorizontal: spacing.sm,
-    borderRadius: radius.md,
-  },
-  optionRowActive: {
-    backgroundColor: colors.primarySoft,
-  },
-  optionEmoji: { fontSize: 18 },
-  activeDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: colors.primary,
-  },
-  divider: {
-    height: 1,
-    backgroundColor: colors.border,
-    marginVertical: spacing.sm,
-  },
-  subLabel: { paddingHorizontal: spacing.sm, marginBottom: spacing.xs },
-});
+function makeStyles(c: ColorPalette) {
+  return StyleSheet.create({
+    head: {
+      paddingHorizontal: spacing.lg,
+      paddingTop: spacing.md,
+      paddingBottom: spacing.sm,
+    },
+    searchWrap: { paddingHorizontal: spacing.lg, marginBottom: spacing.sm },
+    filterRows: {
+      paddingHorizontal: spacing.lg,
+      gap: spacing.sm,
+      marginBottom: spacing.sm,
+    },
+    pillRow: { flexDirection: 'row', gap: spacing.sm },
+    pill: {
+      flex: 1,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.xs,
+      paddingHorizontal: spacing.sm,
+      paddingVertical: spacing.xs,
+      backgroundColor: c.surface,
+      borderWidth: 1,
+      borderColor: c.border,
+      borderRadius: radius.md,
+      minHeight: 46,
+    },
+    pillActive: {
+      borderColor: c.primary,
+      backgroundColor: c.primarySoft,
+    },
+    pillEmoji: { fontSize: 13 },
+    pillLabel: { fontSize: 10, lineHeight: 13 },
+    scroll: {
+      paddingHorizontal: spacing.lg,
+      paddingTop: spacing.sm,
+      paddingBottom: 120,
+      gap: spacing.md,
+    },
+    headerRow: { flexDirection: 'row', justifyContent: 'space-between' },
+    list: { gap: spacing.md },
+    empty: { height: 320 },
+    sheetContent: { gap: spacing.xs, paddingBottom: spacing.lg },
+    optionRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.md,
+      paddingVertical: spacing.md,
+      paddingHorizontal: spacing.sm,
+      borderRadius: radius.md,
+    },
+    optionRowActive: {
+      backgroundColor: c.primarySoft,
+    },
+    optionEmoji: { fontSize: 18 },
+    activeDot: {
+      width: 8,
+      height: 8,
+      borderRadius: 4,
+      backgroundColor: c.primary,
+    },
+    divider: {
+      height: 1,
+      backgroundColor: c.border,
+      marginVertical: spacing.sm,
+    },
+    subLabel: { paddingHorizontal: spacing.sm, marginBottom: spacing.xs },
+  });
+}

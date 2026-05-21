@@ -14,7 +14,7 @@ import {
   Money,
   X,
 } from 'phosphor-react-native';
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 import Animated, {
   useAnimatedStyle,
@@ -32,6 +32,8 @@ import { StepperBar } from '@/components/ui/StepperBar';
 import { Text } from '@/components/ui/Text';
 import { mockMatches } from '@/data/matches';
 import { MatchTypeBadge } from '@/features/match/MatchTypeBadge';
+import { useColors } from '@/hooks/useColors';
+import { useJoinedMatches } from '@/store/joinedMatches';
 import { BCV_RATE, formatVes, usdToVes } from '@/lib/exchange';
 import {
   formatMatchTime,
@@ -39,7 +41,8 @@ import {
   labelModality,
   labelPayment,
 } from '@/lib/format';
-import { colors, radius, spacing } from '@/theme';
+import { radius, spacing } from '@/theme';
+import type { ColorPalette } from '@/theme/palettes';
 import type { PaymentMethod, Sport } from '@/types/domain';
 
 const SPORT_EMOJIS: Record<Sport, string> = {
@@ -63,6 +66,8 @@ const TOTAL_FLOW_STEPS = 3;
 export default function UnirseScreen() {
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
+  const c = useColors();
+  const s = useMemo(() => makeStyles(c), [c]);
   const match = mockMatches.find((m) => m.id === id) ?? mockMatches[0];
 
   const [step, setStep] = useState(1);
@@ -91,9 +96,9 @@ export default function UnirseScreen() {
   return (
     <Screen edges={['top']}>
       {/* Header */}
-      <View style={styles.header}>
+      <View style={s.header}>
         <PressableScale onPress={() => (step === 1 ? router.back() : setStep(step - 1))} scaleTo={0.9}>
-          <X size={22} color={colors.textPrimary} weight="bold" />
+          <X size={22} color={c.textPrimary} weight="bold" />
         </PressableScale>
         <Text variant="bodySemibold">
           {step === 1 ? 'Resumen' : step === 2 ? 'Método de pago' : 'Requisitos'}
@@ -101,13 +106,14 @@ export default function UnirseScreen() {
         <View style={{ width: 22 }} />
       </View>
 
-      <View style={styles.stepperWrap}>
+      <View style={s.stepperWrap}>
         <StepperBar total={TOTAL_FLOW_STEPS} current={step} />
       </View>
 
-      <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
+      <ScrollView contentContainerStyle={s.scroll} showsVerticalScrollIndicator={false}>
         {step === 1 ? (
           <ConfirmStep
+            c={c}
             match={match}
             durationHours={durationHours}
             total={total}
@@ -116,6 +122,7 @@ export default function UnirseScreen() {
         ) : null}
         {step === 2 ? (
           <PaymentStep
+            c={c}
             methods={match.paymentMethods}
             selected={selectedPayment}
             onSelect={setSelectedPayment}
@@ -123,6 +130,7 @@ export default function UnirseScreen() {
         ) : null}
         {step === 3 ? (
           <RequirementsStep
+            c={c}
             requirements={match.requirements}
             checked={checkedReqs}
             onToggle={toggleReq}
@@ -139,7 +147,7 @@ export default function UnirseScreen() {
         ) : null}
       </ScrollView>
 
-      <View style={styles.footer}>
+      <View style={s.footer}>
         <Button
           label="Continuar"
           disabled={step === 2 ? !selectedPayment : step === 3 ? !allReqsChecked : false}
@@ -155,50 +163,58 @@ export default function UnirseScreen() {
 // ---------------------------------------------------------------------------
 
 function ConfirmStep({
+  c,
   match,
   durationHours,
   total,
   router,
 }: {
+  c: ColorPalette;
   match: (typeof mockMatches)[0];
   durationHours: number;
   total: number;
   router: ReturnType<typeof useRouter>;
 }) {
+  const s = useMemo(() => makeStyles(c), [c]);
   return (
-    <View style={styles.step}>
-      <Text variant="h2">Resumen de la partida</Text>
+    <View style={s.step}>
+      <View style={s.stepHeader}>
+        <Text variant="h2">Resumen</Text>
+        <Text variant="body" color="textSecondary">
+          Revisa los detalles antes de continuar
+        </Text>
+      </View>
 
+      {/* Sport + type header */}
+      <View style={s.summaryHero}>
+        <Text style={s.sportEmoji}>{SPORT_EMOJIS[match.sport]}</Text>
+        <View style={{ flex: 1, gap: 4 }}>
+          <Text variant="h3" color="textPrimary">
+            {labelModality(match.modality)}
+          </Text>
+          <MatchTypeBadge type={match.type} />
+        </View>
+      </View>
+
+      {/* Info rows */}
+      <Card padded={false}>
+        <InfoRow
+          icon={<CalendarBlank size={16} color={c.primary} weight="fill" />}
+          label={formatMatchTime(match.startsAt)}
+          sub={`${match.durationMin} min de duración`}
+        />
+        <View style={s.rowDivider} />
+        <InfoRow
+          icon={<MapPin size={16} color={c.primary} weight="fill" />}
+          label={match.location.name}
+          sub={match.location.address}
+        />
+      </Card>
+
+      {/* Price breakdown */}
       <Card>
-        <View style={styles.matchSummary}>
-          <Text style={styles.sportEmoji}>{SPORT_EMOJIS[match.sport]}</Text>
-          <View style={{ flex: 1 }}>
-            <Text variant="bodySemibold" color="textPrimary">
-              {labelModality(match.modality)}
-            </Text>
-            <View style={styles.badgeRow}>
-              <MatchTypeBadge type={match.type} />
-            </View>
-          </View>
-        </View>
-
-        <View style={styles.infoRows}>
-          <InfoRow
-            icon={<CalendarBlank size={16} color={colors.primary} weight="fill" />}
-            label={formatMatchTime(match.startsAt)}
-            sub={`${match.durationMin} min de duración`}
-          />
-          <InfoRow
-            icon={<MapPin size={16} color={colors.primary} weight="fill" />}
-            label={match.location.name}
-            sub={match.location.address}
-          />
-        </View>
-
-        <View style={styles.priceDivider} />
-
-        <View style={styles.priceRows}>
-          <View style={styles.priceRow}>
+        <View style={s.priceRows}>
+          <View style={s.priceRow}>
             <Text variant="body" color="textSecondary">
               Precio por hora
             </Text>
@@ -206,40 +222,41 @@ function ConfirmStep({
               {formatPrice(match.pricePerHour, match.currency)}
             </Text>
           </View>
-          <View style={styles.priceRow}>
+          <View style={s.priceRow}>
             <Text variant="body" color="textSecondary">
               Total estimado ({durationHours}h)
             </Text>
-            <Text variant="bodySemibold" color="primary">
+            <Text variant="h3" color="primary">
               {formatPrice(total, match.currency)}
             </Text>
           </View>
+        </View>
+        <View style={s.bcvRow}>
           <Text variant="caption" color="textTertiary">
-            ≈ {formatVes(usdToVes(total))} · BCV {BCV_RATE.toFixed(2)} Bs/USD
+            ≈ {formatVes(usdToVes(total))} · Tasa BCV {BCV_RATE.toFixed(2)} Bs/USD
           </Text>
         </View>
-
-        <View style={styles.priceDivider} />
-
-        <PressableScale
-          style={styles.organizerRow}
-          scaleTo={0.98}
-          onPress={() => router.push(`/perfil/${match.organizer.id}`)}
-        >
-          <Avatar name={match.organizer.name} size={40} />
-          <View style={{ flex: 1 }}>
-            <Text variant="bodyMedium" color="textPrimary">
-              {match.organizer.name}
-            </Text>
-            <Text variant="small" color="textSecondary">
-              Organizador
-            </Text>
-          </View>
-          {match.organizer.verified ? (
-            <CheckCircle size={18} color={colors.primary} weight="fill" />
-          ) : null}
-        </PressableScale>
       </Card>
+
+      {/* Organizer */}
+      <PressableScale
+        style={[s.organizerRow, { backgroundColor: c.surface, borderColor: c.border }]}
+        scaleTo={0.98}
+        onPress={() => router.push(`/perfil/${match.organizer.id}`)}
+      >
+        <Avatar name={match.organizer.name} size={40} />
+        <View style={{ flex: 1 }}>
+          <Text variant="bodyMedium" color="textPrimary">
+            {match.organizer.name}
+          </Text>
+          <Text variant="small" color="textSecondary">
+            Organizador
+          </Text>
+        </View>
+        {match.organizer.verified ? (
+          <CheckCircle size={18} color={c.primary} weight="fill" />
+        ) : null}
+      </PressableScale>
     </View>
   );
 }
@@ -249,17 +266,20 @@ function ConfirmStep({
 // ---------------------------------------------------------------------------
 
 function PaymentStep({
+  c,
   methods,
   selected,
   onSelect,
 }: {
+  c: ColorPalette;
   methods: PaymentMethod[];
   selected: PaymentMethod | null;
   onSelect: (m: PaymentMethod) => void;
 }) {
+  const s = useMemo(() => makeStyles(c), [c]);
   return (
-    <View style={styles.step}>
-      <View style={styles.stepHeader}>
+    <View style={s.step}>
+      <View style={s.stepHeader}>
         <Text variant="h2">Método de pago</Text>
         <Text variant="body" color="textSecondary">
           Elige tu método preferido
@@ -272,21 +292,21 @@ function PaymentStep({
           return (
             <View key={m}>
               <PressableScale
-                style={[styles.payRow, isSelected ? styles.payRowActive : null]}
+                style={[s.payRow, isSelected ? s.payRowActive : null]}
                 scaleTo={0.98}
                 onPress={() => onSelect(m)}
               >
-                <View style={[styles.payIcon, { backgroundColor: meta.color }]}>
+                <View style={[s.payIcon, { backgroundColor: meta.color }]}>
                   {meta.icon}
                 </View>
                 <Text variant="body" color="textPrimary" style={{ flex: 1 }}>
                   {labelPayment(m)}
                 </Text>
-                <View style={[styles.radio, isSelected ? styles.radioOn : null]}>
-                  {isSelected ? <View style={styles.radioDot} /> : null}
+                <View style={[s.radio, isSelected ? s.radioOn : null]}>
+                  {isSelected ? <View style={s.radioDot} /> : null}
                 </View>
               </PressableScale>
-              {i < methods.length - 1 ? <View style={styles.rowDivider} /> : null}
+              {i < methods.length - 1 ? <View style={s.rowDivider} /> : null}
             </View>
           );
         })}
@@ -300,21 +320,24 @@ function PaymentStep({
 // ---------------------------------------------------------------------------
 
 function RequirementsStep({
+  c,
   requirements,
   checked,
   onToggle,
   masterChecked,
   onMasterToggle,
 }: {
+  c: ColorPalette;
   requirements: string[];
   checked: Set<string>;
   onToggle: (r: string) => void;
   masterChecked: boolean;
   onMasterToggle: () => void;
 }) {
+  const s = useMemo(() => makeStyles(c), [c]);
   return (
-    <View style={styles.step}>
-      <View style={styles.stepHeader}>
+    <View style={s.step}>
+      <View style={s.stepHeader}>
         <Text variant="h2">Requisitos</Text>
         <Text variant="body" color="textSecondary">
           Confirma que cumples con lo siguiente
@@ -328,16 +351,16 @@ function RequirementsStep({
             return (
               <View key={r}>
                 <PressableScale
-                  style={[styles.reqRow, on ? styles.reqRowActive : null]}
+                  style={[s.reqRow, on ? s.reqRowActive : null]}
                   scaleTo={0.98}
                   onPress={() => onToggle(r)}
                 >
                   <Text variant="body" color="textPrimary" style={{ flex: 1 }}>
                     {r}
                   </Text>
-                  <CheckBox checked={on} />
+                  <CheckBox c={c} checked={on} />
                 </PressableScale>
-                {i < requirements.length - 1 ? <View style={styles.rowDivider} /> : null}
+                {i < requirements.length - 1 ? <View style={s.rowDivider} /> : null}
               </View>
             );
           })}
@@ -345,13 +368,13 @@ function RequirementsStep({
       ) : null}
 
       <PressableScale
-        style={[styles.masterRow, masterChecked ? styles.masterRowActive : null]}
+        style={[s.masterRow, masterChecked ? s.masterRowActive : null]}
         scaleTo={0.98}
         onPress={onMasterToggle}
       >
         <CheckCircle
           size={22}
-          color={masterChecked ? colors.primary : colors.border}
+          color={masterChecked ? c.primary : c.border}
           weight={masterChecked ? 'fill' : 'regular'}
         />
         <Text
@@ -377,10 +400,14 @@ function SuccessStep({
   match: (typeof mockMatches)[0];
   router: ReturnType<typeof useRouter>;
 }) {
+  const c = useColors();
+  const s = useMemo(() => makeStyles(c), [c]);
+  const join = useJoinedMatches((st) => st.join);
   const scale = useSharedValue(0);
   const opacity = useSharedValue(0);
 
   useEffect(() => {
+    join(match.id);
     scale.value = withSpring(1, { damping: 12, stiffness: 120 });
     opacity.value = withDelay(200, withSpring(1));
   }, []);
@@ -392,25 +419,25 @@ function SuccessStep({
 
   return (
     <Screen edges={['top', 'bottom']}>
-      <View style={styles.successWrap}>
-        <ConfettiDecor />
+      <View style={s.successWrap}>
+        <ConfettiDecor c={c} />
 
-        <Animated.View style={[styles.checkCircle, checkStyle]}>
-          <Check size={52} color={colors.bg} weight="bold" />
+        <Animated.View style={[s.checkCircle, checkStyle]}>
+          <Check size={52} color={c.bg} weight="bold" />
         </Animated.View>
 
-        <Animated.View style={[styles.successContent, contentStyle]}>
+        <Animated.View style={[s.successContent, contentStyle]}>
           <Text variant="h1" color="textPrimary">
             ¡Ya estás dentro!
           </Text>
-          <Text variant="body" color="textSecondary" style={styles.successSub}>
+          <Text variant="body" color="textSecondary" style={s.successSub}>
             Te hemos agregado a la partida.
           </Text>
 
-          <View style={styles.successMatchCard}>
-            <Text style={styles.sportEmoji}>{SPORT_EMOJIS[match.sport]}</Text>
+          <View style={s.successMatchCard}>
+            <Text style={s.sportEmoji}>{SPORT_EMOJIS[match.sport]}</Text>
             <View style={{ flex: 1 }}>
-              <View style={styles.badgeRow}>
+              <View style={s.badgeRow}>
                 <MatchTypeBadge type={match.type} />
               </View>
               <Text variant="small" color="textSecondary" style={{ marginTop: 2 }}>
@@ -419,17 +446,17 @@ function SuccessStep({
             </View>
           </View>
 
-          <View style={styles.successActions}>
+          <View style={s.successActions}>
             <Button
               label="Ir al chat"
               onPress={() => router.replace(`/chat/${match.id}`)}
-              leading={<ChatCircle size={18} color={colors.bg} weight="fill" />}
+              leading={<ChatCircle size={18} color={c.bg} weight="fill" />}
             />
             <Button
               label="Ver partida"
               variant="secondary"
               onPress={() => router.replace(`/match/${match.id}`)}
-              leading={<Eye size={18} color={colors.textPrimary} weight="fill" />}
+              leading={<Eye size={18} color={c.textPrimary} weight="fill" />}
             />
             <PressableScale onPress={() => router.replace('/(tabs)')} scaleTo={0.97}>
               <Text variant="bodyMedium" color="primary" style={{ textAlign: 'center' }}>
@@ -449,9 +476,9 @@ function SuccessStep({
 
 function InfoRow({ icon, label, sub }: { icon: ReactNode; label: string; sub?: string }) {
   return (
-    <View style={styles.infoRow}>
+    <View style={staticStyles.infoRow}>
       {icon}
-      <View>
+      <View style={{ flex: 1 }}>
         <Text variant="bodyMedium" color="textPrimary">
           {label}
         </Text>
@@ -465,22 +492,23 @@ function InfoRow({ icon, label, sub }: { icon: ReactNode; label: string; sub?: s
   );
 }
 
-function CheckBox({ checked }: { checked: boolean }) {
+function CheckBox({ c, checked }: { c: ColorPalette; checked: boolean }) {
+  const s = useMemo(() => makeStyles(c), [c]);
   return (
-    <View style={[styles.checkbox, checked ? styles.checkboxOn : null]}>
-      {checked ? <Check size={13} color={colors.bg} weight="bold" /> : null}
+    <View style={[s.checkbox, checked ? s.checkboxOn : null]}>
+      {checked ? <Check size={13} color={c.bg} weight="bold" /> : null}
     </View>
   );
 }
 
-function ConfettiDecor() {
+function ConfettiDecor({ c }: { c: ColorPalette }) {
   const dots = [
-    { top: 40, left: 30, size: 10, color: colors.primary },
+    { top: 40, left: 30, size: 10, color: c.primary },
     { top: 80, left: 60, size: 7, color: '#FF6B6B' },
     { top: 55, right: 40, size: 12, color: '#FFD93D' },
     { top: 110, left: 20, size: 8, color: '#4D96FF' },
     { top: 30, right: 70, size: 9, color: '#FF6B6B' },
-    { top: 95, right: 25, size: 7, color: colors.primary },
+    { top: 95, right: 25, size: 7, color: c.primary },
     { top: 140, left: 80, size: 6, color: '#FFD93D' },
     { top: 125, right: 60, size: 10, color: '#4D96FF' },
   ] as const;
@@ -504,141 +532,162 @@ function ConfettiDecor() {
   );
 }
 
-const styles = StyleSheet.create({
-  header: {
+const staticStyles = StyleSheet.create({
+  infoRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    gap: spacing.md,
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.md,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
   },
-  stepperWrap: {
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.sm,
-  },
-  scroll: {
-    paddingHorizontal: spacing.lg,
-    paddingBottom: 120,
-  },
-  step: { gap: spacing.lg, paddingTop: spacing.md },
-  stepHeader: { gap: spacing.xs },
-  footer: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 0,
-    padding: spacing.lg,
-    paddingBottom: spacing.xxl,
-    backgroundColor: colors.bg,
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
-  },
-  // Match summary
-  matchSummary: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md,
-    marginBottom: spacing.md,
-  },
-  sportEmoji: { fontSize: 28, lineHeight: 36 },
-  badgeRow: { flexDirection: 'row', gap: spacing.xs, marginTop: 2 },
-  infoRows: { gap: spacing.sm },
-  infoRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  priceDivider: { height: 1, backgroundColor: colors.border, marginVertical: spacing.md },
-  priceRows: { gap: spacing.sm },
-  priceRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  organizerRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
-  // Payment
-  payRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md,
-    padding: spacing.md,
-  },
-  payRowActive: { backgroundColor: colors.primarySoft },
-  payIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: radius.sm,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  radio: {
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-    borderWidth: 2,
-    borderColor: colors.border,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  radioOn: { borderColor: colors.primary },
-  radioDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    backgroundColor: colors.primary,
-  },
-  rowDivider: { height: 1, backgroundColor: colors.border, marginHorizontal: spacing.md },
-  // Requirements
-  reqRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md,
-    padding: spacing.md,
-  },
-  reqRowActive: { backgroundColor: colors.primarySoft },
-  checkbox: {
-    width: 22,
-    height: 22,
-    borderRadius: radius.sm,
-    borderWidth: 1.5,
-    borderColor: colors.border,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  checkboxOn: { backgroundColor: colors.primary, borderColor: colors.primary },
-  masterRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md,
-    padding: spacing.md,
-    backgroundColor: colors.surface,
-    borderRadius: radius.lg,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  masterRowActive: { borderColor: colors.primary, backgroundColor: colors.primarySoft },
-  // Success
-  successWrap: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: spacing.lg,
-  },
-  checkCircle: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    backgroundColor: colors.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: spacing.xl,
-  },
-  successContent: { width: '100%', alignItems: 'center', gap: spacing.lg },
-  successSub: { textAlign: 'center', marginTop: -spacing.sm },
-  successMatchCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md,
-    padding: spacing.md,
-    backgroundColor: colors.surface,
-    borderRadius: radius.lg,
-    borderWidth: 1,
-    borderColor: colors.border,
-    width: '100%',
-  },
-  successActions: { width: '100%', gap: spacing.sm },
 });
+
+function makeStyles(c: ColorPalette) {
+  return StyleSheet.create({
+    header: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingHorizontal: spacing.lg,
+      paddingVertical: spacing.md,
+      borderBottomWidth: 1,
+      borderBottomColor: c.border,
+    },
+    stepperWrap: {
+      paddingHorizontal: spacing.lg,
+      paddingVertical: spacing.sm,
+    },
+    scroll: {
+      paddingHorizontal: spacing.lg,
+      paddingBottom: 120,
+    },
+    step: { gap: spacing.lg, paddingTop: spacing.md },
+    stepHeader: { gap: spacing.xs },
+    footer: {
+      position: 'absolute',
+      left: 0,
+      right: 0,
+      bottom: 0,
+      padding: spacing.lg,
+      paddingBottom: spacing.xxl,
+      backgroundColor: c.bg,
+      borderTopWidth: 1,
+      borderTopColor: c.border,
+    },
+    // Step 1 summary
+    summaryHero: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.md,
+    },
+    sportEmoji: { fontSize: 32, lineHeight: 42 },
+    badgeRow: { flexDirection: 'row', gap: spacing.xs, marginTop: 2 },
+    priceRows: { gap: spacing.sm },
+    priceRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+    bcvRow: {
+      marginTop: spacing.sm,
+      paddingTop: spacing.sm,
+      borderTopWidth: 1,
+      borderTopColor: c.border,
+    },
+    organizerRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.md,
+      padding: spacing.md,
+      borderRadius: radius.lg,
+      borderWidth: 1,
+    },
+    // Payment
+    payRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.md,
+      padding: spacing.md,
+    },
+    payRowActive: { backgroundColor: c.primarySoft },
+    payIcon: {
+      width: 36,
+      height: 36,
+      borderRadius: radius.sm,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    radio: {
+      width: 22,
+      height: 22,
+      borderRadius: 11,
+      borderWidth: 2,
+      borderColor: c.border,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    radioOn: { borderColor: c.primary },
+    radioDot: {
+      width: 10,
+      height: 10,
+      borderRadius: 5,
+      backgroundColor: c.primary,
+    },
+    rowDivider: { height: 1, backgroundColor: c.border, marginHorizontal: spacing.md },
+    // Requirements
+    reqRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.md,
+      padding: spacing.md,
+    },
+    reqRowActive: { backgroundColor: c.primarySoft },
+    checkbox: {
+      width: 22,
+      height: 22,
+      borderRadius: radius.sm,
+      borderWidth: 1.5,
+      borderColor: c.border,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    checkboxOn: { backgroundColor: c.primary, borderColor: c.primary },
+    masterRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.md,
+      padding: spacing.md,
+      backgroundColor: c.surface,
+      borderRadius: radius.lg,
+      borderWidth: 1,
+      borderColor: c.border,
+    },
+    masterRowActive: { borderColor: c.primary, backgroundColor: c.primarySoft },
+    // Success
+    successWrap: {
+      flex: 1,
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingHorizontal: spacing.lg,
+    },
+    checkCircle: {
+      width: 100,
+      height: 100,
+      borderRadius: 50,
+      backgroundColor: c.primary,
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginBottom: spacing.xl,
+    },
+    successContent: { width: '100%', alignItems: 'center', gap: spacing.lg },
+    successSub: { textAlign: 'center', marginTop: -spacing.sm },
+    successMatchCard: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.md,
+      padding: spacing.md,
+      backgroundColor: c.surface,
+      borderRadius: radius.lg,
+      borderWidth: 1,
+      borderColor: c.border,
+      width: '100%',
+    },
+    successActions: { width: '100%', gap: spacing.sm },
+  });
+}

@@ -1,7 +1,8 @@
 import type { ReactNode } from 'react';
 import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 
-import { colors, radius } from '@/theme';
+import { useColors } from '@/hooks/useColors';
+import { radius } from '@/theme';
 
 interface Props {
   size?: number;
@@ -13,11 +14,13 @@ interface Props {
 
 export function IconCircle({
   size = 40,
-  bg = colors.surface,
-  border = colors.border,
+  bg,
+  border,
   children,
   style,
 }: Props) {
+  const c = useColors();
+
   return (
     <View
       style={[
@@ -26,8 +29,8 @@ export function IconCircle({
           width: size,
           height: size,
           borderRadius: radius.full,
-          backgroundColor: bg,
-          borderColor: border,
+          backgroundColor: bg ?? c.surface,
+          borderColor: border ?? c.border,
         },
         style,
       ]}
