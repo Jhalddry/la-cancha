@@ -58,4 +58,4 @@ export const lightPalette = {
   transparent: 'transparent',
 } as const;
 
-export type ColorPalette = typeof darkPalette;
+export type ColorPalette = typeof darkPalette | typeof lightPalette;
