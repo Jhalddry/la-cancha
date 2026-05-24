@@ -20,11 +20,15 @@ import 'react-native-reanimated';
 
 import { queryClient } from '@/lib/queryClient';
 import { useColors } from '@/hooks/useColors';
+import { useSession } from '@/store/session';
 import { useTheme } from '@/store/theme';
 
 SplashScreen.preventAutoHideAsync().catch(() => {});
 
 export default function RootLayout() {
+  const initialize = useSession((s) => s.initialize);
+  const isLoading = useSession((s) => s.isLoading);
+
   const [fontsLoaded] = useFonts({
     Inter_400Regular,
     Inter_500Medium,
@@ -66,12 +70,17 @@ export default function RootLayout() {
       };
 
   useEffect(() => {
-    if (fontsLoaded) {
+    const unsubscribe = initialize();
+    return unsubscribe;
+  }, [initialize]);
+
+  useEffect(() => {
+    if (fontsLoaded && !isLoading) {
       SplashScreen.hideAsync().catch(() => {});
     }
-  }, [fontsLoaded]);
+  }, [fontsLoaded, isLoading]);
 
-  if (!fontsLoaded) return null;
+  if (!fontsLoaded || isLoading) return null;
 
   return (
     <QueryClientProvider client={queryClient}>

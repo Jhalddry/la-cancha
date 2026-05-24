@@ -7,7 +7,7 @@ import {
   Lock,
 } from 'phosphor-react-native';
 import { useMemo, useState } from 'react';
-import { ScrollView, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, ScrollView, StyleSheet, View } from 'react-native';
 
 import { Crosshair } from '@/components/brand/Crosshair';
 import { BackHeader } from '@/components/ui/BackHeader';
@@ -29,6 +29,8 @@ export default function LoginScreen() {
   const [password, setPassword] = useState('');
   const [secure, setSecure] = useState(true);
   const [tried, setTried] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [authError, setAuthError] = useState<string | null>(null);
 
   const errors = useMemo(() => {
     const e: { email?: string; password?: string } = {};
@@ -40,18 +42,24 @@ export default function LoginScreen() {
   }, [email, password]);
   const shown = tried ? errors : {};
 
-  const submit = () => {
+  const submit = async () => {
     if (Object.keys(errors).length > 0) {
       setTried(true);
       return;
     }
-    signIn();
+    setLoading(true);
+    setAuthError(null);
+    const error = await signIn(email.trim(), password);
+    setLoading(false);
+    if (error) {
+      setAuthError('Correo o contraseña incorrectos.');
+      return;
+    }
     router.replace('/(tabs)');
   };
 
   const submitSocial = () => {
-    signIn();
-    router.replace('/(tabs)');
+    // Social auth — stub for now
   };
 
   return (
@@ -104,7 +112,16 @@ export default function LoginScreen() {
           </PressableScale>
         </View>
 
-        <Button label="Iniciar sesión" onPress={submit} />
+        {authError ? (
+          <Text variant="small" color="alert" style={{ textAlign: 'center' }}>
+            {authError}
+          </Text>
+        ) : null}
+        {loading ? (
+          <ActivityIndicator color={c.primary} />
+        ) : (
+          <Button label="Iniciar sesión" onPress={submit} />
+        )}
 
         <View style={staticStyles.dividerRow}>
           <Divider />

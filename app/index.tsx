@@ -14,6 +14,7 @@ import Svg, { Circle, Line } from 'react-native-svg';
 
 import { Text } from '@/components/ui/Text';
 import { useColors } from '@/hooks/useColors';
+import { useSession } from '@/store/session';
 import { spacing } from '@/theme';
 import type { ColorPalette } from '@/theme/palettes';
 
@@ -27,6 +28,7 @@ const STROKE_WIDTH = 10;
 
 export default function SplashRoute() {
   const router = useRouter();
+  const isAuthed = useSession((s) => s.isAuthed);
   const c = useColors();
   const s = useMemo(() => makeStyles(c), [c]);
 
@@ -64,7 +66,7 @@ export default function SplashRoute() {
     );
 
     const t = setTimeout(() => {
-      router.replace('/(tabs)');
+      router.replace(isAuthed ? '/(tabs)' : '/login');
     }, 2400);
     return () => clearTimeout(t);
   }, [
@@ -73,6 +75,7 @@ export default function SplashRoute() {
     dotOpacity,
     dotScale,
     glowOpacity,
+    isAuthed,
     router,
     wordmarkOpacity,
     wordmarkY,

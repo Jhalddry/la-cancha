@@ -10,7 +10,9 @@
       "Bash(rmdir hooks *)",
       "Bash(npx expo-doctor *)",
       "WebSearch",
-      "WebFetch(domain:docs.expo.dev)"
+      "WebFetch(domain:docs.expo.dev)",
+      "Bash(del \"C:\\\\Users\\\\User\\\\OneDrive\\\\Documents\\\\la-cancha\\\\lib\\\\native-fetch-stub.js\")",
+      "Bash(del \"C:\\\\Users\\\\User\\\\OneDrive\\\\Documents\\\\la-cancha\\\\lib\\\\fetch-setup.ts\")"
     ]
   }
 }

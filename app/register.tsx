@@ -1,7 +1,7 @@
 import { useRouter } from 'expo-router';
 import { Check, Envelope, Lock, User } from 'phosphor-react-native';
 import { useMemo, useState } from 'react';
-import { ScrollView, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, ScrollView, StyleSheet, View } from 'react-native';
 
 import { Crosshair } from '@/components/brand/Crosshair';
 import { BackHeader } from '@/components/ui/BackHeader';
@@ -24,7 +24,7 @@ interface FieldErrors {
 
 export default function RegisterScreen() {
   const router = useRouter();
-  const signIn = useSession((s) => s.signIn);
+  const signUp = useSession((s) => s.signUp);
   const c = useColors();
   const s = useMemo(() => makeStyles(c), [c]);
   const [name, setName] = useState('');
@@ -32,6 +32,8 @@ export default function RegisterScreen() {
   const [password, setPassword] = useState('');
   const [accept, setAccept] = useState(false);
   const [tried, setTried] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [authError, setAuthError] = useState<string | null>(null);
 
   const errors = useMemo<FieldErrors>(() => {
     const e: FieldErrors = {};
@@ -48,12 +50,19 @@ export default function RegisterScreen() {
   const shown: FieldErrors = tried ? errors : {};
   const isValid = Object.keys(errors).length === 0;
 
-  const submit = () => {
+  const submit = async () => {
     if (!isValid) {
       setTried(true);
       return;
     }
-    signIn();
+    setLoading(true);
+    setAuthError(null);
+    const error = await signUp(name.trim(), email.trim(), password);
+    setLoading(false);
+    if (error) {
+      setAuthError(error);
+      return;
+    }
     router.replace('/(tabs)');
   };
 
@@ -128,7 +137,16 @@ export default function RegisterScreen() {
           ) : null}
         </View>
 
-        <Button label="Crear cuenta" onPress={submit} />
+        {authError ? (
+          <Text variant="small" color="alert" style={{ textAlign: 'center' }}>
+            {authError}
+          </Text>
+        ) : null}
+        {loading ? (
+          <ActivityIndicator color={c.primary} />
+        ) : (
+          <Button label="Crear cuenta" onPress={submit} />
+        )}
 
         <View style={staticStyles.regRow}>
           <Text variant="small" color="textSecondary">

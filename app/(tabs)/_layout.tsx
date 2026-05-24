@@ -3,12 +3,17 @@ import {
   Label,
   NativeTabs,
 } from 'expo-router/unstable-native-tabs';
+import { Redirect } from 'expo-router';
 import { DynamicColorIOS, Platform } from 'react-native';
 
 import { useColors } from '@/hooks/useColors';
+import { useSession } from '@/store/session';
 
 export default function TabsLayout() {
+  const isAuthed = useSession((s) => s.isAuthed);
   const c = useColors();
+
+  if (!isAuthed) return <Redirect href="/login" />;
 
   const tintColor =
     Platform.OS === 'ios'
