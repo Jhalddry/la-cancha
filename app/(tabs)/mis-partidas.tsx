@@ -103,7 +103,7 @@ export default function MisPartidasScreen() {
                   <PressableScale
                     style={s.rateStrip}
                     scaleTo={0.98}
-                    onPress={() => router.push(`/calificar/${target.id}`)}
+                    onPress={() => router.push(`/calificar/${target.id}?matchId=${m.id}`)}
                   >
                     <Star size={14} color={c.bg} weight="fill" />
                     <Text variant="smallMedium" style={{ color: c.bg }}>

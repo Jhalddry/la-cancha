@@ -11,7 +11,14 @@ import {
   UserPlus,
 } from 'phosphor-react-native';
 import { useMemo, useState } from 'react';
-import { Alert, ScrollView, StyleSheet, TextInput as RNTextInput, View } from 'react-native';
+import {
+  ActivityIndicator,
+  Alert,
+  ScrollView,
+  StyleSheet,
+  TextInput as RNTextInput,
+  View,
+} from 'react-native';
 
 import { Avatar } from '@/components/ui/Avatar';
 import { BackHeader } from '@/components/ui/BackHeader';
@@ -23,11 +30,12 @@ import { Screen } from '@/components/ui/Screen';
 import { Sheet } from '@/components/ui/Sheet';
 import { Stars } from '@/components/ui/Stars';
 import { Text } from '@/components/ui/Text';
-import { mockMatches } from '@/data/matches';
-import { mockCurrentUser, mockPlayers } from '@/data/players';
 import { MatchTypeBadge } from '@/features/match/MatchTypeBadge';
 import { useColors } from '@/hooks/useColors';
+import { useMatches, useMyMatches } from '@/hooks/useMatches';
+import { useProfile } from '@/hooks/useProfiles';
 import { formatMatchTime, labelModality, labelPosition, labelSport } from '@/lib/format';
+import { useSession } from '@/store/session';
 import { fonts, radius, spacing } from '@/theme';
 import type { ColorPalette } from '@/theme/palettes';
 import type { Sport } from '@/types/domain';
@@ -48,13 +56,45 @@ const SKILL_LABEL: Record<number, string> = {
   5: 'Competitivo',
 };
 
+const REPORT_REASONS = [
+  'Comportamiento tóxico',
+  'Impuntualidad',
+  'Abandonó la partida',
+  'Nivel no acorde al declarado',
+  'No pagó',
+  'Otro',
+];
+
 export default function PlayerProfileScreen() {
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
+  const userId = useSession((st) => st.user?.id);
   const c = useColors();
   const s = useMemo(() => makeStyles(c), [c]);
-  const all = [...mockPlayers, mockCurrentUser];
-  const player = all.find((p) => p.id === id) ?? mockPlayers[0];
+
+  const { data: player, isLoading } = useProfile(id);
+
+  // Recent matches organised by this player
+  const { data: organizedMatches } = useMatches(
+    id ? { upcomingOnly: false } : {},
+  );
+  const recentMatches = useMemo(
+    () =>
+      (organizedMatches ?? [])
+        .filter((m) => m.organizer.id === id)
+        .slice(0, 3),
+    [organizedMatches, id],
+  );
+
+  // Current user's upcoming created matches (for invite sheet)
+  const { data: myMatches } = useMyMatches();
+  const myUpcomingMatches = useMemo(
+    () =>
+      (myMatches?.created ?? []).filter(
+        (m) => new Date(m.startsAt).getTime() > Date.now(),
+      ),
+    [myMatches],
+  );
 
   const [inviteOpen, setInviteOpen] = useState(false);
   const [invitedMatchId, setInvitedMatchId] = useState<string | null>(null);
@@ -65,15 +105,6 @@ export default function PlayerProfileScreen() {
   const [blockDoneOpen, setBlockDoneOpen] = useState(false);
   const [reportReason, setReportReason] = useState<string | null>(null);
   const [reportDetail, setReportDetail] = useState('');
-
-  const REPORT_REASONS = [
-    'Comportamiento tóxico',
-    'Impuntualidad',
-    'Abandonó la partida',
-    'Nivel no acorde al declarado',
-    'No pagó',
-    'Otro',
-  ];
 
   const closeReport = () => {
     setReportOpen(false);
@@ -91,19 +122,16 @@ export default function PlayerProfileScreen() {
     setTimeout(() => setBlockDoneOpen(true), 250);
   };
 
-  const recentMatches = mockMatches
-    .filter(
-      (m) =>
-        m.organizer.id === player.id ||
-        m.joinedPlayers.some((p) => p.id === player.id),
-    )
-    .slice(0, 3);
-
-  const myUpcomingMatches = mockMatches.filter(
-    (m) =>
-      m.organizer.id === mockCurrentUser.id &&
-      new Date(m.startsAt).getTime() > Date.now(),
-  );
+  if (isLoading || !player) {
+    return (
+      <Screen edges={['top']}>
+        <BackHeader title="" transparent />
+        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+          <ActivityIndicator color={c.primary} size="large" />
+        </View>
+      </Screen>
+    );
+  }
 
   return (
     <Screen edges={['top']}>
@@ -111,13 +139,16 @@ export default function PlayerProfileScreen() {
         title=""
         transparent
         trailing={
-          <PressableScale
-            style={s.menuBtn}
-            scaleTo={0.9}
-            onPress={() => setMenuOpen(true)}
-          >
-            <DotsThreeVertical size={22} color={c.textPrimary} weight="bold" />
-          </PressableScale>
+          // Hide menu when viewing own profile
+          id !== userId ? (
+            <PressableScale
+              style={s.menuBtn}
+              scaleTo={0.9}
+              onPress={() => setMenuOpen(true)}
+            >
+              <DotsThreeVertical size={22} color={c.textPrimary} weight="bold" />
+            </PressableScale>
+          ) : undefined
         }
       />
 
@@ -151,12 +182,14 @@ export default function PlayerProfileScreen() {
             ) : null}
           </View>
 
-          <View style={s.locationRow}>
-            <MapPin size={12} color={c.textTertiary} weight="fill" />
-            <Text variant="small" color="textTertiary">
-              Caracas, Venezuela
-            </Text>
-          </View>
+          {player.city ? (
+            <View style={s.locationRow}>
+              <MapPin size={12} color={c.textTertiary} weight="fill" />
+              <Text variant="small" color="textTertiary">
+                {player.city}, Venezuela
+              </Text>
+            </View>
+          ) : null}
         </View>
 
         {/* Stats */}
@@ -240,19 +273,12 @@ export default function PlayerProfileScreen() {
           </View>
         ) : null}
 
-        {/* Recent matches */}
+        {/* Recent matches organised by this player */}
         {recentMatches.length > 0 ? (
           <View style={s.section}>
-            <View style={s.sectionHead}>
-              <Text variant="caption" color="textSecondary">
-                Partidos recientes
-              </Text>
-              <PressableScale scaleTo={0.95} onPress={() => router.push('/historial')}>
-                <Text variant="caption" color="primary">
-                  Ver todos
-                </Text>
-              </PressableScale>
-            </View>
+            <Text variant="caption" color="textSecondary" style={s.sectionLabel}>
+              Partidos recientes
+            </Text>
             <View style={s.recentList}>
               {recentMatches.map((m) => (
                 <PressableScale
@@ -265,7 +291,7 @@ export default function PlayerProfileScreen() {
                   <View style={{ flex: 1 }}>
                     <View style={s.recentTop}>
                       <Text variant="bodyMedium" color="textPrimary">
-                        {labelSport(m.sport)}
+                        {labelModality(m.modality)}
                       </Text>
                       <MatchTypeBadge type={m.type} />
                     </View>
@@ -280,19 +306,24 @@ export default function PlayerProfileScreen() {
         ) : null}
       </ScrollView>
 
-      <View style={s.footer}>
-        <Button
-          label="Enviar mensaje"
-          variant="secondary"
-          onPress={() => router.push(`/chat/${player.id}`)}
-          leading={<ChatCircle size={18} color={c.textPrimary} weight="fill" />}
-        />
-        <Button
-          label="Invitar a jugar"
-          onPress={() => setInviteOpen(true)}
-          leading={<UserPlus size={18} color={c.bg} weight="fill" />}
-        />
-      </View>
+      {/* Footer — only show when viewing another user's profile */}
+      {id !== userId ? (
+        <View style={s.footer}>
+          <Button
+            label="Enviar mensaje"
+            variant="secondary"
+            onPress={() => router.push(`/chat/${player.id}`)}
+            leading={<ChatCircle size={18} color={c.textPrimary} weight="fill" />}
+          />
+          <Button
+            label="Invitar a jugar"
+            onPress={() => setInviteOpen(true)}
+            leading={<UserPlus size={18} color={c.bg} weight="fill" />}
+          />
+        </View>
+      ) : null}
+
+      {/* ── Sheets ── */}
 
       <Sheet
         visible={menuOpen}
@@ -312,9 +343,7 @@ export default function PlayerProfileScreen() {
               <Flag size={18} color={c.alert} weight="fill" />
             </View>
             <View style={{ flex: 1 }}>
-              <Text variant="bodyMedium" color="alert">
-                Reportar jugador
-              </Text>
+              <Text variant="bodyMedium" color="alert">Reportar jugador</Text>
               <Text variant="small" color="textSecondary">
                 Avísanos si vive comportamiento indebido
               </Text>
@@ -333,9 +362,7 @@ export default function PlayerProfileScreen() {
               <Prohibit size={18} color={c.alert} weight="bold" />
             </View>
             <View style={{ flex: 1 }}>
-              <Text variant="bodyMedium" color="alert">
-                Bloquear
-              </Text>
+              <Text variant="bodyMedium" color="alert">Bloquear</Text>
               <Text variant="small" color="textSecondary">
                 No verás más partidas ni mensajes de este jugador
               </Text>
@@ -344,103 +371,77 @@ export default function PlayerProfileScreen() {
         </View>
       </Sheet>
 
-      <Sheet
-        visible={reportOpen}
-        onClose={closeReport}
-        title={`Reportar a ${player.name}`}
-      >
+      <Sheet visible={reportOpen} onClose={closeReport} title={`Reportar a ${player.name}`}>
         <View style={s.reportBody}>
-            <Text variant="caption" color="textSecondary">
-              Motivo del reporte
-            </Text>
-            <View style={s.reasonList}>
-              {REPORT_REASONS.map((r) => {
-                const selected = reportReason === r;
-                return (
-                  <PressableScale
-                    key={r}
-                    scaleTo={0.98}
-                    onPress={() => setReportReason(r)}
-                    style={[
-                      s.reasonRow,
-                      selected ? s.reasonRowActive : null,
-                    ]}
+          <Text variant="caption" color="textSecondary">Motivo del reporte</Text>
+          <View style={s.reasonList}>
+            {REPORT_REASONS.map((r) => {
+              const selected = reportReason === r;
+              return (
+                <PressableScale
+                  key={r}
+                  scaleTo={0.98}
+                  onPress={() => setReportReason(r)}
+                  style={[s.reasonRow, selected ? s.reasonRowActive : null]}
+                >
+                  <View style={[s.radio, selected ? s.radioOn : null]}>
+                    {selected ? <View style={s.radioDot} /> : null}
+                  </View>
+                  <Text
+                    variant="bodyMedium"
+                    color={selected ? 'alert' : 'textPrimary'}
+                    style={{ flex: 1 }}
                   >
-                    <View style={[s.radio, selected ? s.radioOn : null]}>
-                      {selected ? <View style={s.radioDot} /> : null}
-                    </View>
-                    <Text
-                      variant="bodyMedium"
-                      color={selected ? 'alert' : 'textPrimary'}
-                      style={{ flex: 1 }}
-                    >
-                      {r}
-                    </Text>
-                  </PressableScale>
-                );
-              })}
-            </View>
-
-            <Text variant="caption" color="textSecondary" style={{ marginTop: spacing.sm }}>
-              Detalles adicionales (opcional)
-            </Text>
-            <View style={s.textareaWrap}>
-              <RNTextInput
-                style={s.textarea}
-                placeholder="Describe lo que ocurrió..."
-                placeholderTextColor={c.textTertiary}
-                multiline
-                numberOfLines={3}
-                value={reportDetail}
-                onChangeText={(v) => setReportDetail(v.slice(0, 240))}
-                textAlignVertical="top"
-              />
-              <Text variant="caption" color="textTertiary" style={{ alignSelf: 'flex-end' }}>
-                {reportDetail.length}/240
-              </Text>
-            </View>
-
-            <View style={s.reportActions}>
-              <Button
-                label="Cancelar"
-                variant="secondary"
-                onPress={closeReport}
-                style={{ flex: 1 }}
-              />
-              <Button
-                label="Enviar reporte"
-                disabled={!reportReason}
-                onPress={submitReport}
-                style={{ flex: 1 }}
-              />
-            </View>
+                    {r}
+                  </Text>
+                </PressableScale>
+              );
+            })}
           </View>
+
+          <Text variant="caption" color="textSecondary" style={{ marginTop: spacing.sm }}>
+            Detalles adicionales (opcional)
+          </Text>
+          <View style={s.textareaWrap}>
+            <RNTextInput
+              style={s.textarea}
+              placeholder="Describe lo que ocurrió..."
+              placeholderTextColor={c.textTertiary}
+              multiline
+              numberOfLines={3}
+              value={reportDetail}
+              onChangeText={(v) => setReportDetail(v.slice(0, 240))}
+              textAlignVertical="top"
+            />
+            <Text variant="caption" color="textTertiary" style={{ alignSelf: 'flex-end' }}>
+              {reportDetail.length}/240
+            </Text>
+          </View>
+
+          <View style={s.reportActions}>
+            <Button label="Cancelar" variant="secondary" onPress={closeReport} style={{ flex: 1 }} />
+            <Button
+              label="Enviar reporte"
+              disabled={!reportReason}
+              onPress={submitReport}
+              style={{ flex: 1 }}
+            />
+          </View>
+        </View>
       </Sheet>
 
-      <Sheet
-        visible={blockOpen}
-        onClose={() => setBlockOpen(false)}
-        title={`Bloquear a ${player.name}?`}
-      >
+      <Sheet visible={blockOpen} onClose={() => setBlockOpen(false)} title={`Bloquear a ${player.name}?`}>
         <View style={s.blockBody}>
           <View style={s.blockIconWrap}>
             <Prohibit size={48} color={c.alert} weight="bold" />
           </View>
           <Text variant="body" color="textSecondary" style={{ textAlign: 'center' }}>
-            {player.name} no podrá unirse a tus partidas, enviarte mensajes ni verá tu perfil. Puedes desbloquearlo desde ajustes.
+            {player.name} no podrá unirse a tus partidas, enviarte mensajes ni verá tu perfil.
+            Puedes desbloquearlo desde ajustes.
           </Text>
           <View style={s.blockActions}>
-            <Button
-              label="Cancelar"
-              variant="secondary"
-              onPress={() => setBlockOpen(false)}
-              style={{ flex: 1 }}
-            />
-            <Button
-              label="Bloquear"
-              onPress={submitBlock}
-              style={{ flex: 1, backgroundColor: c.alert }}
-            />
+            <Button label="Cancelar" variant="secondary" onPress={() => setBlockOpen(false)} style={{ flex: 1 }} />
+            <Button label="Bloquear" onPress={submitBlock} style={{ flex: 1, backgroundColor: c.alert }} />
           </View>
         </View>
       </Sheet>
@@ -450,9 +451,7 @@ export default function PlayerProfileScreen() {
           <View style={[s.doneIcon, { backgroundColor: c.primarySoft }]}>
             <Check size={36} color={c.primary} weight="bold" />
           </View>
-          <Text variant="h3" color="textPrimary">
-            Reporte enviado
-          </Text>
+          <Text variant="h3" color="textPrimary">Reporte enviado</Text>
           <Text variant="body" color="textSecondary" style={{ textAlign: 'center' }}>
             Revisaremos el comportamiento de {player.name} en las próximas 24h.
           </Text>
@@ -465,9 +464,7 @@ export default function PlayerProfileScreen() {
           <View style={[s.doneIcon, { backgroundColor: `${c.alert}22` }]}>
             <Prohibit size={36} color={c.alert} weight="bold" />
           </View>
-          <Text variant="h3" color="textPrimary">
-            Jugador bloqueado
-          </Text>
+          <Text variant="h3" color="textPrimary">Jugador bloqueado</Text>
           <Text variant="body" color="textSecondary" style={{ textAlign: 'center' }}>
             {player.name} ya no podrá unirse a tus partidas ni enviarte mensajes.
           </Text>
@@ -491,10 +488,7 @@ export default function PlayerProfileScreen() {
             {myUpcomingMatches.map((m) => (
               <PressableScale
                 key={m.id}
-                style={[
-                  s.inviteRow,
-                  invitedMatchId === m.id ? s.inviteRowActive : null,
-                ]}
+                style={[s.inviteRow, invitedMatchId === m.id ? s.inviteRowActive : null]}
                 scaleTo={0.98}
                 onPress={() => setInvitedMatchId(m.id)}
               >
@@ -576,7 +570,13 @@ function makeStyles(c: ColorPalette) {
     },
     hero: { alignItems: 'center', gap: spacing.sm },
     heroName: { marginTop: spacing.sm },
-    heroMeta: { flexDirection: 'row', gap: spacing.sm, alignItems: 'center', flexWrap: 'wrap', justifyContent: 'center' },
+    heroMeta: {
+      flexDirection: 'row',
+      gap: spacing.sm,
+      alignItems: 'center',
+      flexWrap: 'wrap',
+      justifyContent: 'center',
+    },
     skillBadge: {
       flexDirection: 'row',
       alignItems: 'center',
@@ -611,7 +611,11 @@ function makeStyles(c: ColorPalette) {
     statDivider: { width: 1, backgroundColor: c.border, marginVertical: spacing.xs },
     section: { gap: spacing.sm },
     sectionLabel: { marginBottom: 2 },
-    sectionHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+    sectionHead: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+    },
     sportsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.lg },
     sportItem: { alignItems: 'center', gap: spacing.xs, width: 56 },
     sportCircle: {
@@ -653,7 +657,12 @@ function makeStyles(c: ColorPalette) {
       minHeight: 64,
     },
     recentEmoji: { fontSize: 22, lineHeight: 28, width: 32 },
-    recentTop: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginBottom: 2 },
+    recentTop: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.sm,
+      marginBottom: 2,
+    },
     reportBody: { gap: spacing.sm, paddingBottom: spacing.md },
     reasonList: { gap: spacing.xs },
     reasonRow: {
@@ -681,12 +690,7 @@ function makeStyles(c: ColorPalette) {
       justifyContent: 'center',
     },
     radioOn: { borderColor: c.alert },
-    radioDot: {
-      width: 10,
-      height: 10,
-      borderRadius: 5,
-      backgroundColor: c.alert,
-    },
+    radioDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: c.alert },
     textareaWrap: {
       backgroundColor: c.bg,
       borderRadius: radius.md,
@@ -702,11 +706,7 @@ function makeStyles(c: ColorPalette) {
       minHeight: 72,
       maxHeight: 72,
     },
-    reportActions: {
-      flexDirection: 'row',
-      gap: spacing.sm,
-      marginTop: spacing.md,
-    },
+    reportActions: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.md },
     blockBody: { gap: spacing.lg, alignItems: 'center', paddingBottom: spacing.md },
     blockIconWrap: {
       width: 80,
@@ -716,16 +716,8 @@ function makeStyles(c: ColorPalette) {
       alignItems: 'center',
       justifyContent: 'center',
     },
-    blockActions: {
-      flexDirection: 'row',
-      gap: spacing.sm,
-      width: '100%',
-    },
-    doneBody: {
-      alignItems: 'center',
-      gap: spacing.md,
-      paddingBottom: spacing.md,
-    },
+    blockActions: { flexDirection: 'row', gap: spacing.sm, width: '100%' },
+    doneBody: { alignItems: 'center', gap: spacing.md, paddingBottom: spacing.md },
     doneIcon: {
       width: 72,
       height: 72,

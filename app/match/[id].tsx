@@ -1,6 +1,7 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import {
   CalendarBlank,
+  ChatCircle,
   CheckCircle,
   CreditCard,
   MapPin,
@@ -97,6 +98,15 @@ export default function MatchDetailScreen() {
                 onPress={() => router.push(`/editar/${match.id}`)}
               >
                 <PencilSimple size={18} color={c.primary} weight="fill" />
+              </PressableScale>
+            ) : null}
+            {(isOrganizer || joined) ? (
+              <PressableScale
+                style={s.headerBtn}
+                scaleTo={0.9}
+                onPress={() => router.push(`/chat/${match.id}`)}
+              >
+                <ChatCircle size={18} color={c.textPrimary} weight="regular" />
               </PressableScale>
             ) : null}
             <PressableScale style={s.headerBtn} scaleTo={0.9} onPress={handleShare}>

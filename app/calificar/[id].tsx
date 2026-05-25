@@ -1,7 +1,14 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Check, House, Star } from 'phosphor-react-native';
 import { useEffect, useMemo, useState } from 'react';
-import { ScrollView, StyleSheet, TextInput as RNTextInput, View } from 'react-native';
+import {
+  ActivityIndicator,
+  Alert,
+  ScrollView,
+  StyleSheet,
+  TextInput as RNTextInput,
+  View,
+} from 'react-native';
 import Animated, {
   useAnimatedStyle,
   useSharedValue,
@@ -15,10 +22,13 @@ import { PressableScale } from '@/components/ui/PressableScale';
 import { Screen } from '@/components/ui/Screen';
 import { Stars } from '@/components/ui/Stars';
 import { Text } from '@/components/ui/Text';
-import { mockCurrentUser, mockPlayers } from '@/data/players';
 import { useColors } from '@/hooks/useColors';
+import { useProfile } from '@/hooks/useProfiles';
+import { submitRating } from '@/lib/ratingsApi';
+import { useSession } from '@/store/session';
 import { fonts, radius, spacing } from '@/theme';
 import type { ColorPalette } from '@/theme/palettes';
+import type { Player } from '@/types/domain';
 
 const TOTAL_STEPS = 3;
 
@@ -37,16 +47,18 @@ const MAX_COMMENT = 200;
 
 export default function CalificarScreen() {
   const router = useRouter();
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id, matchId } = useLocalSearchParams<{ id: string; matchId?: string }>();
+  const userId = useSession((st) => st.user?.id);
   const c = useColors();
   const s = useMemo(() => makeStyles(c), [c]);
-  const all = [...mockPlayers, mockCurrentUser];
-  const player = all.find((p) => p.id === id) ?? mockPlayers[0];
+
+  const { data: player, isLoading: playerLoading } = useProfile(id);
 
   const [step, setStep] = useState(1);
   const [rating, setRating] = useState(0);
   const [tags, setTags] = useState<Set<string>>(new Set());
   const [comment, setComment] = useState('');
+  const [sending, setSending] = useState(false);
 
   const toggleTag = (t: string) =>
     setTags((cur) => {
@@ -56,6 +68,36 @@ export default function CalificarScreen() {
       return next;
     });
 
+  const handleSubmit = async () => {
+    if (!matchId || !userId || !player) {
+      // No matchId — show success anyway (graceful)
+      setStep(4);
+      return;
+    }
+    setSending(true);
+    try {
+      await submitRating(matchId, userId, player.id, rating, [...tags], comment);
+      setStep(4);
+    } catch (e) {
+      Alert.alert(
+        'Error al enviar',
+        e instanceof Error ? e.message : 'Intenta de nuevo.',
+      );
+    } finally {
+      setSending(false);
+    }
+  };
+
+  if (playerLoading || !player) {
+    return (
+      <Screen>
+        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+          <ActivityIndicator color={c.primary} size="large" />
+        </View>
+      </Screen>
+    );
+  }
+
   if (step === 4) {
     return <SuccessStep player={player} rating={rating} router={router} />;
   }
@@ -63,7 +105,10 @@ export default function CalificarScreen() {
   return (
     <Screen edges={['top']}>
       <View style={s.header}>
-        <PressableScale onPress={() => (step === 1 ? router.back() : setStep(step - 1))} scaleTo={0.9}>
+        <PressableScale
+          onPress={() => (step === 1 ? router.back() : setStep(step - 1))}
+          scaleTo={0.9}
+        >
           <Text variant="bodyMedium" color="textTertiary">
             {step === 1 ? 'Cancelar' : 'Atrás'}
           </Text>
@@ -99,10 +144,14 @@ export default function CalificarScreen() {
             onPress={() => setStep(step + 1)}
           />
         ) : (
-          <Button label="Enviar calificación" onPress={() => setStep(4)} />
+          <Button
+            label={sending ? 'Enviando…' : 'Enviar calificación'}
+            disabled={sending}
+            onPress={handleSubmit}
+          />
         )}
         {step === 3 ? (
-          <PressableScale scaleTo={0.97} onPress={() => setStep(4)}>
+          <PressableScale scaleTo={0.97} onPress={handleSubmit} disabled={sending}>
             <Text variant="body" color="textTertiary" style={{ textAlign: 'center' }}>
               Omitir comentario
             </Text>
@@ -124,7 +173,7 @@ function RatingStep({
   onRate,
 }: {
   c: ColorPalette;
-  player: (typeof mockPlayers)[0];
+  player: Player;
   rating: number;
   onRate: (r: number) => void;
 }) {
@@ -145,9 +194,7 @@ function RatingStep({
 
       <View style={s.avatarWrap}>
         <Avatar name={player.name} uri={player.avatarUrl} size={80} />
-        {player.verified ? (
-          <View style={s.verifiedDot} />
-        ) : null}
+        {player.verified ? <View style={s.verifiedDot} /> : null}
       </View>
 
       <View style={s.starsRow}>
@@ -278,7 +325,7 @@ function SuccessStep({
   rating,
   router,
 }: {
-  player: (typeof mockPlayers)[0];
+  player: Player;
   rating: number;
   router: ReturnType<typeof useRouter>;
 }) {
@@ -305,9 +352,7 @@ function SuccessStep({
         </Animated.View>
 
         <Animated.View style={[s.successContent, contentStyle]}>
-          <Text variant="h1" color="textPrimary">
-            ¡Gracias!
-          </Text>
+          <Text variant="h1" color="textPrimary">¡Gracias!</Text>
           <Text variant="body" color="textSecondary" style={{ textAlign: 'center' }}>
             Tu calificación ha sido enviada.
           </Text>
@@ -315,12 +360,8 @@ function SuccessStep({
           <View style={s.ratedCard}>
             <Avatar name={player.name} uri={player.avatarUrl} size={48} />
             <View style={{ flex: 1 }}>
-              <Text variant="bodySemibold" color="textPrimary">
-                {player.name}
-              </Text>
-              <Text variant="caption" color="textSecondary">
-                Tu calificación
-              </Text>
+              <Text variant="bodySemibold" color="textPrimary">{player.name}</Text>
+              <Text variant="caption" color="textSecondary">Tu calificación</Text>
               {rating > 0 ? (
                 <View style={{ marginTop: 2 }}>
                   <Stars level={rating as 1 | 2 | 3 | 4 | 5} size={14} />
@@ -365,9 +406,7 @@ function TagChip({
       scaleTo={0.93}
       style={[
         s.tagChip,
-        selected
-          ? { borderColor: activeColor, backgroundColor: `${activeColor}18` }
-          : null,
+        selected ? { borderColor: activeColor, backgroundColor: `${activeColor}18` } : null,
       ]}
     >
       <Text
@@ -403,7 +442,9 @@ function ConfettiDecor({ c }: { c: ColorPalette }) {
             borderRadius: d.size / 2,
             backgroundColor: d.color,
             opacity: 0.7,
-            ...('right' in d ? { right: d.right, top: d.top } : { left: d.left, top: d.top }),
+            ...('right' in d
+              ? { right: d.right, top: d.top }
+              : { left: d.left, top: d.top }),
           }}
         />
       ))}
@@ -428,17 +469,9 @@ function makeStyles(c: ColorPalette) {
       gap: spacing.sm,
       paddingVertical: spacing.md,
     },
-    dot: {
-      width: 28,
-      height: 4,
-      borderRadius: 2,
-      backgroundColor: c.border,
-    },
+    dot: { width: 28, height: 4, borderRadius: 2, backgroundColor: c.border },
     dotActive: { backgroundColor: c.primary },
-    scroll: {
-      paddingHorizontal: spacing.lg,
-      paddingBottom: 120,
-    },
+    scroll: { paddingHorizontal: spacing.lg, paddingBottom: 120 },
     step: { gap: spacing.xl, paddingTop: spacing.lg },
     stepHeader: { gap: spacing.xs },
     avatarWrap: { alignSelf: 'center' },
@@ -451,11 +484,7 @@ function makeStyles(c: ColorPalette) {
       borderRadius: 10,
       backgroundColor: c.primary,
     },
-    starsRow: {
-      flexDirection: 'row',
-      justifyContent: 'center',
-      gap: spacing.sm,
-    },
+    starsRow: { flexDirection: 'row', justifyContent: 'center', gap: spacing.sm },
     tagsSection: { gap: spacing.sm },
     tagsGroupLabel: { marginBottom: 2 },
     tagsWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
@@ -494,7 +523,6 @@ function makeStyles(c: ColorPalette) {
       borderTopColor: c.border,
       gap: spacing.sm,
     },
-    // Success
     successWrap: {
       flex: 1,
       alignItems: 'center',

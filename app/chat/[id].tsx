@@ -1,7 +1,8 @@
 import { useLocalSearchParams } from 'expo-router';
 import { PaperPlaneTilt } from 'phosphor-react-native';
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import {
+  ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -16,131 +17,154 @@ import { PressableScale } from '@/components/ui/PressableScale';
 import { Screen } from '@/components/ui/Screen';
 import { Text } from '@/components/ui/Text';
 import { TextInput } from '@/components/ui/TextInput';
-import { mockChatThreads, mockMessages } from '@/data/chats';
-import { mockCurrentUser } from '@/data/players';
+import { useChat } from '@/hooks/useChat';
+import { useMatch } from '@/hooks/useMatches';
 import { useColors } from '@/hooks/useColors';
+import { useSession } from '@/store/session';
 import { timeOnly } from '@/lib/time';
+import { labelModality } from '@/lib/format';
 import { radius, spacing } from '@/theme';
 import type { ColorPalette } from '@/theme/palettes';
-import type { Message } from '@/types/chat';
+import type { ChatMessageData } from '@/lib/chatApi';
+import { useState } from 'react';
 
 export default function ChatScreen() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id: matchId } = useLocalSearchParams<{ id: string }>();
+  const userId = useSession((s) => s.user?.id);
   const c = useColors();
   const insets = useSafeAreaInsets();
   const s = useMemo(() => makeStyles(c, insets.bottom), [c, insets.bottom]);
-  const thread = mockChatThreads.find((t) => t.id === id) ?? mockChatThreads[0];
-  const initial = mockMessages[thread.id] ?? [];
-  const [messages, setMessages] = useState<Message[]>(initial);
+
+  const { data: match } = useMatch(matchId);
+  const { messages, loading, error, send } = useChat(matchId);
   const [text, setText] = useState('');
   const scrollRef = useRef<ScrollView>(null);
 
   const grouped = useMemo(() => groupByDay(messages), [messages]);
 
-  const send = () => {
+  // Scroll to bottom when new messages arrive
+  useEffect(() => {
+    if (messages.length > 0) {
+      setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 80);
+    }
+  }, [messages.length]);
+
+  const handleSend = async () => {
     const body = text.trim();
     if (!body) return;
-    const next: Message = {
-      id: `msg_${Date.now()}`,
-      threadId: thread.id,
-      authorId: mockCurrentUser.id,
-      body,
-      sentAt: new Date().toISOString(),
-    };
-    setMessages((prev) => [...prev, next]);
     setText('');
-    setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 50);
+    await send(body);
   };
+
+  const title = match
+    ? `${labelModality(match.modality)} · ${match.location.name}`
+    : 'Chat';
+  const subtitle = match
+    ? `${match.joinedPlayers.length + 1} participante${match.joinedPlayers.length !== 0 ? 's' : ''}`
+    : undefined;
 
   return (
     <Screen edges={['top']}>
       <BackHeader
-        title={thread.title}
+        title={title}
         trailing={
-          <Text variant="caption" color="textTertiary">
-            {thread.subtitle}
-          </Text>
+          subtitle ? (
+            <Text variant="caption" color="textTertiary">
+              {subtitle}
+            </Text>
+          ) : undefined
         }
       />
-      <KeyboardAvoidingView
-        style={s.flex}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        keyboardVerticalOffset={0}
-      >
-        <ScrollView
-          ref={scrollRef}
-          contentContainerStyle={s.scroll}
-          onContentSizeChange={() => scrollRef.current?.scrollToEnd({ animated: false })}
-        >
-          {grouped.map(({ day, items }) => (
-            <View key={day} style={s.group}>
-              <View style={s.daySep}>
-                <View style={s.dayLine} />
-                <Text variant="caption" color="textTertiary">
-                  {day}
-                </Text>
-                <View style={s.dayLine} />
-              </View>
-              {items.map((msg) => (
-                <Bubble key={msg.id} message={msg} thread={thread} c={c} />
-              ))}
-            </View>
-          ))}
-        </ScrollView>
 
-        <View style={s.composer}>
-          <TextInput
-            placeholder="Escribe un mensaje"
-            value={text}
-            onChangeText={setText}
-            containerStyle={{ flex: 1 }}
-            onSubmitEditing={send}
-            returnKeyType="send"
-          />
-          <PressableScale
-            onPress={send}
-            disabled={!text.trim()}
-            style={[
-              s.sendBtn,
-              text.trim() ? null : { opacity: 0.4 },
-            ]}
-            scaleTo={0.9}
-          >
-            <PaperPlaneTilt size={20} color={c.bg} weight="fill" />
-          </PressableScale>
+      {loading ? (
+        <View style={s.center}>
+          <ActivityIndicator color={c.primary} size="large" />
         </View>
-      </KeyboardAvoidingView>
+      ) : error ? (
+        <View style={s.center}>
+          <Text variant="body" color="textSecondary" style={{ textAlign: 'center' }}>
+            {error}
+          </Text>
+        </View>
+      ) : (
+        <KeyboardAvoidingView
+          style={s.flex}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          keyboardVerticalOffset={0}
+        >
+          <ScrollView
+            ref={scrollRef}
+            contentContainerStyle={s.scroll}
+            onContentSizeChange={() => scrollRef.current?.scrollToEnd({ animated: false })}
+          >
+            {messages.length === 0 ? (
+              <View style={s.emptyWrap}>
+                <Text variant="body" color="textTertiary" style={{ textAlign: 'center' }}>
+                  Sé el primero en escribir 👋
+                </Text>
+              </View>
+            ) : null}
+            {grouped.map(({ day, items }) => (
+              <View key={day} style={s.group}>
+                <View style={s.daySep}>
+                  <View style={s.dayLine} />
+                  <Text variant="caption" color="textTertiary">{day}</Text>
+                  <View style={s.dayLine} />
+                </View>
+                {items.map((msg) => (
+                  <Bubble key={msg.id} message={msg} myId={userId ?? ''} c={c} />
+                ))}
+              </View>
+            ))}
+          </ScrollView>
+
+          <View style={s.composer}>
+            <TextInput
+              placeholder="Escribe un mensaje"
+              value={text}
+              onChangeText={setText}
+              containerStyle={{ flex: 1 }}
+              onSubmitEditing={handleSend}
+              returnKeyType="send"
+            />
+            <PressableScale
+              onPress={handleSend}
+              disabled={!text.trim()}
+              style={[s.sendBtn, !text.trim() ? { opacity: 0.4 } : null]}
+              scaleTo={0.9}
+            >
+              <PaperPlaneTilt size={20} color={c.bg} weight="fill" />
+            </PressableScale>
+          </View>
+        </KeyboardAvoidingView>
+      )}
     </Screen>
   );
 }
 
 function Bubble({
   message,
-  thread,
+  myId,
   c,
 }: {
-  message: Message;
-  thread: (typeof mockChatThreads)[number];
+  message: ChatMessageData;
+  myId: string;
   c: ColorPalette;
 }) {
   const s = useMemo(() => makeStyles(c, 0), [c]);
-  const isMe = message.authorId === mockCurrentUser.id;
-  const author = thread.participants.find((p) => p.id === message.authorId);
+  const isMe = message.authorId === myId;
   return (
     <View style={[s.bubbleRow, isMe ? s.alignRight : s.alignLeft]}>
-      {!isMe ? <Avatar name={author?.name ?? '?'} uri={author?.avatarUrl} size={28} /> : null}
+      {!isMe ? (
+        <Avatar name={message.authorName} uri={message.authorAvatarUrl} size={28} />
+      ) : null}
       <View style={s.bubbleCol}>
-        {!isMe && author ? (
+        {!isMe ? (
           <Text variant="caption" color="textTertiary" style={s.author}>
-            {author.name}
+            {message.authorName}
           </Text>
         ) : null}
-        <View
-          style={[
-            s.bubble,
-            isMe ? s.bubbleMine : s.bubbleOther,
-          ]}
-        >
+        <View style={[s.bubble, isMe ? s.bubbleMine : s.bubbleOther]}>
           <Text variant="body" color={isMe ? 'surface' : 'textPrimary'}>
             {message.body}
           </Text>
@@ -157,11 +181,10 @@ function Bubble({
   );
 }
 
-function groupByDay(msgs: Message[]): { day: string; items: Message[] }[] {
-  const map = new Map<string, Message[]>();
+function groupByDay(msgs: ChatMessageData[]): { day: string; items: ChatMessageData[] }[] {
+  const map = new Map<string, ChatMessageData[]>();
   for (const m of msgs) {
-    const d = new Date(m.sentAt);
-    const key = labelDay(d);
+    const key = labelDay(new Date(m.sentAt));
     map.set(key, [...(map.get(key) ?? []), m]);
   }
   return Array.from(map.entries()).map(([day, items]) => ({ day, items }));
@@ -175,13 +198,12 @@ function labelDay(d: Date): string {
   return d.toLocaleDateString('es-VE', { day: 'numeric', month: 'short' });
 }
 
-function makeStyles(c: ColorPalette, bottomInset: number = 0) {
+function makeStyles(c: ColorPalette, bottomInset = 0) {
   return StyleSheet.create({
     flex: { flex: 1 },
-    scroll: {
-      padding: spacing.lg,
-      gap: spacing.sm,
-    },
+    center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: spacing.lg },
+    emptyWrap: { flex: 1, alignItems: 'center', paddingTop: spacing.huge },
+    scroll: { padding: spacing.lg, gap: spacing.sm, flexGrow: 1 },
     group: { gap: spacing.sm },
     daySep: {
       flexDirection: 'row',
@@ -205,10 +227,7 @@ function makeStyles(c: ColorPalette, bottomInset: number = 0) {
       paddingVertical: spacing.sm + 2,
       borderRadius: radius.lg,
     },
-    bubbleMine: {
-      backgroundColor: c.primary,
-      borderBottomRightRadius: 4,
-    },
+    bubbleMine: { backgroundColor: c.primary, borderBottomRightRadius: 4 },
     bubbleOther: {
       backgroundColor: c.surface,
       borderWidth: 1,
