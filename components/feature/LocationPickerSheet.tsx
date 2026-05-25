@@ -1,16 +1,22 @@
-import { MapPin } from 'phosphor-react-native';
-import { useMemo, useState } from 'react';
-import { Modal, Pressable, StyleSheet, View } from 'react-native';
+import * as Location from 'expo-location';
+import { Crosshair, MapPin } from 'phosphor-react-native';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { ActivityIndicator, Modal, Pressable, StyleSheet, View } from 'react-native';
 import MapView, { Marker, PROVIDER_DEFAULT } from 'react-native-maps';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Button } from '@/components/ui/Button';
 import { Text } from '@/components/ui/Text';
-import { CARACAS_CENTER, mockCanchas, type Cancha } from '@/data/canchas';
 import { useColors } from '@/hooks/useColors';
 import { radius, spacing } from '@/theme';
 import type { ColorPalette } from '@/theme/palettes';
-import type { Sport } from '@/types/domain';
+
+const FALLBACK_REGION = {
+  latitude: 10.4806,
+  longitude: -66.9036,
+  latitudeDelta: 0.08,
+  longitudeDelta: 0.08,
+};
 
 interface Props {
   visible: boolean;
@@ -21,29 +27,49 @@ interface Props {
     lat: number;
     lng: number;
   }) => void;
-  filterSport?: Sport | null;
+  filterSport?: unknown; // kept for API compat, ignored
 }
 
-type Pin =
-  | { kind: 'cancha'; cancha: Cancha }
-  | { kind: 'custom'; lat: number; lng: number };
+type Pin = { lat: number; lng: number };
 
-export function LocationPickerSheet({
-  visible,
-  onClose,
-  onSelect,
-  filterSport,
-}: Props) {
+export function LocationPickerSheet({ visible, onClose, onSelect }: Props) {
   const c = useColors();
   const s = useMemo(() => makeStyles(c), [c]);
   const insets = useSafeAreaInsets();
   const [pin, setPin] = useState<Pin | null>(null);
+  const [initialRegion, setInitialRegion] = useState(FALLBACK_REGION);
+  const [locating, setLocating] = useState(false);
+  const mapRef = useRef<MapView>(null);
 
-  const canchas = useMemo(() => {
-    if (!filterSport) return mockCanchas;
-    const matching = mockCanchas.filter((ca) => ca.sports.includes(filterSport));
-    return matching.length > 0 ? matching : mockCanchas;
-  }, [filterSport]);
+  const goToUserLocation = async () => {
+    setLocating(true);
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') return;
+      const pos = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.Balanced,
+      });
+      const region = {
+        latitude: pos.coords.latitude,
+        longitude: pos.coords.longitude,
+        latitudeDelta: 0.04,
+        longitudeDelta: 0.04,
+      };
+      setInitialRegion(region);
+      mapRef.current?.animateToRegion(region, 600);
+    } catch {
+      // permission denied or unavailable — ignore
+    } finally {
+      setLocating(false);
+    }
+  };
+
+  // Auto-locate when sheet opens
+  useEffect(() => {
+    if (!visible) return;
+    void goToUserLocation();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visible]);
 
   const resetAndClose = () => {
     setPin(null);
@@ -52,16 +78,6 @@ export function LocationPickerSheet({
 
   const confirm = () => {
     if (!pin) return;
-    if (pin.kind === 'cancha') {
-      onSelect({
-        name: pin.cancha.name,
-        address: pin.cancha.address,
-        lat: pin.cancha.lat,
-        lng: pin.cancha.lng,
-      });
-      resetAndClose();
-      return;
-    }
     onSelect({
       name: '',
       address: `Ubicación personalizada · ${pin.lat.toFixed(4)}, ${pin.lng.toFixed(4)}`,
@@ -90,81 +106,56 @@ export function LocationPickerSheet({
           <View style={s.headerBtn} />
         </View>
 
-        <MapView
-          provider={PROVIDER_DEFAULT}
-          style={s.map}
-          initialRegion={{
-            latitude: CARACAS_CENTER.lat,
-            longitude: CARACAS_CENTER.lng,
-            latitudeDelta: CARACAS_CENTER.latDelta,
-            longitudeDelta: CARACAS_CENTER.lngDelta,
-          }}
-          onPress={(e) => {
-            const { latitude, longitude } = e.nativeEvent.coordinate;
-            setPin({ kind: 'custom', lat: latitude, lng: longitude });
-          }}
-        >
-          {canchas.map((ca) => (
-            <Marker
-              key={ca.id}
-              coordinate={{ latitude: ca.lat, longitude: ca.lng }}
-              title={ca.name}
-              description={ca.address}
-              pinColor={
-                pin?.kind === 'cancha' && pin.cancha.id === ca.id ? c.primary : '#FF3B30'
-              }
-              onPress={(e) => {
-                e.stopPropagation();
-                setPin({ kind: 'cancha', cancha: ca });
-              }}
-            />
-          ))}
-          {pin?.kind === 'custom' ? (
-            <Marker
-              coordinate={{ latitude: pin.lat, longitude: pin.lng }}
-              pinColor={c.primary}
-              title="Ubicación personalizada"
-            />
-          ) : null}
-        </MapView>
+        <View style={s.mapContainer}>
+          <MapView
+            ref={mapRef}
+            provider={PROVIDER_DEFAULT}
+            style={s.map}
+            initialRegion={initialRegion}
+            showsUserLocation
+            showsMyLocationButton={false}
+            onPress={(e) => {
+              const { latitude, longitude } = e.nativeEvent.coordinate;
+              setPin({ lat: latitude, lng: longitude });
+            }}
+          >
+            {pin ? (
+              <Marker
+                coordinate={{ latitude: pin.lat, longitude: pin.lng }}
+                pinColor={c.primary}
+                title="Ubicación seleccionada"
+              />
+            ) : null}
+          </MapView>
 
-        <View
-          style={[
-            s.bottomSheet,
-            { paddingBottom: insets.bottom + spacing.lg },
-          ]}
-        >
-          {pin?.kind === 'cancha' ? (
-            <View style={s.selectedCard}>
-              <View style={s.selectedIcon}>
-                <MapPin size={20} color={c.primary} weight="fill" />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text variant="bodySemibold" color="textPrimary">
-                  {pin.cancha.name}
-                </Text>
-                <Text variant="small" color="textSecondary">
-                  {pin.cancha.address}
-                </Text>
-              </View>
-            </View>
-          ) : pin?.kind === 'custom' ? (
+          {/* Locate-me FAB */}
+          <Pressable
+            style={s.locateBtn}
+            onPress={() => void goToUserLocation()}
+            hitSlop={8}
+          >
+            {locating ? (
+              <ActivityIndicator size="small" color={c.primary} />
+            ) : (
+              <Crosshair size={20} color={c.primary} weight="bold" />
+            )}
+          </Pressable>
+        </View>
+
+        <View style={[s.bottomSheet, { paddingBottom: insets.bottom + spacing.lg }]}>
+          {pin ? (
             <View style={s.coordsRow}>
               <MapPin size={16} color={c.primary} weight="fill" />
               <Text variant="small" color="textSecondary">
-                Ubicación personalizada · {pin.lat.toFixed(4)}, {pin.lng.toFixed(4)}
+                {pin.lat.toFixed(4)}, {pin.lng.toFixed(4)}
               </Text>
             </View>
           ) : (
             <Text variant="body" color="textSecondary" style={s.hint}>
-              Toca un pin existente o cualquier punto del mapa para elegir ubicación
+              Toca cualquier punto del mapa para elegir la ubicación
             </Text>
           )}
-          <Button
-            label="Confirmar ubicación"
-            onPress={confirm}
-            disabled={!pin}
-          />
+          <Button label="Confirmar ubicación" onPress={confirm} disabled={!pin} />
         </View>
       </View>
     </Modal>
@@ -184,7 +175,26 @@ function makeStyles(c: ColorPalette) {
       borderBottomColor: c.border,
     },
     headerBtn: { minWidth: 80 },
+    mapContainer: { flex: 1 },
     map: { flex: 1 },
+    locateBtn: {
+      position: 'absolute',
+      bottom: spacing.lg,
+      right: spacing.lg,
+      width: 44,
+      height: 44,
+      borderRadius: radius.full,
+      backgroundColor: c.surface,
+      borderWidth: 1,
+      borderColor: c.border,
+      alignItems: 'center',
+      justifyContent: 'center',
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.15,
+      shadowRadius: 4,
+      elevation: 4,
+    },
     bottomSheet: {
       backgroundColor: c.surface,
       padding: spacing.lg,
@@ -193,24 +203,6 @@ function makeStyles(c: ColorPalette) {
       borderTopColor: c.border,
     },
     hint: { textAlign: 'center', paddingVertical: spacing.md },
-    selectedCard: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: spacing.md,
-      padding: spacing.md,
-      backgroundColor: c.primarySoft,
-      borderRadius: radius.md,
-      borderWidth: 1,
-      borderColor: c.primary,
-    },
-    selectedIcon: {
-      width: 40,
-      height: 40,
-      borderRadius: radius.full,
-      backgroundColor: c.bg,
-      alignItems: 'center',
-      justifyContent: 'center',
-    },
     coordsRow: {
       flexDirection: 'row',
       alignItems: 'center',

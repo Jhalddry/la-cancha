@@ -18,7 +18,7 @@ import { Sheet } from '@/components/ui/Sheet';
 import { Stars } from '@/components/ui/Stars';
 import { Text } from '@/components/ui/Text';
 import { TextInput } from '@/components/ui/TextInput';
-import { mockMatches } from '@/data/matches';
+import { useMatches } from '@/hooks/useMatches';
 import { MatchCard } from '@/features/match/MatchCard';
 import { matchTypeMeta } from '@/features/match/matchTypeMeta';
 import {
@@ -121,8 +121,10 @@ export default function BuscarScreen() {
         ? BASKET_POSITIONS
         : null;
 
+  const { data: allMatches = [] } = useMatches();
+
   const filtered = useMemo(() => {
-    const results = mockMatches.filter((m) => {
+    const results = allMatches.filter((m) => {
       if (sport !== 'all' && m.sport !== sport) return false;
       if (type && m.type !== type) return false;
       if (level && m.skillLevel !== level) return false;
@@ -142,7 +144,7 @@ export default function BuscarScreen() {
       results.sort((a, b) => a.pricePerHour - b.pricePerHour);
     }
     return results;
-  }, [query, sport, type, level, distance, position, sortBy]);
+  }, [allMatches, query, sport, type, level, distance, position, sortBy]);
 
   const sportLabel = sport === 'all' ? 'Todos' : labelSport(sport);
   const typeLabel = type ? matchTypeMeta[type].label : 'Todos';

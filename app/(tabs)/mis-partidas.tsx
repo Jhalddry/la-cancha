@@ -9,11 +9,10 @@ import { PressableScale } from '@/components/ui/PressableScale';
 import { Screen } from '@/components/ui/Screen';
 import { SegmentedTabs } from '@/components/ui/SegmentedTabs';
 import { Text } from '@/components/ui/Text';
-import { mockMatches } from '@/data/matches';
-import { mockCurrentUser } from '@/data/players';
 import { MatchCard } from '@/features/match/MatchCard';
 import { useColors } from '@/hooks/useColors';
-import { useMatchOverrides } from '@/store/matchOverrides';
+import { useMyMatches } from '@/hooks/useMatches';
+import { useSession } from '@/store/session';
 import { radius, spacing } from '@/theme';
 import type { ColorPalette } from '@/theme/palettes';
 
@@ -28,20 +27,17 @@ const OPTIONS: { value: Tab; label: string }[] = [
 export default function MisPartidasScreen() {
   const router = useRouter();
   const [tab, setTab] = useState<Tab>('proximas');
-  const overrides = useMatchOverrides((s) => s.overrides);
+  const userId = useSession((st) => st.user?.id);
+  const { data: myMatches } = useMyMatches();
   const c = useColors();
   const s = useMemo(() => makeStyles(c), [c]);
 
   const list = useMemo(() => {
-    const now = Date.now();
-    const merged = mockMatches.map((m) => ({ ...m, ...overrides[m.id] }));
-    const joined = merged.filter((m) =>
-      m.joinedPlayers.some((p) => p.id === mockCurrentUser.id),
-    );
-    if (tab === 'proximas') return joined.filter((m) => new Date(m.startsAt).getTime() > now);
-    if (tab === 'pasadas') return joined.filter((m) => new Date(m.startsAt).getTime() <= now);
-    return merged.filter((m) => m.organizer.id === mockCurrentUser.id);
-  }, [tab, overrides]);
+    if (!myMatches) return [];
+    if (tab === 'proximas') return myMatches.upcoming;
+    if (tab === 'pasadas') return myMatches.past;
+    return myMatches.created;
+  }, [tab, myMatches]);
 
   return (
     <Screen>
@@ -101,7 +97,7 @@ export default function MisPartidasScreen() {
                 </PressableScale>
               ) : null}
               {tab === 'pasadas' ? (() => {
-                const target = m.joinedPlayers.find((p) => p.id !== mockCurrentUser.id);
+                const target = m.joinedPlayers.find((p) => p.id !== userId);
                 if (!target) return null;
                 return (
                   <PressableScale

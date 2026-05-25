@@ -8,8 +8,8 @@ import { PressableScale } from '@/components/ui/PressableScale';
 import { Screen } from '@/components/ui/Screen';
 import { Text } from '@/components/ui/Text';
 import { CityPickerSheet } from '@/components/feature/CityPickerSheet';
-import { mockMatches } from '@/data/matches';
 import { useSession } from '@/store/session';
+import { useMatches } from '@/hooks/useMatches';
 import { MatchCard } from '@/features/match/MatchCard';
 import { MatchTypePromoCard } from '@/features/match/MatchTypePromoCard';
 import { useColors } from '@/hooks/useColors';
@@ -23,6 +23,7 @@ export default function HomeScreen() {
   const displayName = user?.name ?? '…';
   const city = user?.city ?? '';
   const [locationOpen, setLocationOpen] = useState(false);
+  const { data: nearbyMatches = [] } = useMatches({ limit: 3 });
 
   const handleSelectCity = (selected: string) => {
     setCityStore(selected);
@@ -128,7 +129,7 @@ export default function HomeScreen() {
             </Text>
           </View>
           <View style={s.matchList}>
-            {mockMatches.slice(0, 3).map((m) => (
+            {nearbyMatches.map((m) => (
               <MatchCard
                 key={m.id}
                 match={m}

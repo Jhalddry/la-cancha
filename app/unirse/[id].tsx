@@ -15,7 +15,7 @@ import {
   X,
 } from 'phosphor-react-native';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
-import { ScrollView, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, ScrollView, StyleSheet, View } from 'react-native';
 import Animated, {
   useAnimatedStyle,
   useSharedValue,
@@ -30,10 +30,9 @@ import { PressableScale } from '@/components/ui/PressableScale';
 import { Screen } from '@/components/ui/Screen';
 import { StepperBar } from '@/components/ui/StepperBar';
 import { Text } from '@/components/ui/Text';
-import { mockMatches } from '@/data/matches';
 import { MatchTypeBadge } from '@/features/match/MatchTypeBadge';
 import { useColors } from '@/hooks/useColors';
-import { useJoinedMatches } from '@/store/joinedMatches';
+import { useMatch, useJoinMatch } from '@/hooks/useMatches';
 import { BCV_RATE, formatVes, usdToVes } from '@/lib/exchange';
 import {
   formatMatchTime,
@@ -66,9 +65,19 @@ const TOTAL_FLOW_STEPS = 3;
 export default function UnirseScreen() {
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
+  const { data: match, isLoading } = useMatch(id);
   const c = useColors();
   const s = useMemo(() => makeStyles(c), [c]);
-  const match = mockMatches.find((m) => m.id === id) ?? mockMatches[0];
+
+  if (isLoading || !match) {
+    return (
+      <Screen edges={['top']}>
+        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+          <ActivityIndicator color={c.primary} size="large" />
+        </View>
+      </Screen>
+    );
+  }
 
   const [step, setStep] = useState(1);
   const [selectedPayment, setSelectedPayment] = useState<PaymentMethod | null>(null);
@@ -170,7 +179,7 @@ function ConfirmStep({
   router,
 }: {
   c: ColorPalette;
-  match: (typeof mockMatches)[0];
+  match: import('@/types/domain').Match;
   durationHours: number;
   total: number;
   router: ReturnType<typeof useRouter>;
@@ -397,17 +406,17 @@ function SuccessStep({
   match,
   router,
 }: {
-  match: (typeof mockMatches)[0];
+  match: import('@/types/domain').Match;
   router: ReturnType<typeof useRouter>;
 }) {
   const c = useColors();
   const s = useMemo(() => makeStyles(c), [c]);
-  const join = useJoinedMatches((st) => st.join);
+  const { mutate: joinMatch } = useJoinMatch();
   const scale = useSharedValue(0);
   const opacity = useSharedValue(0);
 
   useEffect(() => {
-    join(match.id);
+    joinMatch(match.id);
     scale.value = withSpring(1, { damping: 12, stiffness: 120 });
     opacity.value = withDelay(200, withSpring(1));
   }, []);

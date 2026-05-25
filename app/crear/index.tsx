@@ -10,7 +10,7 @@ import {
   WarningCircle,
 } from 'phosphor-react-native';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
-import { InputAccessoryView, Keyboard, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Alert, InputAccessoryView, Keyboard, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, View } from 'react-native';
 
 import {
   DateTimePickerSheet,
@@ -45,7 +45,11 @@ import {
   labelSport,
 } from '@/lib/format';
 import { useDraftMatch, type DraftMatch } from '@/store/draftMatch';
+import { useSession } from '@/store/session';
+import { createMatch } from '@/lib/matchesApi';
 import { useColors } from '@/hooks/useColors';
+import { useQueryClient } from '@tanstack/react-query';
+import { matchKeys } from '@/hooks/useMatches';
 import type { ColorPalette } from '@/theme/palettes';
 import { radius, spacing } from '@/theme';
 import type {
@@ -198,6 +202,8 @@ function formatTimeLabel(d: Date): string {
 
 export default function CrearWizard() {
   const router = useRouter();
+  const queryClient = useQueryClient();
+  const user = useSession((st) => st.user);
   const draft = useDraftMatch((s) => s.draft);
   const step = useDraftMatch((s) => s.step);
   const setKey = useDraftMatch((s) => s.set);
@@ -212,6 +218,7 @@ export default function CrearWizard() {
 
   const [triedNext, setTriedNext] = useState(false);
   const [keyboardVisible, setKeyboardVisible] = useState(false);
+  const [publishing, setPublishing] = useState(false);
 
   useEffect(() => {
     const show = Keyboard.addListener('keyboardDidShow', () => setKeyboardVisible(true));
@@ -235,7 +242,7 @@ export default function CrearWizard() {
     }
   };
 
-  const onNext = () => {
+  const onNext = async () => {
     if (!isValid) {
       setTriedNext(true);
       return;
@@ -244,8 +251,23 @@ export default function CrearWizard() {
       next();
       return;
     }
-    router.replace('/crear/confirmacion');
-    setTimeout(reset, 500);
+    if (!user) return;
+    setPublishing(true);
+    try {
+      const newMatchId = await createMatch(draft, user.id);
+      // Invalidate so mis-partidas "Creadas" tab reflects the new match immediately
+      void queryClient.invalidateQueries({ queryKey: matchKeys.lists() });
+      void queryClient.invalidateQueries({ queryKey: matchKeys.mine(user.id) });
+      reset();
+      router.replace(`/crear/confirmacion?matchId=${newMatchId}`);
+    } catch (e) {
+      Alert.alert(
+        'Error al publicar',
+        e instanceof Error ? e.message : 'Intenta de nuevo.',
+      );
+    } finally {
+      setPublishing(false);
+    }
   };
 
   return (
@@ -301,10 +323,14 @@ export default function CrearWizard() {
 
       {!keyboardVisible ? (
         <View style={s.footer}>
-          <Button
-            label={step === TOTAL_STEPS ? 'Publicar partida' : 'Siguiente'}
-            onPress={onNext}
-          />
+          {publishing ? (
+            <ActivityIndicator color={c.primary} />
+          ) : (
+            <Button
+              label={step === TOTAL_STEPS ? 'Publicar partida' : 'Siguiente'}
+              onPress={onNext}
+            />
+          )}
         </View>
       ) : null}
     </Screen>

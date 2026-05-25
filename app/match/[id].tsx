@@ -12,7 +12,7 @@ import {
   WhatsappLogo,
 } from 'phosphor-react-native';
 import { useMemo, type ReactNode } from 'react';
-import { ScrollView, Share, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, ScrollView, Share, StyleSheet, View } from 'react-native';
 
 import { Avatar } from '@/components/ui/Avatar';
 import { BackHeader } from '@/components/ui/BackHeader';
@@ -25,13 +25,11 @@ import { PressableScale } from '@/components/ui/PressableScale';
 import { Screen } from '@/components/ui/Screen';
 import { Stars } from '@/components/ui/Stars';
 import { Text } from '@/components/ui/Text';
-import { mockMatches } from '@/data/matches';
-import { mockCurrentUser } from '@/data/players';
 import { MatchTypeBadge } from '@/features/match/MatchTypeBadge';
 import { matchTypeMeta } from '@/features/match/matchTypeMeta';
 import { useColors } from '@/hooks/useColors';
-import { useJoinedMatches } from '@/store/joinedMatches';
-import { useMatchOverrides } from '@/store/matchOverrides';
+import { useMatch } from '@/hooks/useMatches';
+import { useSession } from '@/store/session';
 import {
   formatMatchTime,
   formatPrice,
@@ -55,15 +53,25 @@ const SPORT_EMOJI: Record<Sport, string> = {
 export default function MatchDetailScreen() {
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
+  const userId = useSession((st) => st.user?.id);
+  const { data: match, isLoading } = useMatch(id);
   const c = useColors();
   const s = useMemo(() => makeStyles(c), [c]);
-  const getMatch = useMatchOverrides((st) => st.getMatch);
-  const hasJoined = useJoinedMatches((st) => st.hasJoined);
-  const base = mockMatches.find((m) => m.id === id) ?? mockMatches[0];
-  const match = getMatch(base);
+
+  if (isLoading || !match) {
+    return (
+      <Screen edges={['top']}>
+        <BackHeader title="" transparent />
+        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+          <ActivityIndicator color={c.primary} size="large" />
+        </View>
+      </Screen>
+    );
+  }
+
   const typeMeta = matchTypeMeta[match.type];
-  const isOrganizer = match.organizer.id === mockCurrentUser.id;
-  const joined = hasJoined(match.id);
+  const isOrganizer = match.organizer.id === userId;
+  const joined = match.joinedPlayers.some((p) => p.id === userId);
 
   const handleShare = async () => {
     try {
@@ -275,26 +283,28 @@ export default function MatchDetailScreen() {
       </ScrollView>
 
       {/* ── Sticky footer ─────────────────────────────── */}
-      <View style={s.footer}>
-        {joined ? (
-          <View style={s.joinedBadge}>
-            <CheckCircle size={18} color={c.primary} weight="fill" />
-            <Text variant="bodyMedium" color="primary">
-              Ya estás unido a esta partida
-            </Text>
-          </View>
-        ) : (
-          <>
-            <Button
-              label="Quiero unirme"
-              onPress={() => router.push(`/unirse/${match.id}`)}
-            />
-            <Text variant="small" color="textTertiary" style={s.footerNote}>
-              El pago se coordina con el organizador
-            </Text>
-          </>
-        )}
-      </View>
+      {!isOrganizer ? (
+        <View style={s.footer}>
+          {joined ? (
+            <View style={s.joinedBadge}>
+              <CheckCircle size={18} color={c.primary} weight="fill" />
+              <Text variant="bodyMedium" color="primary">
+                Ya estás unido a esta partida
+              </Text>
+            </View>
+          ) : (
+            <>
+              <Button
+                label="Quiero unirme"
+                onPress={() => router.push(`/unirse/${match.id}`)}
+              />
+              <Text variant="small" color="textTertiary" style={s.footerNote}>
+                El pago se coordina con el organizador
+              </Text>
+            </>
+          )}
+        </View>
+      ) : null}
     </Screen>
   );
 }

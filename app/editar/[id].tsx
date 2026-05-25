@@ -12,7 +12,7 @@ import {
   X,
 } from 'phosphor-react-native';
 import { useMemo, useState, type ReactNode } from 'react';
-import { Alert, ScrollView, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Alert, ScrollView, StyleSheet, View } from 'react-native';
 
 import {
   DateTimePickerSheet,
@@ -24,10 +24,9 @@ import { Card } from '@/components/ui/Card';
 import { PressableScale } from '@/components/ui/PressableScale';
 import { Screen } from '@/components/ui/Screen';
 import { Text } from '@/components/ui/Text';
-import { mockMatches } from '@/data/matches';
 import { MatchTypeBadge } from '@/features/match/MatchTypeBadge';
 import { labelModality, labelPayment, labelPosition } from '@/lib/format';
-import { useMatchOverrides } from '@/store/matchOverrides';
+import { useMatch, useUpdateMatch, useDeleteMatch } from '@/hooks/useMatches';
 import { useColors } from '@/hooks/useColors';
 import { radius, spacing } from '@/theme';
 import type { ColorPalette } from '@/theme/palettes';
@@ -57,29 +56,41 @@ function fmtTime(d: Date) {
 export default function EditarPartidaScreen() {
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
+  const { data: match, isLoading } = useMatch(id);
+  const { mutateAsync: updateMatch, isPending: saving } = useUpdateMatch();
+  const { mutateAsync: deleteMatch, isPending: deleting } = useDeleteMatch();
   const c = useColors();
   const s = useMemo(() => makeStyles(c), [c]);
-  const getMatch = useMatchOverrides((st) => st.getMatch);
-  const setOverride = useMatchOverrides((st) => st.setOverride);
-  const baseMatch = mockMatches.find((m) => m.id === id) ?? mockMatches[0];
-  const match = getMatch(baseMatch);
 
-  const [date, setDate] = useState(() => new Date(match.startsAt));
-  const [durationMin, setDurationMin] = useState(match.durationMin);
-  const [locationName, setLocationName] = useState(match.location.name);
-  const [locationAddress, setLocationAddress] = useState(match.location.address ?? '');
+  const [date, setDate] = useState<Date | null>(null);
+  const [durationMin, setDurationMin] = useState<number | null>(null);
+  const [locationName, setLocationName] = useState<string | null>(null);
+  const [locationAddress, setLocationAddress] = useState<string | null>(null);
 
-  const handleSave = () => {
-    setOverride(match.id, {
-      startsAt: date.toISOString(),
-      durationMin,
-      location: {
-        ...match.location,
-        name: locationName,
-        address: locationAddress || undefined,
-      },
-    });
-    router.back();
+  // Initialise local state once match loads
+  const effectiveDate = date ?? (match ? new Date(match.startsAt) : new Date());
+  const effectiveDuration = durationMin ?? match?.durationMin ?? 90;
+  const effectiveLocationName = locationName ?? match?.location.name ?? '';
+  const effectiveLocationAddress = locationAddress ?? match?.location.address ?? '';
+
+  const handleSave = async () => {
+    if (!match) return;
+    try {
+      await updateMatch({
+        id: match.id,
+        patch: {
+          starts_at: effectiveDate.toISOString(),
+          duration_min: effectiveDuration,
+          location_name: effectiveLocationName.trim(),
+          location_address: effectiveLocationAddress.trim() || null,
+          lat: match.location.lat ?? null,
+          lng: match.location.lng ?? null,
+        },
+      });
+      router.back();
+    } catch (e) {
+      Alert.alert('Error', e instanceof Error ? e.message : 'Intenta de nuevo.');
+    }
   };
 
   const [dateOpen, setDateOpen] = useState(false);
@@ -87,16 +98,33 @@ export default function EditarPartidaScreen() {
   const [durationOpen, setDurationOpen] = useState(false);
   const [locationOpen, setLocationOpen] = useState(false);
 
+  if (isLoading || !match) {
+    return (
+      <Screen>
+        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+          <ActivityIndicator color={c.primary} size="large" />
+        </View>
+      </Screen>
+    );
+  }
+
   const handleCancel = () => {
     Alert.alert(
       'Cancelar partida',
-      'Se notificará a todos los jugadores que la partida fue cancelada.',
+      'Esta acción eliminará la partida y notificará a los jugadores.',
       [
         { text: 'No cancelar', style: 'cancel' },
         {
           text: 'Cancelar partida',
           style: 'destructive',
-          onPress: () => router.replace('/(tabs)'),
+          onPress: async () => {
+            try {
+              await deleteMatch(match.id);
+              router.replace('/(tabs)');
+            } catch {
+              Alert.alert('Error', 'No se pudo cancelar la partida.');
+            }
+          },
         },
       ],
     );
@@ -111,7 +139,14 @@ export default function EditarPartidaScreen() {
         {
           text: 'Eliminar',
           style: 'destructive',
-          onPress: () => router.replace('/(tabs)'),
+          onPress: async () => {
+            try {
+              await deleteMatch(match.id);
+              router.replace('/(tabs)');
+            } catch {
+              Alert.alert('Error', 'No se pudo eliminar la partida.');
+            }
+          },
         },
       ],
     );
@@ -125,10 +160,12 @@ export default function EditarPartidaScreen() {
           <X size={22} color={c.textPrimary} weight="bold" />
         </PressableScale>
         <Text variant="bodySemibold">Editar partida</Text>
-        <PressableScale scaleTo={0.95} onPress={handleSave}>
-          <Text variant="bodySemibold" color="primary">
-            Guardar
-          </Text>
+        <PressableScale scaleTo={0.95} onPress={handleSave} disabled={saving || deleting}>
+          {saving ? (
+            <ActivityIndicator size="small" color={c.primary} />
+          ) : (
+            <Text variant="bodySemibold" color="primary">Guardar</Text>
+          )}
         </PressableScale>
       </View>
 
@@ -157,7 +194,7 @@ export default function EditarPartidaScreen() {
             c={c}
             icon={<CalendarBlank size={18} color={c.primary} weight="fill" />}
             label="Fecha y hora"
-            value={`${fmtDate(date)} · ${fmtTime(date)}`}
+            value={`${fmtDate(effectiveDate)} · ${fmtTime(effectiveDate)}`}
             onPress={() => setDateOpen(true)}
           />
           <View style={s.rowDivider} />
@@ -165,7 +202,7 @@ export default function EditarPartidaScreen() {
             c={c}
             icon={<ClockCounterClockwise size={18} color={c.primary} weight="fill" />}
             label="Duración"
-            value={`${durationMin} minutos`}
+            value={`${effectiveDuration} minutos`}
             onPress={() => setDurationOpen(true)}
           />
           <View style={s.rowDivider} />
@@ -173,8 +210,8 @@ export default function EditarPartidaScreen() {
             c={c}
             icon={<MapPin size={18} color={c.primary} weight="fill" />}
             label="Ubicación"
-            value={locationName || 'Sin cancha'}
-            sub={locationAddress || undefined}
+            value={effectiveLocationName || 'Sin cancha'}
+            sub={effectiveLocationAddress || undefined}
             onPress={() => setLocationOpen(true)}
           />
         </View>
@@ -244,10 +281,10 @@ export default function EditarPartidaScreen() {
       <DateTimePickerSheet
         visible={dateOpen}
         onClose={() => setDateOpen(false)}
-        value={date}
+        value={effectiveDate}
         mode="date"
         onChange={(d) => {
-          const next = new Date(date);
+          const next = new Date(effectiveDate);
           next.setFullYear(d.getFullYear(), d.getMonth(), d.getDate());
           setDate(next);
         }}
@@ -255,10 +292,10 @@ export default function EditarPartidaScreen() {
       <DateTimePickerSheet
         visible={timeOpen}
         onClose={() => setTimeOpen(false)}
-        value={date}
+        value={effectiveDate}
         mode="time"
         onChange={(d) => {
-          const next = new Date(date);
+          const next = new Date(effectiveDate);
           next.setHours(d.getHours(), d.getMinutes(), 0, 0);
           setDate(next);
         }}
@@ -266,7 +303,7 @@ export default function EditarPartidaScreen() {
       <DurationPickerSheet
         visible={durationOpen}
         onClose={() => setDurationOpen(false)}
-        value={durationMin}
+        value={effectiveDuration}
         onChange={setDurationMin}
       />
       <LocationPickerSheet
