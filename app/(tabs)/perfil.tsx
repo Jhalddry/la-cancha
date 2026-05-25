@@ -8,7 +8,6 @@ import {
   PencilSimple,
   Shield,
   SignOut,
-  Sparkle,
   Trophy,
 } from 'phosphor-react-native';
 import { useMemo } from 'react';
@@ -17,11 +16,11 @@ import { ScrollView, StyleSheet, View } from 'react-native';
 import { Avatar } from '@/components/ui/Avatar';
 import { Card } from '@/components/ui/Card';
 import { Chip } from '@/components/ui/Chip';
+import { Stars } from '@/components/ui/Stars';
 import { Divider } from '@/components/ui/Divider';
 import { IconCircle } from '@/components/ui/IconCircle';
 import { PressableScale } from '@/components/ui/PressableScale';
 import { Screen } from '@/components/ui/Screen';
-import { Stars } from '@/components/ui/Stars';
 import { Text } from '@/components/ui/Text';
 import { useColors } from '@/hooks/useColors';
 import { labelPosition, labelSkill, labelSport } from '@/lib/format';
@@ -49,7 +48,20 @@ export default function PerfilScreen() {
     return (
       <Screen>
         <View style={s.empty}>
-          <Text variant="h3">Sin sesión activa</Text>
+          <Text variant="h3" style={{ marginBottom: spacing.lg }}>
+            Cargando perfil…
+          </Text>
+          <PressableScale
+            scaleTo={0.96}
+            onPress={async () => {
+              await signOut();
+              router.replace('/login');
+            }}
+          >
+            <Text variant="bodyMedium" color="alert">
+              Cerrar sesión
+            </Text>
+          </PressableScale>
         </View>
       </Screen>
     );
@@ -62,15 +74,14 @@ export default function PerfilScreen() {
         showsVerticalScrollIndicator={false}
       >
         <View style={s.head}>
-          <Avatar name={u.name} size={88} />
+          <Avatar name={u.name} uri={u.avatarUrl} size={88} />
           <View style={s.headInfo}>
             <Text variant="h2">{u.name}</Text>
-            <View style={s.repRow}>
-              <Stars level={Math.round(u.reputation ?? 0) as 1 | 2 | 3 | 4 | 5} />
-              <Text variant="smallMedium" color="textSecondary">
-                {u.reputation?.toFixed(1) ?? '—'}
+            {u.username ? (
+              <Text variant="small" color="textSecondary">
+                @{u.username}
               </Text>
-            </View>
+            ) : null}
             <Text variant="small" color="textSecondary">
               {labelSkill(u.skillLevel)}
             </Text>
@@ -162,14 +173,6 @@ export default function PerfilScreen() {
           />
           <Divider inset />
           <SettingsRow
-            icon={<Sparkle size={20} color={c.primary} weight="fill" />}
-            label="Ver onboarding"
-            onPress={() => router.push('/onboarding')}
-            c={c}
-            s={s}
-          />
-          <Divider inset />
-          <SettingsRow
             icon={<Gear size={20} color={c.primary} weight="fill" />}
             label="Ajustes"
             onPress={() => router.push('/ajustes')}
@@ -252,7 +255,6 @@ function makeStyles(c: ColorPalette) {
     },
     head: { flexDirection: 'row', gap: spacing.lg, alignItems: 'center' },
     headInfo: { flex: 1, gap: spacing.xs },
-    repRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
     verified: {
       flexDirection: 'row',
       alignItems: 'center',

@@ -11,9 +11,15 @@ import { useSession } from '@/store/session';
 
 export default function TabsLayout() {
   const isAuthed = useSession((s) => s.isAuthed);
+  const isOnboarded = useSession((s) => s.isOnboarded);
+  const user = useSession((s) => s.user);
   const c = useColors();
 
   if (!isAuthed) return <Redirect href="/login" />;
+  // isAuthed but no profile yet — fetchOrCreateProfile still running or failed.
+  // Return null to block render without redirecting to onboarding.
+  if (!user) return null;
+  if (!isOnboarded) return <Redirect href="/onboarding" />;
 
   const tintColor =
     Platform.OS === 'ios'

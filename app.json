@@ -38,7 +38,21 @@
         }
       ],
       "expo-font",
-      "@react-native-community/datetimepicker"
+      "@react-native-community/datetimepicker",
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "La Cancha necesita tu ubicación para mostrarte partidas cercanas.",
+          "locationWhenInUsePermission": "La Cancha necesita tu ubicación para mostrarte partidas cercanas."
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "La Cancha necesita acceso a tus fotos para que puedas elegir una foto de perfil.",
+          "cameraPermission": "La Cancha necesita acceso a tu cámara para que puedas tomar una foto de perfil."
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": false,

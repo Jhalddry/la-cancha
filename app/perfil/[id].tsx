@@ -124,7 +124,7 @@ export default function PlayerProfileScreen() {
       <ScrollView contentContainerStyle={s.scroll} showsVerticalScrollIndicator={false}>
         {/* Hero */}
         <View style={s.hero}>
-          <Avatar name={player.name} size={88} />
+          <Avatar name={player.name} uri={player.avatarUrl} size={88} />
           <Text variant="h2" color="textPrimary" style={s.heroName}>
             {player.name}
           </Text>

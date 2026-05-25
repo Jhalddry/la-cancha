@@ -223,7 +223,7 @@ export default function MatchDetailScreen() {
         <Section title="Organizador">
           <Card onPress={() => router.push(`/perfil/${match.organizer.id}`)}>
             <View style={s.organizerRow}>
-              <Avatar name={match.organizer.name} size={46} />
+              <Avatar name={match.organizer.name} uri={match.organizer.avatarUrl} size={46} />
               <View style={{ flex: 1, gap: 2 }}>
                 <View style={s.orgNameRow}>
                   <Text variant="bodySemibold" color="textPrimary">
@@ -262,7 +262,7 @@ export default function MatchDetailScreen() {
                     onPress={() => router.push(`/perfil/${p.id}`)}
                     style={s.avatarItem}
                   >
-                    <Avatar name={p.name} size={40} />
+                    <Avatar name={p.name} uri={p.avatarUrl} size={40} />
                     <Text variant="caption" color="textSecondary" numberOfLines={1} style={s.avatarName}>
                       {p.name.split(' ')[0]}
                     </Text>

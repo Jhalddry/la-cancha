@@ -2,6 +2,7 @@ import { useRouter } from 'expo-router';
 import {
   AppleLogo,
   Envelope,
+  Eye,
   EyeSlash,
   GoogleLogo,
   Lock,
@@ -49,7 +50,7 @@ export default function LoginScreen() {
     }
     setLoading(true);
     setAuthError(null);
-    const error = await signIn(email.trim(), password);
+    const error = await signIn(email.trim().toLowerCase(), password);
     setLoading(false);
     if (error) {
       setAuthError('Correo o contraseña incorrectos.');
@@ -99,8 +100,12 @@ export default function LoginScreen() {
             onChangeText={setPassword}
             leading={<Lock size={18} color={c.textSecondary} weight="regular" />}
             trailing={
-              <PressableScale onPress={() => setSecure((s) => !s)} scaleTo={0.9}>
-                <EyeSlash size={18} color={c.textTertiary} weight="regular" />
+              <PressableScale onPress={() => setSecure((v) => !v)} scaleTo={0.9}>
+                {secure ? (
+                  <EyeSlash size={18} color={c.textTertiary} weight="regular" />
+                ) : (
+                  <Eye size={18} color={c.textTertiary} weight="regular" />
+                )}
               </PressableScale>
             }
             error={shown.password}

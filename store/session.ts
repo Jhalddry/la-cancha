@@ -19,6 +19,8 @@ function rowToPlayer(row: Record<string, unknown>): Player {
     matchesOrganized: (row.matches_organized as number) ?? 0,
     attendancePct: (row.attendance_pct as number | null) ?? undefined,
     badges: (row.badges as string[]) ?? [],
+    city: (row.city as string | null) ?? undefined,
+    onboarded: (row.onboarded as boolean) ?? false,
   };
 }
 
@@ -27,9 +29,45 @@ async function fetchProfile(userId: string): Promise<Player | null> {
     .from("profiles")
     .select("*")
     .eq("id", userId)
-    .single();
-  if (error || !data) return null;
+    .maybeSingle();
+  if (error) {
+    console.error("[fetchProfile] query error:", error.code, error.message);
+    return null;
+  }
+  if (!data) return null; // 0 rows — profile not created yet
   return rowToPlayer(data as Record<string, unknown>);
+}
+
+/**
+ * Fetch profile, creating a stub row if the trigger hasn't fired yet
+ * (race condition after signUp or orphaned auth user).
+ */
+async function fetchOrCreateProfile(
+  userId: string,
+  fallbackName: string,
+): Promise<Player | null> {
+  const existing = await fetchProfile(userId);
+  if (existing) return existing;
+
+  // Profile row missing — upsert a stub so onboarding can proceed.
+  // FK violation (23503) means auth.users row isn't visible yet (rare race);
+  // in that case skip the upsert and let the trigger create the row instead.
+  const { error: upsertError } = await supabase.from("profiles").upsert(
+    { id: userId, name: fallbackName },
+    { onConflict: "id", ignoreDuplicates: true },
+  );
+  if (upsertError) {
+    if (upsertError.code === "23503") {
+      // FK race — auth user not yet committed; wait and retry read only
+      console.warn("[fetchOrCreateProfile] FK race, retrying read after delay");
+    } else {
+      console.error("[fetchOrCreateProfile] upsert error:", upsertError.message);
+      return null;
+    }
+  }
+  // Brief pause so PgBouncer propagates the write (or trigger) before re-reading
+  await new Promise((r) => setTimeout(r, 500));
+  return fetchProfile(userId);
 }
 
 interface SessionState {
@@ -39,12 +77,9 @@ interface SessionState {
   isOnboarded: boolean;
   setUser: (user: Player | null) => void;
   setOnboarded: (v: boolean) => void;
+  setCity: (city: string) => Promise<void>;
   signIn: (email: string, password: string) => Promise<string | null>;
-  signUp: (
-    name: string,
-    email: string,
-    password: string,
-  ) => Promise<string | null>;
+  signUp: (name: string, email: string, password: string) => Promise<string | null>;
   signOut: () => Promise<void>;
   initialize: () => () => void;
 }
@@ -53,17 +88,32 @@ export const useSession = create<SessionState>((set) => ({
   user: null,
   isAuthed: false,
   isLoading: true,
-  isOnboarded: true,
+  isOnboarded: false,
+
   setUser: (user) => set({ user, isAuthed: !!user }),
   setOnboarded: (v) => set({ isOnboarded: v }),
 
+  setCity: async (city) => {
+    const { user } = useSession.getState();
+    if (!user) return;
+    await supabase.from("profiles").update({ city }).eq("id", user.id);
+    set({ user: { ...user, city } });
+  },
+
   signIn: async (email, password) => {
     try {
-      const { error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      });
+      const { data, error } = await supabase.auth.signInWithPassword({ email, password });
       if (error) return error.message;
+      if (data.user) {
+        const fallback = data.user.email?.split("@")[0] ?? "Usuario";
+        const profile = await fetchOrCreateProfile(data.user.id, fallback);
+        set({
+          user: profile,
+          isAuthed: true,
+          isLoading: false,
+          isOnboarded: profile?.onboarded ?? false,
+        });
+      }
       return null;
     } catch (e: unknown) {
       console.error("[signIn] threw:", e);
@@ -73,12 +123,16 @@ export const useSession = create<SessionState>((set) => ({
 
   signUp: async (name, email, password) => {
     try {
-      const { error } = await supabase.auth.signUp({
+      const { data, error } = await supabase.auth.signUp({
         email,
         password,
         options: { data: { name } },
       });
       if (error) return error.message;
+      if (data.user) {
+        const profile = await fetchOrCreateProfile(data.user.id, name);
+        set({ user: profile, isAuthed: true, isLoading: false, isOnboarded: false });
+      }
       return null;
     } catch (e: unknown) {
       return e instanceof Error ? e.message : "Error de conexión";
@@ -87,23 +141,34 @@ export const useSession = create<SessionState>((set) => ({
 
   signOut: async () => {
     await supabase.auth.signOut();
-    set({ user: null, isAuthed: false });
+    set({ user: null, isAuthed: false, isOnboarded: false });
   },
 
   initialize: () => {
     supabase.auth
       .getSession()
       .then(async ({ data: { session }, error }) => {
-        if (error) {
-          set({ user: null, isAuthed: false, isLoading: false });
+        if (error || !session?.user) {
+          set({ user: null, isAuthed: false, isLoading: false, isOnboarded: false });
           return;
         }
-        if (session?.user) {
-          const profile = await fetchProfile(session.user.id);
-          set({ user: profile, isAuthed: true, isLoading: false });
-        } else {
-          set({ user: null, isAuthed: false, isLoading: false });
+        const fallback =
+          (session.user.user_metadata?.name as string | undefined) ??
+          session.user.email?.split("@")[0] ??
+          "Usuario";
+        const profile = await fetchOrCreateProfile(session.user.id, fallback);
+        if (!profile) {
+          // Profile unrecoverable — sign out so user can re-authenticate cleanly
+          await supabase.auth.signOut();
+          set({ user: null, isAuthed: false, isLoading: false, isOnboarded: false });
+          return;
         }
+        set({
+          user: profile,
+          isAuthed: true,
+          isLoading: false,
+          isOnboarded: profile.onboarded ?? false,
+        });
       })
       .catch(() => {
         set({ user: null, isAuthed: false, isLoading: false });
@@ -112,12 +177,34 @@ export const useSession = create<SessionState>((set) => ({
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (session?.user) {
-        const profile = await fetchProfile(session.user.id);
-        set({ user: profile, isAuthed: true, isLoading: false });
-      } else {
-        set({ user: null, isAuthed: false, isLoading: false });
+      if (!session?.user) {
+        set({ user: null, isAuthed: false, isLoading: false, isOnboarded: false });
+        return;
       }
+      // Skip redundant re-fetch on token refresh if we already have the user
+      if (event === "TOKEN_REFRESHED") {
+        const current = useSession.getState().user;
+        if (current?.id === session.user.id) {
+          set({ isAuthed: true, isLoading: false });
+          return;
+        }
+      }
+      const fallback =
+        (session.user.user_metadata?.name as string | undefined) ??
+        session.user.email?.split("@")[0] ??
+        "Usuario";
+      const profile = await fetchOrCreateProfile(session.user.id, fallback);
+      if (!profile) {
+        await supabase.auth.signOut();
+        set({ user: null, isAuthed: false, isLoading: false, isOnboarded: false });
+        return;
+      }
+      set({
+        user: profile,
+        isAuthed: true,
+        isLoading: false,
+        isOnboarded: profile.onboarded ?? false,
+      });
     });
 
     return () => subscription.unsubscribe();

@@ -244,7 +244,7 @@ function ConfirmStep({
         scaleTo={0.98}
         onPress={() => router.push(`/perfil/${match.organizer.id}`)}
       >
-        <Avatar name={match.organizer.name} size={40} />
+        <Avatar name={match.organizer.name} uri={match.organizer.avatarUrl} size={40} />
         <View style={{ flex: 1 }}>
           <Text variant="bodyMedium" color="textPrimary">
             {match.organizer.name}

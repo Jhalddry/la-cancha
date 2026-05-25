@@ -23,7 +23,7 @@ import { useColors } from '@/hooks/useColors';
 import { useSession } from '@/store/session';
 import { useTheme } from '@/store/theme';
 
-SplashScreen.preventAutoHideAsync().catch(() => {});
+void SplashScreen.preventAutoHideAsync().catch(() => {});
 
 export default function RootLayout() {
   const initialize = useSession((s) => s.initialize);
@@ -76,7 +76,13 @@ export default function RootLayout() {
 
   useEffect(() => {
     if (fontsLoaded && !isLoading) {
-      SplashScreen.hideAsync().catch(() => {});
+      void (async () => {
+        try {
+          await SplashScreen.hideAsync();
+        } catch {
+          // Not registered on this view controller (hot-reload / already hidden)
+        }
+      })();
     }
   }, [fontsLoaded, isLoading]);
 

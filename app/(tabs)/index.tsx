@@ -1,38 +1,32 @@
 import { useRouter } from 'expo-router';
-import { Bell, CaretRight, Check, MagnifyingGlass, MapPin, Plus } from 'phosphor-react-native';
+import { Bell, CaretRight, MagnifyingGlass, MapPin, Plus } from 'phosphor-react-native';
 import { useMemo, useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 
 import { Avatar } from '@/components/ui/Avatar';
 import { PressableScale } from '@/components/ui/PressableScale';
 import { Screen } from '@/components/ui/Screen';
-import { Sheet } from '@/components/ui/Sheet';
 import { Text } from '@/components/ui/Text';
-import { mockCurrentUser } from '@/data/players';
+import { CityPickerSheet } from '@/components/feature/CityPickerSheet';
 import { mockMatches } from '@/data/matches';
+import { useSession } from '@/store/session';
 import { MatchCard } from '@/features/match/MatchCard';
 import { MatchTypePromoCard } from '@/features/match/MatchTypePromoCard';
 import { useColors } from '@/hooks/useColors';
 import { radius, spacing } from '@/theme';
 import type { ColorPalette } from '@/theme/palettes';
 
-const CITIES = [
-  'Barquisimeto, Venezuela',
-  'Caracas, Venezuela',
-  'Ciudad Guayana, Venezuela',
-  'Cumaná, Venezuela',
-  'Maracaibo, Venezuela',
-  'Maracay, Venezuela',
-  'Margarita, Venezuela',
-  'Maturín, Venezuela',
-  'Puerto La Cruz, Venezuela',
-  'Valencia, Venezuela',
-];
-
 export default function HomeScreen() {
   const router = useRouter();
-  const [city, setCity] = useState('Caracas, Venezuela');
+  const user = useSession((s) => s.user);
+  const setCityStore = useSession((s) => s.setCity);
+  const displayName = user?.name ?? '…';
+  const city = user?.city ?? '';
   const [locationOpen, setLocationOpen] = useState(false);
+
+  const handleSelectCity = (selected: string) => {
+    setCityStore(selected);
+  };
   const c = useColors();
   const s = useMemo(() => makeStyles(c), [c]);
 
@@ -44,11 +38,11 @@ export default function HomeScreen() {
       >
         <View style={s.header}>
           <View style={s.headerLeft}>
-            <Avatar name={mockCurrentUser.name} size={44} />
+            <Avatar name={displayName} uri={user?.avatarUrl} size={44} />
             <View>
               <View style={s.greetRow}>
                 <Text variant="h3" color="textPrimary">
-                  Hola, {mockCurrentUser.name}
+                  Hola, {displayName}
                 </Text>
                 <Text variant="h3" color="textPrimary">
                   {' '}👋
@@ -75,8 +69,8 @@ export default function HomeScreen() {
           onPress={() => setLocationOpen(true)}
         >
           <MapPin size={16} color={c.primary} weight="fill" />
-          <Text variant="body" color="textSecondary" style={{ flex: 1 }}>
-            {city}
+          <Text variant="body" color={city ? 'textSecondary' : 'textTertiary'} style={{ flex: 1 }}>
+            {city || 'Selecciona tu ciudad'}
           </Text>
           <CaretRight size={16} color={c.textTertiary} weight="bold" />
         </PressableScale>
@@ -145,31 +139,12 @@ export default function HomeScreen() {
         </View>
       </ScrollView>
 
-      <Sheet visible={locationOpen} onClose={() => setLocationOpen(false)} title="Tu ubicación">
-        <View style={s.cityList}>
-          {CITIES.map((city_item) => (
-            <PressableScale
-              key={city_item}
-              style={s.cityRow}
-              scaleTo={0.98}
-              onPress={() => {
-                setCity(city_item);
-                setLocationOpen(false);
-              }}
-            >
-              <MapPin size={16} color={c.primary} weight="fill" />
-              <Text variant="body" color="textPrimary" style={{ flex: 1 }}>
-                {city_item}
-              </Text>
-              {city === city_item ? (
-                <Check size={18} color={c.primary} weight="bold" />
-              ) : (
-                <CaretRight size={16} color={c.textTertiary} weight="bold" />
-              )}
-            </PressableScale>
-          ))}
-        </View>
-      </Sheet>
+      <CityPickerSheet
+        visible={locationOpen}
+        onClose={() => setLocationOpen(false)}
+        currentCity={city}
+        onSelect={handleSelectCity}
+      />
     </Screen>
   );
 }
@@ -267,14 +242,5 @@ function makeStyles(c: ColorPalette) {
     },
     typesRow: { flexDirection: 'row', gap: spacing.md, marginTop: spacing.xs },
     matchList: { gap: spacing.md, marginTop: spacing.xs },
-    cityList: { gap: spacing.xs },
-    cityRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: spacing.md,
-      paddingVertical: spacing.md,
-      borderBottomWidth: 1,
-      borderBottomColor: c.border,
-    },
   });
 }

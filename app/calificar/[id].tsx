@@ -144,7 +144,7 @@ function RatingStep({
       </View>
 
       <View style={s.avatarWrap}>
-        <Avatar name={player.name} size={80} />
+        <Avatar name={player.name} uri={player.avatarUrl} size={80} />
         {player.verified ? (
           <View style={s.verifiedDot} />
         ) : null}
@@ -313,7 +313,7 @@ function SuccessStep({
           </Text>
 
           <View style={s.ratedCard}>
-            <Avatar name={player.name} size={48} />
+            <Avatar name={player.name} uri={player.avatarUrl} size={48} />
             <View style={{ flex: 1 }}>
               <Text variant="bodySemibold" color="textPrimary">
                 {player.name}

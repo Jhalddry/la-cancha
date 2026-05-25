@@ -128,7 +128,7 @@ function Bubble({
   const author = thread.participants.find((p) => p.id === message.authorId);
   return (
     <View style={[s.bubbleRow, isMe ? s.alignRight : s.alignLeft]}>
-      {!isMe ? <Avatar name={author?.name ?? '?'} size={28} /> : null}
+      {!isMe ? <Avatar name={author?.name ?? '?'} uri={author?.avatarUrl} size={28} /> : null}
       <View style={s.bubbleCol}>
         {!isMe && author ? (
           <Text variant="caption" color="textTertiary" style={s.author}>

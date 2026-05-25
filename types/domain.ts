@@ -49,6 +49,8 @@ export interface Player {
   matchesOrganized?: number;
   attendancePct?: number;
   badges?: string[];
+  city?: string;
+  onboarded?: boolean;
 }
 
 export interface MatchLocation {

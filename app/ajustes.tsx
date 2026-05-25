@@ -1,5 +1,5 @@
 import { useRouter } from 'expo-router';
-import { CaretRight } from 'phosphor-react-native';
+import { CaretRight, MapPin } from 'phosphor-react-native';
 import { useMemo, useState } from 'react';
 import { Alert, ScrollView, StyleSheet, Switch, View } from 'react-native';
 
@@ -9,9 +9,11 @@ import { Divider } from '@/components/ui/Divider';
 import { PressableScale } from '@/components/ui/PressableScale';
 import { Screen } from '@/components/ui/Screen';
 import { Text } from '@/components/ui/Text';
+import { CityPickerSheet } from '@/components/feature/CityPickerSheet';
 import { useColors } from '@/hooks/useColors';
 import type { ColorPalette } from '@/theme/palettes';
 import { spacing } from '@/theme';
+import { useSession } from '@/store/session';
 import { useTheme } from '@/store/theme';
 
 
@@ -61,6 +63,9 @@ export default function AjustesScreen() {
   const { mode, setMode } = useTheme();
   const c = useColors();
   const s = useMemo(() => makeStyles(c), [c]);
+  const user = useSession((st) => st.user);
+  const setCityStore = useSession((st) => st.setCity);
+  const [citySheetOpen, setCitySheetOpen] = useState(false);
   const [nearbyMatches, setNearbyMatches] = useState(true);
   const [newMessages, setNewMessages] = useState(true);
   const [myMatches, setMyMatches] = useState(true);
@@ -72,6 +77,20 @@ export default function AjustesScreen() {
         contentContainerStyle={s.content}
         showsVerticalScrollIndicator={false}
       >
+        {/* Location */}
+        <SectionLabel title="Ubicación" />
+        <Card padded={false}>
+          <PressableScale onPress={() => setCitySheetOpen(true)} scaleTo={0.98}>
+            <View style={staticStyles.settingsRow}>
+              <MapPin size={16} color={c.primary} weight="fill" />
+              <Text variant="bodyMedium" color="textPrimary" style={{ flex: 1 }}>
+                {user?.city ?? 'Selecciona tu ciudad'}
+              </Text>
+              <CaretRight size={16} color={c.textTertiary} />
+            </View>
+          </PressableScale>
+        </Card>
+
         {/* Appearance */}
         <SectionLabel title="Apariencia" />
         <Card padded={false}>
@@ -151,6 +170,13 @@ export default function AjustesScreen() {
           />
         </Card>
       </ScrollView>
+
+      <CityPickerSheet
+        visible={citySheetOpen}
+        onClose={() => setCitySheetOpen(false)}
+        currentCity={user?.city}
+        onSelect={(city) => setCityStore(city)}
+      />
     </Screen>
   );
 }

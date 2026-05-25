@@ -1,7 +1,8 @@
 import { useRouter } from 'expo-router';
-import { Camera } from 'phosphor-react-native';
+import * as ImagePicker from 'expo-image-picker';
+import { Camera, Trash } from 'phosphor-react-native';
 import { useMemo, useState } from 'react';
-import { ScrollView, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Alert, ScrollView, StyleSheet, View } from 'react-native';
 
 import { Avatar } from '@/components/ui/Avatar';
 import { BackHeader } from '@/components/ui/BackHeader';
@@ -16,6 +17,7 @@ import { TextInput } from '@/components/ui/TextInput';
 import { footballPositionsByModality, basketPositionsByModality } from '@/features/match/helpers';
 import { useColors } from '@/hooks/useColors';
 import { labelPosition, labelSkill, labelSport } from '@/lib/format';
+import { supabase, SUPABASE_URL } from '@/lib/supabase';
 import { useSession } from '@/store/session';
 import { radius, spacing } from '@/theme';
 import type { ColorPalette } from '@/theme/palettes';
@@ -38,10 +40,14 @@ export default function EditPerfilScreen() {
   const setUser = useSession((s) => s.setUser);
 
   const [name, setName] = useState(user?.name ?? '');
+  const [username, setUsername] = useState(user?.username ?? '');
   const [bio, setBio] = useState(user?.bio ?? '');
   const [skill, setSkill] = useState<SkillLevel>(user?.skillLevel ?? 3);
   const [sports, setSports] = useState<Sport[]>(user?.sports ?? []);
   const [positions, setPositions] = useState<Position[]>(user?.positions ?? []);
+  const [saving, setSaving] = useState(false);
+  const [avatarUri, setAvatarUri] = useState<string | undefined>(user?.avatarUrl);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
 
   const c = useColors();
   const s = useMemo(() => makeStyles(c), [c]);
@@ -51,24 +57,167 @@ export default function EditPerfilScreen() {
   const togglePosition = (p: Position) =>
     setPositions((cur) => (cur.includes(p) ? cur.filter((x) => x !== p) : [...cur, p]));
 
-  // Union of all football + basket positions for sports the user practices.
   const availablePositions: Position[] = (() => {
     const set = new Set<Position>();
-    if (sports.includes('futbol')) {
-      footballPositionsByModality.futbol11.forEach((p) => set.add(p));
-    }
-    if (sports.includes('basket')) {
-      basketPositionsByModality.basket5v5.forEach((p) => set.add(p));
-    }
+    if (sports.includes('futbol')) footballPositionsByModality.futbol11.forEach((p) => set.add(p));
+    if (sports.includes('basket')) basketPositionsByModality.basket5v5.forEach((p) => set.add(p));
     return set.size > 0 ? Array.from(set) : ['cualquiera'];
   })();
 
-  const save = () => {
+  // Fixed storage path — always overwrite the same object so URL stays stable.
+  const AVATAR_STORAGE_PATH = `${user?.id}/avatar`;
+
+  const uploadAvatar = async () => {
     if (!user) return;
+
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('Permiso requerido', 'Necesitamos acceso a tus fotos para cambiar tu avatar.');
+      return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: 'images',
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.8,
+    });
+
+    if (result.canceled || !result.assets[0]) return;
+
+    const asset = result.assets[0];
+    // Determine MIME from mimeType field (most reliable in SDK 54)
+    const mimeType = asset.mimeType ?? 'image/jpeg';
+
+    setUploadingAvatar(true);
+    try {
+      const response = await fetch(asset.uri);
+      const arrayBuffer = await response.arrayBuffer();
+
+      // Delete old object first so storage doesn't accumulate stale files
+      await supabase.storage.from('avatars').remove([AVATAR_STORAGE_PATH]);
+
+      const { error: uploadError } = await supabase.storage
+        .from('avatars')
+        .upload(AVATAR_STORAGE_PATH, arrayBuffer, {
+          contentType: mimeType,
+          upsert: true,
+        });
+
+      if (uploadError) {
+        Alert.alert('Error al subir foto', uploadError.message);
+        return;
+      }
+
+      // Append cache-buster so Image component skips its local cache
+      const baseUrl = `${SUPABASE_URL}/storage/v1/object/public/avatars/${AVATAR_STORAGE_PATH}`;
+      const publicUrl = `${baseUrl}?t=${Date.now()}`;
+
+      const { error: updateError } = await supabase
+        .from('profiles')
+        .update({ avatar_url: publicUrl })
+        .eq('id', user.id);
+
+      if (updateError) {
+        Alert.alert('Error al guardar foto', updateError.message);
+        return;
+      }
+
+      setAvatarUri(publicUrl);
+      setUser({ ...user, avatarUrl: publicUrl });
+    } catch (e) {
+      Alert.alert('Error', 'No se pudo subir la imagen. Intenta de nuevo.');
+      console.error('[uploadAvatar]', e);
+    } finally {
+      setUploadingAvatar(false);
+    }
+  };
+
+  const deleteAvatar = async () => {
+    if (!user) return;
+    setUploadingAvatar(true);
+    try {
+      await supabase.storage.from('avatars').remove([AVATAR_STORAGE_PATH]);
+      const { error } = await supabase
+        .from('profiles')
+        .update({ avatar_url: null })
+        .eq('id', user.id);
+      if (error) {
+        Alert.alert('Error', error.message);
+        return;
+      }
+      setAvatarUri(undefined);
+      setUser({ ...user, avatarUrl: undefined });
+    } catch (e) {
+      Alert.alert('Error', 'No se pudo eliminar la foto.');
+    } finally {
+      setUploadingAvatar(false);
+    }
+  };
+
+  const onAvatarPress = () => {
+    if (avatarUri) {
+      Alert.alert('Foto de perfil', undefined, [
+        { text: 'Cambiar foto', onPress: uploadAvatar },
+        {
+          text: 'Eliminar foto',
+          style: 'destructive',
+          onPress: () =>
+            Alert.alert('Eliminar foto', '¿Estás seguro?', [
+              { text: 'Cancelar', style: 'cancel' },
+              { text: 'Eliminar', style: 'destructive', onPress: deleteAvatar },
+            ]),
+        },
+        { text: 'Cancelar', style: 'cancel' },
+      ]);
+    } else {
+      uploadAvatar();
+    }
+  };
+
+  const save = async () => {
+    if (!user) return;
+    setSaving(true);
+
+    const trimmedUsername = username.trim().toLowerCase();
+    if (trimmedUsername) {
+      const { data: existing } = await supabase
+        .from('profiles')
+        .select('id')
+        .eq('username', trimmedUsername)
+        .neq('id', user.id)
+        .maybeSingle();
+      if (existing) {
+        setSaving(false);
+        Alert.alert('Nombre de usuario no disponible', 'Ese @usuario ya está en uso. Elige otro.');
+        return;
+      }
+    }
+
+    const trimmedBio = bio.trim().slice(0, 300);
+
+    const { error } = await supabase
+      .from('profiles')
+      .update({
+        name: name.trim().slice(0, 60) || user.name,
+        username: trimmedUsername || null,
+        bio: trimmedBio || null,
+        skill_level: skill,
+        sports,
+        positions,
+      })
+      .eq('id', user.id);
+
+    setSaving(false);
+    if (error) {
+      Alert.alert('Error', error.message);
+      return;
+    }
     setUser({
       ...user,
-      name: name.trim() || user.name,
-      bio: bio.trim(),
+      name: name.trim().slice(0, 60) || user.name,
+      username: trimmedUsername || undefined,
+      bio: trimmedBio || undefined,
       skillLevel: skill,
       sports,
       positions,
@@ -85,9 +234,19 @@ export default function EditPerfilScreen() {
         keyboardShouldPersistTaps="handled"
       >
         <View style={s.avatarWrap}>
-          <Avatar name={name || '?'} size={96} />
-          <PressableScale style={s.cameraBtn} scaleTo={0.9}>
-            <Camera size={18} color={c.bg} weight="fill" />
+          <Avatar name={name || '?'} uri={avatarUri} size={96} />
+          <PressableScale
+            style={s.cameraBtn}
+            scaleTo={0.9}
+            onPress={onAvatarPress}
+          >
+            {uploadingAvatar ? (
+              <ActivityIndicator size="small" color={c.bg} />
+            ) : avatarUri ? (
+              <Trash size={18} color={c.bg} weight="fill" />
+            ) : (
+              <Camera size={18} color={c.bg} weight="fill" />
+            )}
           </PressableScale>
         </View>
 
@@ -95,13 +254,24 @@ export default function EditPerfilScreen() {
           label="Nombre"
           placeholder="Tu nombre"
           value={name}
-          onChangeText={setName}
+          onChangeText={(t) => setName(t.slice(0, 60))}
+          autoCapitalize="words"
+          autoCorrect={false}
+        />
+        <TextInput
+          label="Nombre de usuario"
+          placeholder="tuusuario"
+          value={username}
+          onChangeText={(t) => setUsername(t.toLowerCase().replace(/[^a-z0-9_]/g, '').slice(0, 20))}
+          autoCapitalize="none"
+          autoCorrect={false}
+          leading={<Text variant="body" color="textSecondary">@</Text>}
         />
         <TextInput
           label="Sobre mí"
           placeholder="Cuéntale a la comunidad cómo juegas"
           value={bio}
-          onChangeText={setBio}
+          onChangeText={(t) => setBio(t.slice(0, 300))}
           multiline
           numberOfLines={3}
           inputStyle={s.bioInput}
@@ -128,10 +298,7 @@ export default function EditPerfilScreen() {
                   >
                     <Text style={s.sportEmoji}>{SPORT_EMOJIS[sp]}</Text>
                   </IconCircle>
-                  <Text
-                    variant="caption"
-                    color={active ? 'primary' : 'textSecondary'}
-                  >
+                  <Text variant="caption" color={active ? 'primary' : 'textSecondary'}>
                     {labelSport(sp)}
                   </Text>
                 </PressableScale>
@@ -149,13 +316,15 @@ export default function EditPerfilScreen() {
               <PressableScale
                 key={lvl}
                 onPress={() => setSkill(lvl)}
-                style={[
-                  s.levelBtn,
-                  skill === lvl ? s.levelBtnActive : null,
-                ]}
+                style={[s.levelBtn, skill === lvl ? s.levelBtnActive : null]}
                 scaleTo={0.94}
               >
-                <Stars level={lvl} size={10} />
+                <Stars
+                  level={lvl}
+                  size={10}
+                  filledColor={skill === lvl ? c.textOnPrimary : c.primary}
+                  emptyColor={skill === lvl ? `${c.textOnPrimary}55` : c.border}
+                />
               </PressableScale>
             ))}
           </View>
@@ -181,7 +350,11 @@ export default function EditPerfilScreen() {
         </View>
       </ScrollView>
       <View style={s.footer}>
-        <Button label="Guardar cambios" onPress={save} />
+        {saving ? (
+          <ActivityIndicator color={c.primary} />
+        ) : (
+          <Button label="Guardar cambios" onPress={save} />
+        )}
       </View>
     </Screen>
   );
@@ -227,7 +400,7 @@ function makeStyles(c: ColorPalette) {
       justifyContent: 'center',
       minHeight: 44,
     },
-    levelBtnActive: { backgroundColor: c.primarySoft, borderColor: c.primary },
+    levelBtnActive: { backgroundColor: c.primaryBg, borderColor: c.primary },
     levelLabel: { textAlign: 'center' },
     chipsWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
     footer: {

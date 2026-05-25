@@ -1,5 +1,5 @@
 import { useRouter } from 'expo-router';
-import { Check, Envelope, Lock, User } from 'phosphor-react-native';
+import { Check, CheckCircle, Envelope, Eye, EyeSlash, Lock, User, XCircle } from 'phosphor-react-native';
 import { useMemo, useState } from 'react';
 import { ActivityIndicator, ScrollView, StyleSheet, View } from 'react-native';
 
@@ -11,9 +11,9 @@ import { Screen } from '@/components/ui/Screen';
 import { Text } from '@/components/ui/Text';
 import { TextInput } from '@/components/ui/TextInput';
 import { useColors } from '@/hooks/useColors';
-import type { ColorPalette } from '@/theme/palettes';
 import { useSession } from '@/store/session';
 import { radius, spacing } from '@/theme';
+import type { ColorPalette } from '@/theme/palettes';
 
 interface FieldErrors {
   name?: string;
@@ -22,30 +22,90 @@ interface FieldErrors {
   accept?: string;
 }
 
+interface PwReqs {
+  length: boolean;
+  upper: boolean;
+  lower: boolean;
+  number: boolean;
+  special: boolean;
+}
+
+function PasswordRequirements({ reqs }: { reqs: PwReqs }) {
+  const c = useColors();
+
+  const items: [keyof PwReqs, string][] = [
+    ['length', 'Mínimo 8 caracteres'],
+    ['upper', 'Una letra mayúscula'],
+    ['lower', 'Una letra minúscula'],
+    ['number', 'Un número'],
+    ['special', 'Un carácter especial (@$!%*?&_-#.)'],
+  ];
+
+  return (
+    <View style={pwStyles.wrap}>
+      {items.map(([key, label]) => {
+        const ok = reqs[key];
+        return (
+          <View key={key} style={pwStyles.row}>
+            {ok ? (
+              <CheckCircle size={14} color={c.primary} weight="fill" />
+            ) : (
+              <XCircle size={14} color={c.textTertiary} weight="regular" />
+            )}
+            <Text variant="small" color={ok ? 'primary' : 'textTertiary'}>
+              {label}
+            </Text>
+          </View>
+        );
+      })}
+    </View>
+  );
+}
+
+const pwStyles = StyleSheet.create({
+  wrap: { gap: 6, paddingVertical: spacing.xs },
+  row: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
+});
+
 export default function RegisterScreen() {
   const router = useRouter();
   const signUp = useSession((s) => s.signUp);
   const c = useColors();
   const s = useMemo(() => makeStyles(c), [c]);
+
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [secure, setSecure] = useState(true);
   const [accept, setAccept] = useState(false);
   const [tried, setTried] = useState(false);
   const [loading, setLoading] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
+  const pwReqs = useMemo<PwReqs>(
+    () => ({
+      length: password.length >= 8,
+      upper: /[A-Z]/.test(password),
+      lower: /[a-z]/.test(password),
+      number: /[0-9]/.test(password),
+      special: /[@$!%*?&_\-#.]/.test(password),
+    }),
+    [password],
+  );
+
+  const pwStrong = Object.values(pwReqs).every(Boolean);
 
   const errors = useMemo<FieldErrors>(() => {
     const e: FieldErrors = {};
     if (!name.trim()) e.name = 'Ingresa tu nombre.';
+    else if (name.trim().length < 2) e.name = 'Mínimo 2 caracteres.';
     if (!email.trim()) e.email = 'Ingresa tu correo electrónico.';
-    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))
+    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim()))
       e.email = 'Correo electrónico inválido.';
     if (!password) e.password = 'Crea una contraseña.';
-    else if (password.length < 6) e.password = 'Mínimo 6 caracteres.';
+    else if (!pwStrong) e.password = 'La contraseña no cumple los requisitos.';
     if (!accept) e.accept = 'Debes aceptar los términos.';
     return e;
-  }, [name, email, password, accept]);
+  }, [name, email, password, pwStrong, accept]);
 
   const shown: FieldErrors = tried ? errors : {};
   const isValid = Object.keys(errors).length === 0;
@@ -57,7 +117,7 @@ export default function RegisterScreen() {
     }
     setLoading(true);
     setAuthError(null);
-    const error = await signUp(name.trim(), email.trim(), password);
+    const error = await signUp(name.trim(), email.trim().toLowerCase(), password);
     setLoading(false);
     if (error) {
       setAuthError(error);
@@ -86,10 +146,13 @@ export default function RegisterScreen() {
 
         <View style={staticStyles.form}>
           <TextInput
-            label="Nombre"
+            label="Nombre completo"
             placeholder="Tu nombre"
             value={name}
-            onChangeText={setName}
+            onChangeText={(t) => setName(t.slice(0, 60))}
+            autoCapitalize="words"
+            autoCorrect={false}
+            returnKeyType="next"
             leading={<User size={18} color={c.textSecondary} weight="regular" />}
             error={shown.name}
           />
@@ -98,38 +161,65 @@ export default function RegisterScreen() {
             placeholder="tunombre@email.com"
             keyboardType="email-address"
             autoCapitalize="none"
+            autoCorrect={false}
             value={email}
-            onChangeText={setEmail}
+            onChangeText={(t) => setEmail(t.trim())}
+            returnKeyType="next"
             leading={<Envelope size={18} color={c.textSecondary} weight="regular" />}
             error={shown.email}
           />
-          <TextInput
-            label="Contraseña"
-            placeholder="Mínimo 6 caracteres"
-            secureTextEntry
-            value={password}
-            onChangeText={setPassword}
-            leading={<Lock size={18} color={c.textSecondary} weight="regular" />}
-            error={shown.password}
-          />
-          <PressableScale
-            onPress={() => setAccept((a) => !a)}
-            style={staticStyles.termsRow}
-            scaleTo={0.99}
-          >
-            <View
-              style={[
-                s.check,
-                accept ? s.checkOn : null,
-              ]}
+          <View>
+            <TextInput
+              label="Contraseña"
+              placeholder="Mínimo 8 caracteres"
+              secureTextEntry={secure}
+              value={password}
+              onChangeText={setPassword}
+              returnKeyType="done"
+              leading={<Lock size={18} color={c.textSecondary} weight="regular" />}
+              trailing={
+                <PressableScale onPress={() => setSecure((v) => !v)} scaleTo={0.9}>
+                  {secure ? (
+                    <EyeSlash size={18} color={c.textTertiary} weight="regular" />
+                  ) : (
+                    <Eye size={18} color={c.textTertiary} weight="regular" />
+                  )}
+                </PressableScale>
+              }
+              error={tried && !pwStrong && password.length > 0 ? shown.password : undefined}
+            />
+            <PasswordRequirements reqs={pwReqs} />
+          </View>
+
+          <View style={staticStyles.termsRow}>
+            <PressableScale
+              onPress={() => setAccept((a) => !a)}
+              scaleTo={0.9}
             >
-              {accept ? <Check size={14} color={c.bg} weight="bold" /> : null}
-            </View>
+              <View style={[s.check, accept ? s.checkOn : null]}>
+                {accept ? <Check size={14} color={c.bg} weight="bold" /> : null}
+              </View>
+            </PressableScale>
             <Text variant="small" color="textSecondary" style={{ flex: 1 }}>
-              Acepto los <Text color="primary" variant="smallMedium">Términos de servicio</Text> y la{' '}
-              <Text color="primary" variant="smallMedium">Política de privacidad</Text>.
+              Acepto los{' '}
+              <Text
+                color="primary"
+                variant="smallMedium"
+                onPress={() => router.push('/terminos')}
+              >
+                Términos de servicio
+              </Text>{' '}
+              y la{' '}
+              <Text
+                color="primary"
+                variant="smallMedium"
+                onPress={() => router.push('/privacidad')}
+              >
+                Política de privacidad
+              </Text>
+              .
             </Text>
-          </PressableScale>
+          </View>
           {shown.accept ? (
             <Text variant="small" color="alert">
               {shown.accept}
