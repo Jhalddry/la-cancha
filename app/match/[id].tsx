@@ -3,33 +3,43 @@ import {
   CalendarBlank,
   ChatCircle,
   CheckCircle,
+  Clock,
   CreditCard,
   MapPin,
   PencilSimple,
+  Person,
   ShareNetwork,
   ShieldCheck,
   Trophy,
   UsersThree,
+  WarningCircle,
   WhatsappLogo,
+  X,
+  XCircle,
 } from 'phosphor-react-native';
-import { useMemo, type ReactNode } from 'react';
-import { ActivityIndicator, ScrollView, Share, StyleSheet, View } from 'react-native';
+import { useMemo, useState, type ReactNode } from 'react';
+import { ActivityIndicator, Modal, ScrollView, Share, StyleSheet, View } from 'react-native';
+import MapView, { Marker } from 'react-native-maps';
 
 import { Avatar } from '@/components/ui/Avatar';
 import { BackHeader } from '@/components/ui/BackHeader';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { Chip } from '@/components/ui/Chip';
+import { ConfirmSheet } from '@/components/ui/ConfirmSheet';
 import { Divider } from '@/components/ui/Divider';
 import { IconCircle } from '@/components/ui/IconCircle';
 import { PressableScale } from '@/components/ui/PressableScale';
 import { Screen } from '@/components/ui/Screen';
+import { Sheet } from '@/components/ui/Sheet';
 import { Stars } from '@/components/ui/Stars';
 import { Text } from '@/components/ui/Text';
 import { MatchTypeBadge } from '@/features/match/MatchTypeBadge';
+import { PlayerPositions } from '@/components/feature/PlayerPositions';
 import { matchTypeMeta } from '@/features/match/matchTypeMeta';
 import { useColors } from '@/hooks/useColors';
-import { useMatch } from '@/hooks/useMatches';
+import { useMatch, useLeaveMatch, useMyParticipantStatus, usePendingParticipants, useApproveParticipant, useRejectParticipant, useInviteToMatch } from '@/hooks/useMatches';
+import { useProfile } from '@/hooks/useProfiles';
 import { useSession } from '@/store/session';
 import {
   formatMatchTime,
@@ -39,6 +49,7 @@ import {
   labelPosition,
   labelSkill,
 } from '@/lib/format';
+import type { MatchParticipant, Match } from '@/types/domain';
 import { radius, spacing } from '@/theme';
 import type { ColorPalette } from '@/theme/palettes';
 import type { Sport } from '@/types/domain';
@@ -55,9 +66,21 @@ export default function MatchDetailScreen() {
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
   const userId = useSession((st) => st.user?.id);
+  const isAdmin = useSession((st) => st.user?.isAdmin ?? false);
   const { data: match, isLoading } = useMatch(id);
+  const { mutate: leaveMatch, isPending: isLeaving } = useLeaveMatch();
   const c = useColors();
   const s = useMemo(() => makeStyles(c), [c]);
+  const [mapOpen, setMapOpen] = useState(false);
+  const [leaveConfirmOpen, setLeaveConfirmOpen] = useState(false);
+  const [selectedParticipant, setSelectedParticipant] = useState<MatchParticipant | null>(null);
+
+  const isOrganizer = match?.organizer.id === userId;
+  const { data: organizerProfile } = useProfile(match?.organizer.id);
+  const { data: myStatus } = useMyParticipantStatus(!isOrganizer ? id : undefined);
+  const { data: pendingParticipants } = usePendingParticipants(id, !!isOrganizer && !match?.endedAt);
+  const { mutate: approveParticipant, isPending: isApproving } = useApproveParticipant();
+  const { mutate: rejectParticipant, isPending: isRejecting } = useRejectParticipant();
 
   if (isLoading || !match) {
     return (
@@ -71,8 +94,9 @@ export default function MatchDetailScreen() {
   }
 
   const typeMeta = matchTypeMeta[match.type];
-  const isOrganizer = match.organizer.id === userId;
   const joined = match.joinedPlayers.some((p) => p.id === userId);
+
+  const handleLeave = () => setLeaveConfirmOpen(true);
 
   const handleShare = async () => {
     try {
@@ -91,7 +115,7 @@ export default function MatchDetailScreen() {
         transparent
         trailing={
           <View style={s.headerActions}>
-            {isOrganizer ? (
+            {isOrganizer && !match.endedAt ? (
               <PressableScale
                 style={s.headerBtn}
                 scaleTo={0.9}
@@ -100,7 +124,7 @@ export default function MatchDetailScreen() {
                 <PencilSimple size={18} color={c.primary} weight="fill" />
               </PressableScale>
             ) : null}
-            {(isOrganizer || joined) ? (
+            {(isOrganizer || joined) && !match.endedAt ? (
               <PressableScale
                 style={s.headerBtn}
                 scaleTo={0.9}
@@ -125,10 +149,16 @@ export default function MatchDetailScreen() {
           <View style={s.heroLeft}>
             <Text style={s.heroEmoji}>{SPORT_EMOJI[match.sport]}</Text>
             <View style={{ gap: 2 }}>
-              <Text variant="h1" color="textPrimary">
-                Faltan {match.missingCount}{' '}
-                {match.missingCount === 1 ? 'jugador' : 'jugadores'}
-              </Text>
+              {match.endedAt ? (
+                <Text variant="h1" color="textSecondary">Partida finalizada</Text>
+              ) : match.startedAt ? (
+                <Text variant="h1" style={{ color: c.seria }}>🟢 En curso</Text>
+              ) : (
+                <Text variant="h1" color="textPrimary">
+                  Faltan {match.missingCount}{' '}
+                  {match.missingCount === 1 ? 'jugador' : 'jugadores'}
+                </Text>
+              )}
               <View style={s.heroMeta}>
                 <Text variant="body" color="textSecondary">
                   {labelModality(match.modality)}
@@ -161,9 +191,13 @@ export default function MatchDetailScreen() {
             label={match.location.name}
             sub={match.location.address}
             trailing={
-              <Text variant="smallMedium" color="primary">
-                Mapa
-              </Text>
+              match.location.lat && match.location.lng ? (
+                <PressableScale scaleTo={0.9} onPress={() => setMapOpen(true)}>
+                  <Text variant="smallMedium" color="primary">
+                    Ver mapa
+                  </Text>
+                </PressableScale>
+              ) : undefined
             }
           />
           <Divider inset />
@@ -192,11 +226,7 @@ export default function MatchDetailScreen() {
           title="Posiciones buscadas"
           icon={<UsersThree size={15} color={c.textTertiary} weight="regular" />}
         >
-          <View style={s.chips}>
-            {match.missingPositions.map((p) => (
-              <Chip key={p} label={labelPosition(p)} selected />
-            ))}
-          </View>
+          <PlayerPositions sports={[match.sport]} positions={match.missingPositions} />
         </Section>
 
         {/* ── Payment ───────────────────────────────────── */}
@@ -252,12 +282,14 @@ export default function MatchDetailScreen() {
                   ) : null}
                 </View>
                 <View style={s.repRow}>
-                  <Stars
-                    level={Math.round(match.organizer.reputation ?? 0) as 1 | 2 | 3 | 4 | 5}
-                    size={12}
-                  />
+                  {((organizerProfile ?? match.organizer).reputation ?? 0) > 0 ? (
+                    <Stars
+                      level={Math.max(1, Math.round((organizerProfile ?? match.organizer).reputation!)) as 1 | 2 | 3 | 4 | 5}
+                      size={12}
+                    />
+                  ) : null}
                   <Text variant="small" color="textSecondary">
-                    {match.organizer.reputation?.toFixed(1) ?? '—'} · Organizador
+                    {(organizerProfile ?? match.organizer).reputation?.toFixed(1) ?? '—'} · Organizador
                   </Text>
                 </View>
               </View>
@@ -268,38 +300,174 @@ export default function MatchDetailScreen() {
           </Card>
         </Section>
 
+        {/* ── Pending participants (organizer only) ────── */}
+        {isOrganizer && !match.endedAt ? (
+          <Section
+            title={
+              pendingParticipants && pendingParticipants.length > 0
+                ? `${pendingParticipants.length} solicitud${pendingParticipants.length !== 1 ? 'es' : ''} pendiente${pendingParticipants.length !== 1 ? 's' : ''}`
+                : 'Solicitudes de jugadores'
+            }
+            icon={<UsersThree size={15} color={c.seria} weight="regular" />}
+          >
+            {pendingParticipants && pendingParticipants.length > 0 ? (
+            <Card padded={false}>
+              {pendingParticipants.map((p, i) => (
+                <View key={p.id}>
+                  <PressableScale scaleTo={0.98} onPress={() => setSelectedParticipant(p)} style={staticStyles.participantRow}>
+                    <Avatar name={p.name} uri={p.avatarUrl} size={42} />
+                    <View style={{ flex: 1, gap: 3 }}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.xs }}>
+                        <Text variant="bodyMedium" color="textPrimary">{p.name}</Text>
+                        {p.verified ? <CheckCircle size={13} color={c.primary} weight="fill" /> : null}
+                      </View>
+                      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs, alignItems: 'center' }}>
+                        {(() => {
+                          const missingSet = new Set(match.missingPositions.map((mp) => mp.toString()));
+                          const positions = p.positions.slice(0, 2);
+                          const hasMatch = positions.some((pos) => missingSet.has(pos) || pos === 'cualquiera');
+                          const outOfPos = positions.length > 0 && !hasMatch;
+                          return positions.map((pos) => {
+                            const fits = missingSet.has(pos) || pos === 'cualquiera';
+                            return (
+                              <View key={pos} style={[staticStyles.pill, {
+                                backgroundColor: fits ? `${c.primary}18` : outOfPos ? `${c.seria}15` : c.surface,
+                                borderColor: fits ? `${c.primary}55` : outOfPos ? `${c.seria}55` : c.border,
+                              }]}>
+                                {fits
+                                  ? <CheckCircle size={10} color={c.primary} weight="fill" />
+                                  : outOfPos
+                                    ? <WarningCircle size={10} color={c.seria} weight="fill" />
+                                    : <Person size={10} color={c.textTertiary} weight="fill" />
+                                }
+                                <Text variant="caption" style={{ color: fits ? c.primary : outOfPos ? c.seria : c.textSecondary }}>
+                                  {labelPosition(pos)}
+                                </Text>
+                              </View>
+                            );
+                          });
+                        })()}
+                        {p.paymentMethod ? (
+                          <View style={[staticStyles.pill, staticStyles.pillNeutral(c)]}>
+                            <Text variant="caption" color="textSecondary">{labelPayment(p.paymentMethod)}</Text>
+                          </View>
+                        ) : null}
+                      </View>
+                      {match.requirements.length > 0 ? (
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.xs }}>
+                          {(() => {
+                            const allMet = match.requirements.every((r) => p.checkedRequirements?.includes(r) ?? false);
+                            const someMet = match.requirements.some((r) => p.checkedRequirements?.includes(r) ?? false);
+                            if (allMet) return (
+                              <>
+                                <CheckCircle size={12} color={c.primary} weight="fill" />
+                                <Text variant="caption" color="primary">Todos los requisitos</Text>
+                              </>
+                            );
+                            if (someMet) return (
+                              <>
+                                <WarningCircle size={12} color={c.seria} weight="fill" />
+                                <Text variant="caption" style={{ color: c.seria }}>Requisitos parciales</Text>
+                              </>
+                            );
+                            return (
+                              <>
+                                <XCircle size={12} color={c.seria} weight="fill" />
+                                <Text variant="caption" style={{ color: c.seria }}>Sin requisitos</Text>
+                              </>
+                            );
+                          })()}
+                        </View>
+                      ) : null}
+                    </View>
+                    <View style={staticStyles.pendingChevron}>
+                      <Text variant="caption" color="textTertiary">Ver →</Text>
+                    </View>
+                  </PressableScale>
+                  {i < pendingParticipants.length - 1 ? <Divider inset /> : null}
+                </View>
+              ))}
+            </Card>
+            ) : (
+              <Card>
+                <Text variant="small" color="textTertiary" style={{ textAlign: 'center' }}>
+                  Sin solicitudes pendientes
+                </Text>
+              </Card>
+            )}
+          </Section>
+        ) : null}
+
         {/* ── Joined players ────────────────────────────── */}
         {match.joinedPlayers.length > 0 ? (
           <Section title={`${match.joinedPlayers.length} jugador${match.joinedPlayers.length !== 1 ? 'es' : ''} confirmado${match.joinedPlayers.length !== 1 ? 's' : ''}`}>
-            <Card>
-              <View style={s.avatarsRow}>
-                {match.joinedPlayers.map((p) => (
-                  <PressableScale
-                    key={p.id}
-                    scaleTo={0.9}
-                    onPress={() => router.push(`/perfil/${p.id}`)}
-                    style={s.avatarItem}
-                  >
-                    <Avatar name={p.name} uri={p.avatarUrl} size={40} />
-                    <Text variant="caption" color="textSecondary" numberOfLines={1} style={s.avatarName}>
-                      {p.name.split(' ')[0]}
-                    </Text>
-                  </PressableScale>
+            {isOrganizer ? (
+              <Card padded={false}>
+                {match.joinedPlayers.map((p, i) => (
+                  <View key={p.id}>
+                    <ParticipantRow
+                      player={p}
+                      showPayment
+                      c={c}
+                      onPress={() => setSelectedParticipant(p)}
+                    />
+                    {i < match.joinedPlayers.length - 1 ? <Divider inset /> : null}
+                  </View>
                 ))}
-              </View>
-            </Card>
+              </Card>
+            ) : (
+              <Card>
+                <View style={s.avatarsRow}>
+                  {match.joinedPlayers.map((p) => (
+                    <PressableScale
+                      key={p.id}
+                      scaleTo={0.9}
+                      onPress={() => router.push(`/perfil/${p.id}`)}
+                      style={s.avatarItem}
+                    >
+                      <Avatar name={p.name} uri={p.avatarUrl} size={40} />
+                      <Text variant="caption" color="textSecondary" numberOfLines={1} style={s.avatarName}>
+                        {p.name.split(' ')[0]}
+                      </Text>
+                    </PressableScale>
+                  ))}
+                </View>
+              </Card>
+            )}
           </Section>
         ) : null}
       </ScrollView>
 
       {/* ── Sticky footer ─────────────────────────────── */}
-      {!isOrganizer ? (
+      {!isOrganizer && !match.endedAt && !isAdmin ? (
         <View style={s.footer}>
-          {joined ? (
+          {myStatus === 'joined' || joined ? (
+            <>
+              <View style={s.joinedBadge}>
+                <CheckCircle size={18} color={c.primary} weight="fill" />
+                <Text variant="bodyMedium" color="primary">
+                  Ya estás unido a esta partida
+                </Text>
+              </View>
+              <Button
+                label={isLeaving ? 'Saliendo…' : 'Salirme de la partida'}
+                variant="secondary"
+                disabled={isLeaving}
+                onPress={handleLeave}
+              />
+            </>
+          ) : myStatus === 'pending' ? (
             <View style={s.joinedBadge}>
-              <CheckCircle size={18} color={c.primary} weight="fill" />
-              <Text variant="bodyMedium" color="primary">
-                Ya estás unido a esta partida
+              <Clock size={18} color={c.textSecondary} weight="fill" />
+              <Text variant="bodyMedium" color="textSecondary">
+                Solicitud enviada — en espera de aprobación
+              </Text>
+            </View>
+          ) : myStatus === 'rejected' ? (
+            <View style={s.joinedBadge}>
+              <XCircle size={18} color={c.seria} weight="fill" />
+              <Text variant="bodyMedium" style={{ color: c.seria }}>
+                Tu solicitud no fue aceptada
               </Text>
             </View>
           ) : (
@@ -314,6 +482,87 @@ export default function MatchDetailScreen() {
             </>
           )}
         </View>
+      ) : null}
+
+      {/* ── Leave confirm ─────────────────────────────── */}
+      <ConfirmSheet
+        visible={leaveConfirmOpen}
+        onClose={() => setLeaveConfirmOpen(false)}
+        title="Salirse de la partida"
+        description="¿Seguro que quieres salirte? El organizador será notificado."
+        confirmLabel="Salirme"
+        onConfirm={() => leaveMatch(match!.id, { onSuccess: () => router.back() })}
+      />
+
+      {/* ── Join request detail ────────────────────────── */}
+      <Sheet
+        visible={selectedParticipant !== null}
+        onClose={() => setSelectedParticipant(null)}
+        title={selectedParticipant && pendingParticipants?.some((pp) => pp.id === selectedParticipant.id) ? 'Solicitud de unión' : 'Jugador confirmado'}
+      >
+        {selectedParticipant ? (
+          <ParticipantDetail
+            participant={selectedParticipant}
+            match={match}
+            isPending={!!pendingParticipants?.some((pp) => pp.id === selectedParticipant.id)}
+            isApproving={isApproving}
+            isRejecting={isRejecting}
+            c={c}
+            onApprove={() => {
+              approveParticipant({ matchId: match!.id, profileId: selectedParticipant.id });
+              setSelectedParticipant(null);
+            }}
+            onReject={() => {
+              rejectParticipant({ matchId: match!.id, profileId: selectedParticipant.id });
+              setSelectedParticipant(null);
+            }}
+            onViewProfile={() => {
+              setSelectedParticipant(null);
+              setTimeout(() => router.push(`/perfil/${selectedParticipant.id}`), 250);
+            }}
+          />
+        ) : null}
+      </Sheet>
+
+      {/* ── Map modal ─────────────────────────────────── */}
+      {match.location.lat && match.location.lng ? (
+        <Modal
+          visible={mapOpen}
+          animationType="slide"
+          presentationStyle="pageSheet"
+          onRequestClose={() => setMapOpen(false)}
+        >
+          <View style={s.mapModal}>
+            <View style={s.mapHeader}>
+              <Text variant="bodySemibold" color="textPrimary" style={{ flex: 1 }}>
+                {match.location.name}
+              </Text>
+              <PressableScale scaleTo={0.9} onPress={() => setMapOpen(false)}>
+                <X size={22} color={c.textPrimary} weight="bold" />
+              </PressableScale>
+            </View>
+            {match.location.address ? (
+              <Text variant="small" color="textSecondary" style={s.mapAddress}>
+                {match.location.address}
+              </Text>
+            ) : null}
+            <MapView
+              style={s.map}
+              initialRegion={{
+                latitude: match.location.lat,
+                longitude: match.location.lng,
+                latitudeDelta: 0.005,
+                longitudeDelta: 0.005,
+              }}
+            >
+              <Marker
+                coordinate={{ latitude: match.location.lat, longitude: match.location.lng }}
+                title={match.location.name}
+                description={match.location.address}
+              />
+            </MapView>
+          </View>
+        </Modal>
       ) : null}
     </Screen>
   );
@@ -372,18 +621,315 @@ function Section({
   );
 }
 
-const staticStyles = StyleSheet.create({
-  section: { gap: spacing.sm },
-  sectionHead: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
-  detailRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md,
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
-  },
-  detailIcon: { width: 22, alignItems: 'center' },
-});
+function ParticipantRow({
+  player,
+  showPayment,
+  c,
+  onPress,
+}: {
+  player: MatchParticipant;
+  showPayment?: boolean;
+  c: ColorPalette;
+  onPress: () => void;
+}) {
+  const positions = player.positions.slice(0, 2);
+  return (
+    <PressableScale scaleTo={0.98} onPress={onPress} style={staticStyles.participantRow}>
+      <Avatar name={player.name} uri={player.avatarUrl} size={40} />
+      <View style={{ flex: 1, gap: 3 }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.xs }}>
+          <Text variant="bodyMedium" color="textPrimary">{player.name}</Text>
+          {player.verified ? <CheckCircle size={13} color={c.primary} weight="fill" /> : null}
+        </View>
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs }}>
+          {positions.map((pos) => (
+            <View key={pos} style={[staticStyles.pill, staticStyles.pillNeutral(c)]}>
+              <Person size={10} color={c.textTertiary} weight="fill" />
+              <Text variant="caption" color="textSecondary">{labelPosition(pos)}</Text>
+            </View>
+          ))}
+          {showPayment && player.paymentMethod ? (
+            <View key="pay" style={[staticStyles.pill, staticStyles.pillNeutral(c)]}>
+              <Text variant="caption" color="textSecondary">{labelPayment(player.paymentMethod)}</Text>
+            </View>
+          ) : null}
+        </View>
+      </View>
+    </PressableScale>
+  );
+}
+
+const staticStyles = {
+  ...StyleSheet.create({
+    section: { gap: spacing.sm },
+    sectionHead: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
+    detailRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.md,
+      paddingHorizontal: spacing.lg,
+      paddingVertical: spacing.md,
+    },
+    detailIcon: { width: 22, alignItems: 'center' },
+    participantRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.md,
+      paddingHorizontal: spacing.lg,
+      paddingVertical: spacing.md,
+    },
+    pill: {
+      flexDirection: 'row' as const,
+      alignItems: 'center' as const,
+      gap: 4,
+      paddingHorizontal: spacing.sm,
+      paddingVertical: 3,
+      borderRadius: radius.full,
+      borderWidth: 1,
+    },
+    pendingChevron: {
+      paddingLeft: spacing.xs,
+    },
+    detailIconCircle: {
+      width: 28,
+      height: 28,
+      borderRadius: 14,
+      alignItems: 'center' as const,
+      justifyContent: 'center' as const,
+    },
+  }),
+  pillNeutral: (c: ColorPalette) => ({
+    backgroundColor: c.surface,
+    borderColor: c.border,
+  }),
+};
+
+// ─── Participant detail sheet content ────────────────────────────────────────
+
+const SKILL_LABEL_MAP: Record<number, string> = {
+  1: 'Principiante', 2: 'Básico', 3: 'Intermedio', 4: 'Avanzado', 5: 'Competitivo',
+};
+
+function ParticipantDetail({
+  participant,
+  match,
+  isPending,
+  isApproving,
+  isRejecting,
+  c,
+  onApprove,
+  onReject,
+  onViewProfile,
+}: {
+  participant: MatchParticipant;
+  match: Match;
+  isPending: boolean;
+  isApproving: boolean;
+  isRejecting: boolean;
+  c: ColorPalette;
+  onApprove: () => void;
+  onReject: () => void;
+  onViewProfile: () => void;
+}) {
+  const { data: fullProfile } = useProfile(participant.id);
+  const profile = fullProfile ?? participant;
+
+  const positionSet = new Set(match.missingPositions.map((p) => p.toString()));
+  const participantPositions = profile.positions ?? [];
+  const isOutOfPosition = participantPositions.length > 0 &&
+    !participantPositions.some((p) => positionSet.has(p) || p === 'cualquiera');
+  const levelDiff = profile.skillLevel - match.skillLevel;
+  const levelWarning = Math.abs(levelDiff) > 1;
+
+  return (
+    <ScrollView showsVerticalScrollIndicator={false} style={{ maxHeight: 520 }}>
+      <View style={{ gap: spacing.lg, paddingBottom: spacing.xl }}>
+
+        {/* Header */}
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.md }}>
+          <Avatar name={profile.name} uri={profile.avatarUrl} size={56} />
+          <View style={{ flex: 1 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.xs, flexWrap: 'wrap' }}>
+              <Text variant="h3" color="textPrimary">{profile.name}</Text>
+              {profile.verified ? <CheckCircle size={15} color={c.primary} weight="fill" /> : null}
+            </View>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.xs, marginTop: 2 }}>
+              {(profile.reputation ?? 0) > 0 ? (
+                <Stars level={profile.reputation ?? 0} size={11} />
+              ) : null}
+              <Text variant="small" color="textSecondary">
+                {profile.reputation?.toFixed(1) ?? '—'} · {profile.matchesPlayed ?? 0} partidas
+              </Text>
+            </View>
+            {profile.city ? (
+              <Text variant="caption" color="textTertiary">{profile.city}</Text>
+            ) : null}
+          </View>
+        </View>
+
+        {/* Warnings */}
+        {isOutOfPosition ? (
+          <View style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: spacing.sm,
+            padding: spacing.md,
+            backgroundColor: `${c.seria}18`,
+            borderRadius: radius.md,
+            borderWidth: 1,
+            borderColor: `${c.seria}44`,
+          }}>
+            <WarningCircle size={16} color={c.seria} weight="fill" />
+            <Text variant="smallMedium" style={{ color: c.seria, flex: 1 }}>
+              Fuera de posición — no coincide con las requeridas
+            </Text>
+          </View>
+        ) : null}
+        {levelWarning ? (
+          <View style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: spacing.sm,
+            padding: spacing.md,
+            backgroundColor: `${c.seria}18`,
+            borderRadius: radius.md,
+            borderWidth: 1,
+            borderColor: `${c.seria}44`,
+          }}>
+            <WarningCircle size={16} color={c.seria} weight="fill" />
+            <Text variant="smallMedium" style={{ color: c.seria, flex: 1 }}>
+              Nivel {levelDiff > 0 ? 'superior' : 'inferior'} al requerido ({SKILL_LABEL_MAP[match.skillLevel]})
+            </Text>
+          </View>
+        ) : null}
+
+        {/* Positions */}
+        {profile.sports.length > 0 ? (
+          <View style={{ gap: spacing.xs }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.xs }}>
+              <Person size={13} color={c.textTertiary} weight="fill" />
+              <Text variant="caption" color="textSecondary">POSICIÓN</Text>
+            </View>
+            <PlayerPositions
+              sports={profile.sports}
+              positions={participantPositions}
+              matchPositions={positionSet}
+            />
+          </View>
+        ) : null}
+
+        {/* Payment */}
+        {participant.paymentMethod ? (
+          <View style={{ gap: spacing.xs }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.xs }}>
+              <CreditCard size={13} color={c.textTertiary} weight="fill" />
+              <Text variant="caption" color="textSecondary">MÉTODO DE PAGO</Text>
+            </View>
+            <View style={[staticStyles.pill, staticStyles.pillNeutral(c), { alignSelf: 'flex-start' }]}>
+              <Text variant="bodyMedium" color="textPrimary">{labelPayment(participant.paymentMethod)}</Text>
+            </View>
+          </View>
+        ) : null}
+
+        {/* Required requisites */}
+        {match.requirements.length > 0 ? (
+          <View style={{ gap: spacing.xs }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.xs }}>
+              <ShieldCheck size={13} color={c.textTertiary} weight="fill" />
+              <Text variant="caption" color="textSecondary">REQUISITOS OBLIGATORIOS</Text>
+            </View>
+            <View style={{ gap: spacing.xs }}>
+              {match.requirements.map((req) => {
+                const has = participant.checkedRequirements?.includes(req) ?? false;
+                return (
+                  <View key={req} style={{
+                    flexDirection: 'row',
+                    alignSelf: 'flex-start',
+                    alignItems: 'center',
+                    gap: spacing.sm,
+                    paddingVertical: spacing.xs,
+                    paddingHorizontal: spacing.sm,
+                    backgroundColor: has ? `${c.primary}12` : `${c.seria}12`,
+                    borderRadius: radius.md,
+                    borderWidth: 1,
+                    borderColor: has ? `${c.primary}33` : `${c.seria}33`,
+                  }}>
+                    {has ? (
+                      <CheckCircle size={13} color={c.primary} weight="fill" />
+                    ) : (
+                      <XCircle size={13} color={c.seria} weight="fill" />
+                    )}
+                    <Text variant="small" style={{ color: has ? c.primary : c.seria }}>{req}</Text>
+                  </View>
+                );
+              })}
+            </View>
+          </View>
+        ) : null}
+
+        {/* Optional requisites */}
+        {(match.optionalRequirements ?? []).length > 0 ? (
+          <View style={{ gap: spacing.xs }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.xs }}>
+              <ShieldCheck size={13} color={c.textTertiary} weight="regular" />
+              <Text variant="caption" color="textSecondary">REQUISITOS OPCIONALES</Text>
+            </View>
+            <View style={{ gap: spacing.xs }}>
+              {(match.optionalRequirements ?? []).map((req) => {
+                const has = participant.checkedRequirements?.includes(req) ?? false;
+                return (
+                  <View key={req} style={{
+                    flexDirection: 'row',
+                    alignSelf: 'flex-start',
+                    alignItems: 'center',
+                    gap: spacing.sm,
+                    paddingVertical: spacing.xs,
+                    paddingHorizontal: spacing.sm,
+                    backgroundColor: has ? `${c.primary}0C` : c.surface,
+                    borderRadius: radius.md,
+                    borderWidth: 1,
+                    borderColor: has ? `${c.primary}33` : c.border,
+                  }}>
+                    {has ? (
+                      <CheckCircle size={13} color={c.primary} weight="fill" />
+                    ) : (
+                      <XCircle size={13} color={c.textTertiary} weight="fill" />
+                    )}
+                    <Text variant="small" style={{ color: has ? c.primary : c.textSecondary }}>{req}</Text>
+                  </View>
+                );
+              })}
+            </View>
+          </View>
+        ) : null}
+
+        {/* Actions */}
+        <Button
+          label="Ver perfil completo"
+          variant="secondary"
+          onPress={onViewProfile}
+        />
+        {isPending ? (
+          <View style={{ flexDirection: 'row', gap: spacing.sm }}>
+            <Button
+              label={isRejecting ? 'Rechazando…' : 'Rechazar'}
+              variant="secondary"
+              disabled={isRejecting || isApproving}
+              style={{ flex: 1 }}
+              onPress={onReject}
+            />
+            <Button
+              label={isApproving ? 'Aprobando…' : 'Aprobar'}
+              disabled={isApproving || isRejecting}
+              style={{ flex: 1 }}
+              onPress={onApprove}
+            />
+          </View>
+        ) : null}
+      </View>
+    </ScrollView>
+  );
+}
 
 function makeStyles(c: ColorPalette) {
   return StyleSheet.create({
@@ -467,5 +1013,23 @@ function makeStyles(c: ColorPalette) {
       borderWidth: 1,
       borderColor: c.primary,
     },
+    // Map modal
+    mapModal: {
+      flex: 1,
+      backgroundColor: c.bg,
+    },
+    mapHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingHorizontal: spacing.lg,
+      paddingTop: spacing.lg,
+      paddingBottom: spacing.sm,
+      gap: spacing.md,
+    },
+    mapAddress: {
+      paddingHorizontal: spacing.lg,
+      paddingBottom: spacing.md,
+    },
+    map: { flex: 1 },
   });
 }

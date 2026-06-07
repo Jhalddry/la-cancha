@@ -14,6 +14,8 @@ import {
   labelSkill,
   pluralize,
 } from '@/lib/format';
+import { formatVes, usdToVes } from '@/lib/exchange';
+import { useBcvRate } from '@/hooks/useExchange';
 import { spacing } from '@/theme';
 import type { ColorPalette } from '@/theme/palettes';
 import type { Match, Sport } from '@/types/domain';
@@ -47,6 +49,7 @@ function typeColor(type: Match['type'], c: ColorPalette): string {
 export function MatchCard({ match, onPress, cardStyle }: Props) {
   const c = useColors();
   const s = useMemo(() => makeStyles(c), [c]);
+  const bcvRate = useBcvRate();
   const accent = typeColor(match.type, c);
   const tint = `${accent}12`;          // ~7% opacity tint
   const emoji = SPORT_EMOJI[match.sport];
@@ -69,9 +72,13 @@ export function MatchCard({ match, onPress, cardStyle }: Props) {
             <Text variant="bodySemibold" color="primary">
               {formatPrice(match.pricePerHour, match.currency)}/h
             </Text>
-            <Text variant="caption" color="textTertiary">
-              Por hora
-            </Text>
+            {match.currency === 'USD' ? (
+              <Text variant="caption" color="textTertiary">
+                {formatVes(usdToVes(match.pricePerHour, bcvRate))}/h
+              </Text>
+            ) : (
+              <Text variant="caption" color="textTertiary">Por hora</Text>
+            )}
           </View>
         </View>
 
