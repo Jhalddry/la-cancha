@@ -23,14 +23,15 @@ import { Screen } from '@/components/ui/Screen';
 import { Stars } from '@/components/ui/Stars';
 import { Text } from '@/components/ui/Text';
 import { useColors } from '@/hooks/useColors';
-import { useProfile } from '@/hooks/useProfiles';
-import { submitRating } from '@/lib/ratingsApi';
+import { useProfile, profileKeys, ratingKeys } from '@/hooks/useProfiles';
+import { submitRating, updateAttendancePct } from '@/lib/ratingsApi';
+import { queryClient } from '@/lib/queryClient';
 import { useSession } from '@/store/session';
 import { fonts, radius, spacing } from '@/theme';
 import type { ColorPalette } from '@/theme/palettes';
 import type { Player } from '@/types/domain';
 
-const TOTAL_STEPS = 3;
+// TOTAL_STEPS is dynamic based on isOrgEval — defined inside CalificarScreen
 
 const RATING_LABEL: Record<number, string> = {
   1: 'Muy malo',
@@ -47,18 +48,26 @@ const MAX_COMMENT = 200;
 
 export default function CalificarScreen() {
   const router = useRouter();
-  const { id, matchId } = useLocalSearchParams<{ id: string; matchId?: string }>();
+  const { id, matchId, isOrganizer } = useLocalSearchParams<{ id: string; matchId?: string; isOrganizer?: string }>();
+  const isOrgEval = isOrganizer === 'true';
   const userId = useSession((st) => st.user?.id);
   const c = useColors();
   const s = useMemo(() => makeStyles(c), [c]);
 
   const { data: player, isLoading: playerLoading } = useProfile(id);
 
+  // 4 steps for everyone: Stars → Check → Tags → Comment
+  const TOTAL_STEPS = 4;
   const [step, setStep] = useState(1);
   const [rating, setRating] = useState(0);
   const [tags, setTags] = useState<Set<string>>(new Set());
   const [comment, setComment] = useState('');
   const [sending, setSending] = useState(false);
+  const [attended, setAttended] = useState<boolean | null>(null);
+  const [punctual, setPunctual] = useState<boolean | null>(null);
+  const [locationOk, setLocationOk] = useState<boolean | null>(null);
+
+  const successStep = TOTAL_STEPS + 1;
 
   const toggleTag = (t: string) =>
     setTags((cur) => {
@@ -69,15 +78,30 @@ export default function CalificarScreen() {
     });
 
   const handleSubmit = async () => {
-    if (!matchId || !userId || !player) {
-      // No matchId — show success anyway (graceful)
-      setStep(4);
+    if (!userId || !player) return;
+    if (!matchId) {
+      Alert.alert(
+        'Sin partida',
+        'No se encontró la partida asociada. Regresa y vuelve a intentarlo.',
+      );
       return;
     }
     setSending(true);
     try {
-      await submitRating(matchId, userId, player.id, rating, [...tags], comment);
-      setStep(4);
+      const extraTags: string[] = [];
+      if (attended === true) extraTags.push('Asistió');
+      if (attended === false) extraTags.push('No asistió');
+      if (punctual === true) extraTags.push('Puntual');
+      if (punctual === false) extraTags.push('Impuntual');
+      if (isOrgEval && locationOk === true) extraTags.push('Lugar correcto');
+      if (isOrgEval && locationOk === false) extraTags.push('Lugar incorrecto');
+      await submitRating(matchId, userId, player.id, rating, [...tags, ...extraTags], comment);
+      if (attended !== null) void updateAttendancePct(player.id);
+      // Invalidate profile reputation, player ratings, and my given ratings list
+      void queryClient.invalidateQueries({ queryKey: profileKeys.detail(player.id) });
+      void queryClient.invalidateQueries({ queryKey: ratingKeys.forPlayer(player.id) });
+      void queryClient.invalidateQueries({ queryKey: ratingKeys.given(userId) });
+      setStep(successStep);
     } catch (e) {
       Alert.alert(
         'Error al enviar',
@@ -98,7 +122,7 @@ export default function CalificarScreen() {
     );
   }
 
-  if (step === 4) {
+  if (step === successStep) {
     return <SuccessStep player={player} rating={rating} router={router} />;
   }
 
@@ -129,9 +153,21 @@ export default function CalificarScreen() {
           <RatingStep c={c} player={player} rating={rating} onRate={setRating} />
         ) : null}
         {step === 2 ? (
-          <TagsStep c={c} tags={tags} onToggle={toggleTag} />
+          <CheckStep
+            c={c}
+            attended={attended}
+            setAttended={setAttended}
+            punctual={punctual}
+            setPunctual={setPunctual}
+            locationOk={locationOk}
+            setLocationOk={setLocationOk}
+            showLocation={isOrgEval}
+          />
         ) : null}
         {step === 3 ? (
+          <TagsStep c={c} tags={tags} onToggle={toggleTag} />
+        ) : null}
+        {step === 4 ? (
           <CommentStep c={c} comment={comment} onChange={setComment} />
         ) : null}
       </ScrollView>
@@ -150,7 +186,7 @@ export default function CalificarScreen() {
             onPress={handleSubmit}
           />
         )}
-        {step === 3 ? (
+        {step === TOTAL_STEPS ? (
           <PressableScale scaleTo={0.97} onPress={handleSubmit} disabled={sending}>
             <Text variant="body" color="textTertiary" style={{ textAlign: 'center' }}>
               Omitir comentario
@@ -223,7 +259,110 @@ function RatingStep({
 }
 
 // ---------------------------------------------------------------------------
-// Step 2 — Etiquetas rápidas
+// Step 2 — Asistencia, puntualidad (todos) + ubicación (solo org eval)
+// ---------------------------------------------------------------------------
+
+function BinaryChoice({
+  question,
+  value,
+  onChange,
+  c,
+  s,
+}: {
+  question: string;
+  value: boolean | null;
+  onChange: (v: boolean) => void;
+  c: ColorPalette;
+  s: ReturnType<typeof makeStyles>;
+}) {
+  return (
+    <View style={s.orgCheckWrap}>
+      <Text variant="bodyMedium" color="textPrimary" style={{ marginBottom: spacing.sm }}>
+        {question}
+      </Text>
+      <View style={s.orgCheckRow}>
+        <PressableScale
+          scaleTo={0.93}
+          style={[s.orgBinaryBtn, {
+            borderColor: value === true ? c.primary : c.border,
+            backgroundColor: value === true ? `${c.primary}18` : c.surface,
+          }]}
+          onPress={() => onChange(true)}
+        >
+          <Text variant="bodyMedium" style={{ color: value === true ? c.primary : c.textSecondary }}>Sí</Text>
+        </PressableScale>
+        <PressableScale
+          scaleTo={0.93}
+          style={[s.orgBinaryBtn, {
+            borderColor: value === false ? c.alert : c.border,
+            backgroundColor: value === false ? `${c.alert}18` : c.surface,
+          }]}
+          onPress={() => onChange(false)}
+        >
+          <Text variant="bodyMedium" style={{ color: value === false ? c.alert : c.textSecondary }}>No</Text>
+        </PressableScale>
+      </View>
+    </View>
+  );
+}
+
+function CheckStep({
+  c,
+  attended,
+  setAttended,
+  punctual,
+  setPunctual,
+  locationOk,
+  setLocationOk,
+  showLocation,
+}: {
+  c: ColorPalette;
+  attended: boolean | null;
+  setAttended: (v: boolean) => void;
+  punctual: boolean | null;
+  setPunctual: (v: boolean) => void;
+  locationOk: boolean | null;
+  setLocationOk: (v: boolean) => void;
+  showLocation: boolean;
+}) {
+  const s = useMemo(() => makeStyles(c), [c]);
+  return (
+    <View style={s.step}>
+      <View style={s.stepHeader}>
+        <Text variant="h2" style={{ textAlign: 'center' }}>Asistencia y puntualidad</Text>
+        <Text variant="body" color="textSecondary" style={{ textAlign: 'center' }}>
+          Esto afecta el perfil del jugador
+        </Text>
+      </View>
+      <BinaryChoice
+        question="¿Asistió a la partida?"
+        value={attended}
+        onChange={setAttended}
+        c={c}
+        s={s}
+      />
+      <BinaryChoice
+        question="¿Llegó puntual?"
+        value={punctual}
+        onChange={setPunctual}
+        c={c}
+        s={s}
+      />
+      {showLocation ? (
+        <BinaryChoice
+          question="¿El lugar de la partida era el correcto?"
+          value={locationOk}
+          onChange={setLocationOk}
+          c={c}
+          s={s}
+        />
+      ) : null}
+    </View>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Step 2 (normal) / Step 3 (isOrgEval) — Etiquetas rápidas
 // ---------------------------------------------------------------------------
 
 function TagsStep({
@@ -406,7 +545,7 @@ function TagChip({
       scaleTo={0.93}
       style={[
         s.tagChip,
-        selected ? { borderColor: activeColor, backgroundColor: `${activeColor}18` } : null,
+        selected ? { borderColor: activeColor, backgroundColor: `${activeColor}30` } : null,
       ]}
     >
       <Text
@@ -495,6 +634,16 @@ function makeStyles(c: ColorPalette) {
       borderWidth: 1,
       borderColor: c.border,
       backgroundColor: c.surface,
+    },
+    orgCheckWrap: { gap: spacing.xs },
+    orgCheckRow: { flexDirection: 'row', gap: spacing.md },
+    orgBinaryBtn: {
+      flex: 1,
+      paddingVertical: spacing.md,
+      borderRadius: radius.lg,
+      borderWidth: 1,
+      alignItems: 'center',
+      justifyContent: 'center',
     },
     textareaWrap: {
       backgroundColor: c.surface,
