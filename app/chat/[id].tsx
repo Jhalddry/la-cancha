@@ -1,5 +1,5 @@
-import { useLocalSearchParams } from 'expo-router';
-import { PaperPlaneTilt } from 'phosphor-react-native';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import { PaperPlaneTilt, Users } from 'phosphor-react-native';
 import { useEffect, useMemo, useRef } from 'react';
 import {
   ActivityIndicator,
@@ -13,11 +13,13 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Avatar } from '@/components/ui/Avatar';
 import { BackHeader } from '@/components/ui/BackHeader';
+import { ConfirmSheet } from '@/components/ui/ConfirmSheet';
+import { Sheet } from '@/components/ui/Sheet';
 import { PressableScale } from '@/components/ui/PressableScale';
 import { Screen } from '@/components/ui/Screen';
 import { Text } from '@/components/ui/Text';
 import { TextInput } from '@/components/ui/TextInput';
-import { useChat } from '@/hooks/useChat';
+import { useChat, useDeleteMessage } from '@/hooks/useChat';
 import { useMatch } from '@/hooks/useMatches';
 import { useColors } from '@/hooks/useColors';
 import { useSession } from '@/store/session';
@@ -30,6 +32,7 @@ import { useState } from 'react';
 
 export default function ChatScreen() {
   const { id: matchId } = useLocalSearchParams<{ id: string }>();
+  const router = useRouter();
   const userId = useSession((s) => s.user?.id);
   const c = useColors();
   const insets = useSafeAreaInsets();
@@ -37,7 +40,10 @@ export default function ChatScreen() {
 
   const { data: match } = useMatch(matchId);
   const { messages, loading, error, send } = useChat(matchId);
+  const { mutate: deleteMessage } = useDeleteMessage();
   const [text, setText] = useState('');
+  const [deleteMessageId, setDeleteMessageId] = useState<string | null>(null);
+  const [participantsOpen, setParticipantsOpen] = useState(false);
   const scrollRef = useRef<ScrollView>(null);
 
   const grouped = useMemo(() => groupByDay(messages), [messages]);
@@ -59,19 +65,21 @@ export default function ChatScreen() {
   const title = match
     ? `${labelModality(match.modality)} · ${match.location.name}`
     : 'Chat';
-  const subtitle = match
-    ? `${match.joinedPlayers.length + 1} participante${match.joinedPlayers.length !== 0 ? 's' : ''}`
-    : undefined;
 
   return (
     <Screen edges={['top']}>
       <BackHeader
         title={title}
         trailing={
-          subtitle ? (
-            <Text variant="caption" color="textTertiary">
-              {subtitle}
-            </Text>
+          match ? (
+            <PressableScale scaleTo={0.9} onPress={() => setParticipantsOpen(true)}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                <Users size={16} color={c.textTertiary} weight="regular" />
+                <Text variant="caption" color="textTertiary">
+                  {match.joinedPlayers.length + 1}
+                </Text>
+              </View>
+            </PressableScale>
           ) : undefined
         }
       />
@@ -112,7 +120,14 @@ export default function ChatScreen() {
                   <View style={s.dayLine} />
                 </View>
                 {items.map((msg) => (
-                  <Bubble key={msg.id} message={msg} myId={userId ?? ''} c={c} />
+                  <Bubble
+                    key={msg.id}
+                    message={msg}
+                    myId={userId ?? ''}
+                    c={c}
+                    onDelete={(id) => setDeleteMessageId(id)}
+                    onAvatarPress={(authorId) => router.push(`/perfil/${authorId}`)}
+                  />
                 ))}
               </View>
             ))}
@@ -138,6 +153,46 @@ export default function ChatScreen() {
           </View>
         </KeyboardAvoidingView>
       )}
+      <Sheet
+        visible={participantsOpen}
+        onClose={() => setParticipantsOpen(false)}
+        title="Participantes"
+      >
+        <View style={{ gap: spacing.sm, paddingBottom: spacing.xl }}>
+          {match?.organizer ? (
+            <PressableScale
+              scaleTo={0.97}
+              onPress={() => { setParticipantsOpen(false); setTimeout(() => router.push(`/perfil/${match.organizer.id}`), 200); }}
+              style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: spacing.sm }}
+            >
+              <Avatar name={match.organizer.name} uri={match.organizer.avatarUrl} size={40} />
+              <View style={{ flex: 1 }}>
+                <Text variant="bodyMedium" color="textPrimary">{match.organizer.name}</Text>
+                <Text variant="caption" color="primary">Organizador</Text>
+              </View>
+            </PressableScale>
+          ) : null}
+          {match?.joinedPlayers.map((p) => (
+            <PressableScale
+              key={p.id}
+              scaleTo={0.97}
+              onPress={() => { setParticipantsOpen(false); setTimeout(() => router.push(`/perfil/${p.id}`), 200); }}
+              style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: spacing.sm }}
+            >
+              <Avatar name={p.name} uri={p.avatarUrl} size={40} />
+              <Text variant="bodyMedium" color="textPrimary">{p.name}</Text>
+            </PressableScale>
+          ))}
+        </View>
+      </Sheet>
+      <ConfirmSheet
+        visible={deleteMessageId !== null}
+        onClose={() => setDeleteMessageId(null)}
+        title="Eliminar mensaje"
+        description="¿Eliminar este mensaje para todos?"
+        confirmLabel="Eliminar"
+        onConfirm={() => { if (deleteMessageId) deleteMessage(deleteMessageId); }}
+      />
     </Screen>
   );
 }
@@ -146,29 +201,43 @@ function Bubble({
   message,
   myId,
   c,
+  onDelete,
+  onAvatarPress,
 }: {
   message: ChatMessageData;
   myId: string;
   c: ColorPalette;
+  onDelete?: (id: string) => void;
+  onAvatarPress?: (authorId: string) => void;
 }) {
   const s = useMemo(() => makeStyles(c, 0), [c]);
   const isMe = message.authorId === myId;
+  const isOptimistic = message.id.startsWith('opt_');
   return (
     <View style={[s.bubbleRow, isMe ? s.alignRight : s.alignLeft]}>
       {!isMe ? (
-        <Avatar name={message.authorName} uri={message.authorAvatarUrl} size={28} />
+        <PressableScale scaleTo={0.9} onPress={() => onAvatarPress?.(message.authorId)}>
+          <Avatar name={message.authorName} uri={message.authorAvatarUrl} size={28} />
+        </PressableScale>
       ) : null}
       <View style={s.bubbleCol}>
         {!isMe ? (
-          <Text variant="caption" color="textTertiary" style={s.author}>
-            {message.authorName}
-          </Text>
+          <PressableScale scaleTo={0.95} onPress={() => onAvatarPress?.(message.authorId)}>
+            <Text variant="caption" color="primary" style={s.author}>
+              {message.authorName}
+            </Text>
+          </PressableScale>
         ) : null}
-        <View style={[s.bubble, isMe ? s.bubbleMine : s.bubbleOther]}>
-          <Text variant="body" color={isMe ? 'surface' : 'textPrimary'}>
-            {message.body}
-          </Text>
-        </View>
+        <PressableScale
+          scaleTo={0.97}
+          onLongPress={isMe && !isOptimistic && onDelete ? () => onDelete(message.id) : undefined}
+        >
+          <View style={[s.bubble, isMe ? s.bubbleMine : s.bubbleOther, isOptimistic ? s.bubbleOptimistic : null]}>
+            <Text variant="body" color={isMe ? 'surface' : 'textPrimary'}>
+              {message.body}
+            </Text>
+          </View>
+        </PressableScale>
         <Text
           variant="caption"
           color="textTertiary"
@@ -228,6 +297,7 @@ function makeStyles(c: ColorPalette, bottomInset = 0) {
       borderRadius: radius.lg,
     },
     bubbleMine: { backgroundColor: c.primary, borderBottomRightRadius: 4 },
+    bubbleOptimistic: { opacity: 0.6 },
     bubbleOther: {
       backgroundColor: c.surface,
       borderWidth: 1,
