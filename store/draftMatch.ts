@@ -29,7 +29,7 @@ export interface DraftMatch {
   paymentMethods: PaymentMethod[];
   exchangeRate: ExchangeRateSource;
   requirements: string[];
-  extraRequirement: string;
+  extraRequirements: string[];
 }
 
 function defaultDate(): Date {
@@ -56,7 +56,7 @@ const initial: DraftMatch = {
   paymentMethods: ['pagoMovil'],
   exchangeRate: 'bcv',
   requirements: [],
-  extraRequirement: '',
+  extraRequirements: [],
 };
 
 interface State {

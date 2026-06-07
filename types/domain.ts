@@ -44,6 +44,8 @@ export interface Player {
   positions: Position[];
   bio?: string;
   verified?: boolean;
+  verificationRequested?: boolean;
+  isAdmin?: boolean;
   reputation?: number;
   matchesPlayed?: number;
   matchesOrganized?: number;
@@ -61,6 +63,14 @@ export interface MatchLocation {
   lng?: number;
 }
 
+export interface MatchParticipant extends Player {
+  paymentMethod?: PaymentMethod;
+  checkedRequirements?: string[];
+}
+
+/** Same shape, explicit alias for pending-state entries */
+export type PendingParticipant = MatchParticipant;
+
 export interface Match {
   id: string;
   sport: Sport;
@@ -76,6 +86,9 @@ export interface Match {
   currency: Currency;
   paymentMethods: PaymentMethod[];
   requirements: string[];
+  optionalRequirements?: string[];
   organizer: Player;
-  joinedPlayers: Player[];
+  joinedPlayers: MatchParticipant[];
+  startedAt?: string;
+  endedAt?: string;
 }

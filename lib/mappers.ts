@@ -11,6 +11,8 @@ export function rowToPlayer(row: Record<string, unknown>): Player {
     positions: (row.positions as Position[]) ?? [],
     bio: (row.bio as string | null) ?? undefined,
     verified: (row.verified as boolean) ?? false,
+    verificationRequested: (row.verification_requested as boolean) ?? false,
+    isAdmin: (row.is_admin as boolean) ?? false,
     reputation: (row.reputation as number | null) ?? undefined,
     matchesPlayed: (row.matches_played as number) ?? 0,
     matchesOrganized: (row.matches_organized as number) ?? 0,
