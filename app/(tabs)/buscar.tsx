@@ -5,11 +5,22 @@ import {
   MagnifyingGlass,
   MapPin,
   Star,
+  WifiSlash,
   X,
 } from 'phosphor-react-native';
-import { useMemo, useState } from 'react';
-import { ScrollView, StyleSheet, View } from 'react-native';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import {
+  ActivityIndicator,
+  Animated,
+  type DimensionValue,
+  FlatList,
+  RefreshControl,
+  StyleSheet,
+  TextInput as RNTextInput,
+  View,
+} from 'react-native';
 
+import { Button } from '@/components/ui/Button';
 import { Chip } from '@/components/ui/Chip';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { PressableScale } from '@/components/ui/PressableScale';
@@ -18,9 +29,20 @@ import { Sheet } from '@/components/ui/Sheet';
 import { Stars } from '@/components/ui/Stars';
 import { Text } from '@/components/ui/Text';
 import { TextInput } from '@/components/ui/TextInput';
-import { useMatches } from '@/hooks/useMatches';
+import { useMatchesInfinite } from '@/hooks/useMatches';
+import { useUserLocation } from '@/hooks/useUserLocation';
 import { MatchCard } from '@/features/match/MatchCard';
+import { haversineKm } from '@/lib/geo';
 import { matchTypeMeta } from '@/features/match/matchTypeMeta';
+
+const SPORT_EMOJI: Record<string, string> = {
+  all: '🏅',
+  futbol: '⚽',
+  basket: '🏀',
+  tenis: '🎾',
+  padel: '🏓',
+  beachTennis: '🏖️',
+};
 import {
   basketPositionsByModality,
   footballPositionsByModality,
@@ -33,7 +55,7 @@ import type { MatchType, Position, SkillLevel, Sport } from '@/types/domain';
 
 type SportFilter = 'all' | Sport;
 type SortOption = 'recientes' | 'distancia' | 'precio';
-type OpenFilter = 'sport' | 'type' | 'level' | 'distance' | 'sort' | null;
+type OpenFilter = 'sport' | 'type' | 'level' | 'distance' | 'sort' | 'position' | null;
 
 const SPORT_OPTIONS: SportFilter[] = ['all', 'futbol', 'basket', 'padel', 'tenis', 'beachTennis'];
 const TYPE_OPTIONS: MatchType[] = ['chill', 'seria', 'competencia'];
@@ -54,7 +76,48 @@ const FILTER_TITLES: Record<NonNullable<OpenFilter>, string> = {
   level: 'Nivel',
   distance: 'Distancia máxima',
   sort: 'Ordenar por',
+  position: 'Posición',
 };
+
+function SkeletonPulse({
+  width,
+  height,
+  borderRadius: br,
+  bgColor,
+  borderColor,
+}: {
+  width: DimensionValue;
+  height: number;
+  borderRadius: number;
+  bgColor: string;
+  borderColor: string;
+}) {
+  const opacity = useRef(new Animated.Value(0.3)).current;
+  useEffect(() => {
+    const anim = Animated.loop(
+      Animated.sequence([
+        Animated.timing(opacity, { toValue: 1, duration: 800, useNativeDriver: true }),
+        Animated.timing(opacity, { toValue: 0.3, duration: 800, useNativeDriver: true }),
+      ]),
+    );
+    anim.start();
+    return () => anim.stop();
+  }, [opacity]);
+  return (
+    <View style={{ width, height }}>
+      <Animated.View
+        style={{
+          flex: 1,
+          borderRadius: br,
+          backgroundColor: bgColor,
+          borderWidth: 1,
+          borderColor,
+          opacity,
+        }}
+      />
+    </View>
+  );
+}
 
 function FilterPill({
   icon,
@@ -111,8 +174,11 @@ export default function BuscarScreen() {
   const [distance, setDistance] = useState<number | null>(null);
   const [position, setPosition] = useState<Position | null>(null);
   const [sortBy, setSortBy] = useState<SortOption>('recientes');
+  const [customDistance, setCustomDistance] = useState('');
   const c = useColors();
   const s = useMemo(() => makeStyles(c), [c]);
+
+  const { coords: userCoords, status: locationStatus } = useUserLocation();
 
   const positionsForSport: Position[] | null =
     sport === 'futbol'
@@ -121,14 +187,41 @@ export default function BuscarScreen() {
         ? BASKET_POSITIONS
         : null;
 
-  const { data: allMatches = [] } = useMatches();
+  const {
+    data: matchPages,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+    isLoading,
+    isError,
+    refetch,
+    isRefetching,
+  } = useMatchesInfinite();
+
+  const rawMatches = useMemo(
+    () => matchPages?.pages.flatMap((p) => p) ?? [],
+    [matchPages],
+  );
+
+  // Inject computed distanceKm from user GPS
+  const allMatches = useMemo(() => {
+    if (!userCoords) return rawMatches;
+    return rawMatches.map((m) => {
+      if (!m.location.lat || !m.location.lng) return m;
+      const distanceKm = Math.round(
+        haversineKm(userCoords.lat, userCoords.lng, m.location.lat, m.location.lng) * 10,
+      ) / 10;
+      return { ...m, location: { ...m.location, distanceKm } };
+    });
+  }, [rawMatches, userCoords]);
 
   const filtered = useMemo(() => {
     const results = allMatches.filter((m) => {
       if (sport !== 'all' && m.sport !== sport) return false;
       if (type && m.type !== type) return false;
       if (level && m.skillLevel !== level) return false;
-      if (distance && (m.location.distanceKm ?? 99) > distance) return false;
+      const effectiveDistance = distance ?? (customDistance ? Number(customDistance) : null);
+      if (effectiveDistance && (m.location.distanceKm ?? 9999) > effectiveDistance) return false;
       if (position && !m.missingPositions.includes(position)) return false;
       if (query) {
         const q = query.toLowerCase();
@@ -144,12 +237,16 @@ export default function BuscarScreen() {
       results.sort((a, b) => a.pricePerHour - b.pricePerHour);
     }
     return results;
-  }, [allMatches, query, sport, type, level, distance, position, sortBy]);
+  }, [allMatches, query, sport, type, level, distance, customDistance, position, sortBy]);
 
   const sportLabel = sport === 'all' ? 'Todos' : labelSport(sport);
   const typeLabel = type ? matchTypeMeta[type].label : 'Todos';
   const levelLabel = level ? labelSkill(level) : 'Todos';
-  const distanceLabel = distance ? `${distance} km` : 'Cerca de ti';
+  const distanceLabel = distance
+    ? `${distance} km`
+    : customDistance
+      ? `${customDistance} km`
+      : 'Sin límite';
   const sortLabel = SORT_OPTIONS.find((opt) => opt.value === sortBy)?.label ?? 'Más recientes';
 
   return (
@@ -180,7 +277,7 @@ export default function BuscarScreen() {
       <View style={s.filterRows}>
         <View style={s.pillRow}>
           <FilterPill
-            icon={<Text style={s.pillEmoji}>⚽</Text>}
+            icon={<Text style={s.pillEmoji}>{SPORT_EMOJI[sport]}</Text>}
             label="Deporte"
             value={sportLabel}
             active={sport !== 'all'}
@@ -189,7 +286,7 @@ export default function BuscarScreen() {
             s={s}
           />
           <FilterPill
-            icon={<Text style={s.pillEmoji}>😎</Text>}
+            icon={<Text style={s.pillEmoji}>{type ? matchTypeMeta[type].emoji : '🎮'}</Text>}
             label="Tipo"
             value={typeLabel}
             active={type !== null}
@@ -227,41 +324,124 @@ export default function BuscarScreen() {
             s={s}
           />
         </View>
+        {positionsForSport ? (
+          <View style={s.pillRow}>
+            <FilterPill
+              icon={<Text style={s.pillEmoji}>🏃</Text>}
+              label="Posición"
+              value={position ? labelPosition(position) : 'Cualquiera'}
+              active={position !== null}
+              onPress={() => setOpenFilter('position')}
+              c={c}
+              s={s}
+            />
+          </View>
+        ) : null}
       </View>
 
       {/* Results */}
-      <ScrollView
-        contentContainerStyle={s.scroll}
-        showsVerticalScrollIndicator={false}
-      >
-        <View style={s.headerRow}>
-          <Text variant="caption" color="textSecondary">
-            Partidas cerca de ti
-          </Text>
-          <Text variant="caption" color="textTertiary">
-            {filtered.length} resultado{filtered.length === 1 ? '' : 's'}
-          </Text>
-        </View>
-        {filtered.length === 0 ? (
-          <View style={s.empty}>
-            <EmptyState
-              icon={<MagnifyingGlass size={36} color={c.primary} weight="bold" />}
-              title="Sin resultados"
-              description="Ajusta tus filtros o intenta otra búsqueda."
+      {isLoading && rawMatches.length === 0 ? (
+        <View style={s.skeletonWrap}>
+          {[0, 1, 2, 3].map((i) => (
+            <SkeletonPulse
+              key={i}
+              width="100%"
+              height={120}
+              borderRadius={radius.lg}
+              bgColor={c.surface}
+              borderColor={c.border}
             />
-          </View>
-        ) : (
-          <View style={s.list}>
-            {filtered.map((m) => (
-              <MatchCard
-                key={m.id}
-                match={m}
-                onPress={() => router.push(`/match/${m.id}`)}
+          ))}
+        </View>
+      ) : isError ? (
+        <View style={s.errorWrap}>
+          <EmptyState
+            icon={<WifiSlash size={36} color={c.alert} weight="bold" />}
+            title="Sin conexión"
+            description="No se pudieron cargar las partidas."
+            action={
+              <Button
+                label="Reintentar"
+                variant="secondary"
+                fullWidth={false}
+                style={{ marginTop: spacing.md }}
+                onPress={() => void refetch()}
               />
-            ))}
-          </View>
-        )}
-      </ScrollView>
+            }
+          />
+        </View>
+      ) : (
+        <FlatList
+          data={filtered}
+          keyExtractor={(m) => m.id}
+          contentContainerStyle={s.scroll}
+          showsVerticalScrollIndicator={false}
+          onEndReached={() => {
+            if (hasNextPage && !isFetchingNextPage) void fetchNextPage();
+          }}
+          onEndReachedThreshold={0.3}
+          refreshControl={
+            <RefreshControl
+              refreshing={isRefetching}
+              onRefresh={() => void refetch()}
+              tintColor={c.primary}
+              colors={[c.primary]}
+            />
+          }
+          ListHeaderComponent={
+            <View style={s.headerRow}>
+              <Text variant="caption" color="textSecondary">
+                {filtered.length} partida{filtered.length === 1 ? '' : 's'} disponible{filtered.length === 1 ? '' : 's'}
+              </Text>
+              {locationStatus === 'denied' ? (
+                <Text variant="caption" color="textTertiary">📍 Sin ubicación</Text>
+              ) : locationStatus === 'granted' && userCoords ? (
+                <Text variant="caption" color="primary">📍 Ubicación activa</Text>
+              ) : null}
+            </View>
+          }
+          ItemSeparatorComponent={() => <View style={{ height: spacing.md }} />}
+          renderItem={({ item: m }) => (
+            <MatchCard
+              match={m}
+              onPress={() => router.push(`/match/${m.id}`)}
+            />
+          )}
+          ListEmptyComponent={
+            <View style={s.empty}>
+              <EmptyState
+                icon={<MagnifyingGlass size={36} color={c.primary} weight="bold" />}
+                title="Sin resultados"
+                description="Ajusta tus filtros o intenta otra búsqueda."
+                action={
+                  (sport !== 'all' || type !== null || level !== null || distance !== null || position !== null) ? (
+                    <Button
+                      label="Limpiar filtros"
+                      variant="secondary"
+                      fullWidth={false}
+                      style={{ marginTop: spacing.md }}
+                      onPress={() => {
+                        setSport('all');
+                        setType(null);
+                        setLevel(null);
+                        setDistance(null);
+                        setPosition(null);
+                      }}
+                    />
+                  ) : undefined
+                }
+              />
+            </View>
+          }
+          ListFooterComponent={
+            isFetchingNextPage ? (
+              <View style={s.loadingMore}>
+                <ActivityIndicator color={c.primary} />
+              </View>
+            ) : null
+          }
+        />
+      )}
 
       {/* Individual filter sheets */}
       <Sheet
@@ -356,21 +536,21 @@ export default function BuscarScreen() {
         {openFilter === 'distance' ? (
           <View style={s.sheetContent}>
             <PressableScale
-              style={[s.optionRow, distance === null ? s.optionRowActive : null]}
+              style={[s.optionRow, distance === null && !customDistance ? s.optionRowActive : null]}
               scaleTo={0.98}
-              onPress={() => { setDistance(null); setOpenFilter(null); }}
+              onPress={() => { setDistance(null); setCustomDistance(''); setOpenFilter(null); }}
             >
-              <Text variant="body" color={distance === null ? 'primary' : 'textPrimary'}>
-                Cerca de ti
+              <Text variant="body" color={distance === null && !customDistance ? 'primary' : 'textPrimary'}>
+                Sin límite de distancia
               </Text>
-              {distance === null ? <View style={s.activeDot} /> : null}
+              {distance === null && !customDistance ? <View style={s.activeDot} /> : null}
             </PressableScale>
             {DISTANCE_OPTIONS.map((d) => (
               <PressableScale
                 key={d}
                 style={[s.optionRow, distance === d ? s.optionRowActive : null]}
                 scaleTo={0.98}
-                onPress={() => { setDistance(d); setOpenFilter(null); }}
+                onPress={() => { setDistance(d); setCustomDistance(''); setOpenFilter(null); }}
               >
                 <Text variant="body" color={distance === d ? 'primary' : 'textPrimary'}>
                   Menos de {d} km
@@ -378,28 +558,28 @@ export default function BuscarScreen() {
                 {distance === d ? <View style={s.activeDot} /> : null}
               </PressableScale>
             ))}
-
-            {positionsForSport ? (
-              <>
-                <View style={s.divider} />
-                <Text variant="caption" color="textSecondary" style={s.subLabel}>
-                  Posición que buscas
-                </Text>
-                {positionsForSport.map((p) => (
-                  <PressableScale
-                    key={p}
-                    style={[s.optionRow, position === p ? s.optionRowActive : null]}
-                    scaleTo={0.98}
-                    onPress={() => setPosition((cur) => (cur === p ? null : p))}
-                  >
-                    <Text variant="body" color={position === p ? 'primary' : 'textPrimary'}>
-                      {labelPosition(p)}
-                    </Text>
-                    {position === p ? <View style={s.activeDot} /> : null}
-                  </PressableScale>
-                ))}
-              </>
-            ) : null}
+            {/* Custom distance input */}
+            <View style={s.customDistanceWrap}>
+              <Text variant="caption" color="textSecondary" style={{ marginBottom: spacing.xs }}>
+                Distancia personalizada
+              </Text>
+              <View style={s.customDistanceRow}>
+                <RNTextInput
+                  style={[s.customDistanceInput, { color: c.textPrimary, borderColor: customDistance ? c.primary : c.border }]}
+                  placeholder="km"
+                  placeholderTextColor={c.textTertiary}
+                  keyboardType="numeric"
+                  value={customDistance}
+                  onChangeText={(v) => {
+                    setCustomDistance(v.replace(/[^0-9]/g, ''));
+                    setDistance(null);
+                  }}
+                  returnKeyType="done"
+                  onSubmitEditing={() => setOpenFilter(null)}
+                />
+                <Text variant="body" color="textSecondary">km</Text>
+              </View>
+            </View>
           </View>
         ) : null}
 
@@ -416,6 +596,34 @@ export default function BuscarScreen() {
                   {opt.label}
                 </Text>
                 {sortBy === opt.value ? <View style={s.activeDot} /> : null}
+              </PressableScale>
+            ))}
+          </View>
+        ) : null}
+
+        {openFilter === 'position' && positionsForSport ? (
+          <View style={s.sheetContent}>
+            <PressableScale
+              style={[s.optionRow, position === null ? s.optionRowActive : null]}
+              scaleTo={0.98}
+              onPress={() => { setPosition(null); setOpenFilter(null); }}
+            >
+              <Text variant="body" color={position === null ? 'primary' : 'textPrimary'}>
+                Cualquier posición
+              </Text>
+              {position === null ? <View style={s.activeDot} /> : null}
+            </PressableScale>
+            {positionsForSport.map((p) => (
+              <PressableScale
+                key={p}
+                style={[s.optionRow, position === p ? s.optionRowActive : null]}
+                scaleTo={0.98}
+                onPress={() => { setPosition(p); setOpenFilter(null); }}
+              >
+                <Text variant="body" color={position === p ? 'primary' : 'textPrimary'}>
+                  {labelPosition(p)}
+                </Text>
+                {position === p ? <View style={s.activeDot} /> : null}
               </PressableScale>
             ))}
           </View>
@@ -462,11 +670,16 @@ function makeStyles(c: ColorPalette) {
       paddingHorizontal: spacing.lg,
       paddingTop: spacing.sm,
       paddingBottom: 120,
+    },
+    skeletonWrap: {
+      paddingHorizontal: spacing.lg,
+      paddingTop: spacing.sm,
       gap: spacing.md,
     },
-    headerRow: { flexDirection: 'row', justifyContent: 'space-between' },
-    list: { gap: spacing.md },
+    errorWrap: { flex: 1, paddingHorizontal: spacing.lg },
+    headerRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: spacing.md },
     empty: { height: 320 },
+    loadingMore: { paddingVertical: spacing.lg, alignItems: 'center' },
     sheetContent: { gap: spacing.xs, paddingBottom: spacing.lg },
     optionRow: {
       flexDirection: 'row',
@@ -492,5 +705,16 @@ function makeStyles(c: ColorPalette) {
       marginVertical: spacing.sm,
     },
     subLabel: { paddingHorizontal: spacing.sm, marginBottom: spacing.xs },
+    customDistanceWrap: { paddingHorizontal: spacing.sm, marginTop: spacing.sm },
+    customDistanceRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+    customDistanceInput: {
+      flex: 1,
+      borderWidth: 1,
+      borderRadius: radius.md,
+      paddingHorizontal: spacing.md,
+      paddingVertical: spacing.sm,
+      fontSize: 15,
+      backgroundColor: c.surface,
+    },
   });
 }
