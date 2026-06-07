@@ -2,7 +2,6 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import {
   Bank,
   CalendarBlank,
-  ChatCircle,
   Check,
   CheckCircle,
   Coins,
@@ -14,7 +13,7 @@ import {
   Money,
   X,
 } from 'phosphor-react-native';
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { ActivityIndicator, ScrollView, StyleSheet, View } from 'react-native';
 import Animated, {
   useAnimatedStyle,
@@ -26,6 +25,8 @@ import Animated, {
 import { Avatar } from '@/components/ui/Avatar';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
+import { ConfirmSheet } from '@/components/ui/ConfirmSheet';
+import { Divider } from '@/components/ui/Divider';
 import { PressableScale } from '@/components/ui/PressableScale';
 import { Screen } from '@/components/ui/Screen';
 import { StepperBar } from '@/components/ui/StepperBar';
@@ -33,7 +34,10 @@ import { Text } from '@/components/ui/Text';
 import { MatchTypeBadge } from '@/features/match/MatchTypeBadge';
 import { useColors } from '@/hooks/useColors';
 import { useMatch, useJoinMatch } from '@/hooks/useMatches';
-import { BCV_RATE, formatVes, usdToVes } from '@/lib/exchange';
+import { useSession } from '@/store/session';
+import { useProfile } from '@/hooks/useProfiles';
+import { formatVes, usdToVes } from '@/lib/exchange';
+import { useBcvRate } from '@/hooks/useExchange';
 import {
   formatMatchTime,
   formatPrice,
@@ -63,11 +67,9 @@ const PAYMENT_ICON: Record<PaymentMethod, { icon: ReactNode; color: string }> = 
 const TOTAL_FLOW_STEPS = 3;
 
 export default function UnirseScreen() {
-  const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
   const { data: match, isLoading } = useMatch(id);
   const c = useColors();
-  const s = useMemo(() => makeStyles(c), [c]);
 
   if (isLoading || !match) {
     return (
@@ -79,10 +81,22 @@ export default function UnirseScreen() {
     );
   }
 
+  return <UnirseContent match={match} />;
+}
+
+function UnirseContent({ match }: { match: import('@/types/domain').Match }) {
+  const router = useRouter();
+  const userId = useSession((st) => st.user?.id);
+  const isAdmin = useSession((st) => st.user?.isAdmin ?? false);
+  const { data: myProfile } = useProfile(userId);
+  const c = useColors();
+  const s = useMemo(() => makeStyles(c), [c]);
+
   const [step, setStep] = useState(1);
   const [selectedPayment, setSelectedPayment] = useState<PaymentMethod | null>(null);
   const [checkedReqs, setCheckedReqs] = useState<Set<string>>(new Set());
   const [masterChecked, setMasterChecked] = useState(false);
+  const [outOfPositionWarning, setOutOfPositionWarning] = useState(false);
 
   const allReqsChecked =
     match.requirements.every((r) => checkedReqs.has(r)) && masterChecked;
@@ -98,8 +112,61 @@ export default function UnirseScreen() {
   const durationHours = match.durationMin / 60;
   const total = Math.round(match.pricePerHour * durationHours);
 
+  // Guard: admin accounts are read-only
+  if (isAdmin) {
+    return (
+      <Screen edges={['top']}>
+        <View style={s.header}>
+          <PressableScale onPress={() => router.back()} scaleTo={0.9}>
+            <X size={22} color={c.textPrimary} weight="bold" />
+          </PressableScale>
+          <Text variant="bodySemibold">Sin acceso</Text>
+          <View style={{ width: 22 }} />
+        </View>
+        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 32 }}>
+          <Text variant="h3" color="textPrimary" style={{ textAlign: 'center' }}>
+            Las cuentas de administrador no pueden unirse a partidas
+          </Text>
+          <Text variant="body" color="textSecondary" style={{ textAlign: 'center', marginTop: 8 }}>
+            Esta cuenta es de solo lectura.
+          </Text>
+        </View>
+      </Screen>
+    );
+  }
+
+  // Guard: prevent joining ended or cancelled matches
+  if (match.endedAt) {
+    return (
+      <Screen edges={['top']}>
+        <View style={s.header}>
+          <PressableScale onPress={() => router.back()} scaleTo={0.9}>
+            <X size={22} color={c.textPrimary} weight="bold" />
+          </PressableScale>
+          <Text variant="bodySemibold">Partida finalizada</Text>
+          <View style={{ width: 22 }} />
+        </View>
+        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: spacing.xl }}>
+          <Text variant="h2" color="textSecondary" style={{ textAlign: 'center' }}>
+            Esta partida ya finalizó
+          </Text>
+          <Text variant="body" color="textTertiary" style={{ textAlign: 'center', marginTop: spacing.sm }}>
+            No puedes unirte a partidas que ya terminaron.
+          </Text>
+        </View>
+      </Screen>
+    );
+  }
+
   if (step === 4) {
-    return <SuccessStep match={match} router={router} />;
+    return (
+      <SuccessStep
+        match={match}
+        router={router}
+        selectedPayment={selectedPayment}
+        checkedRequirements={[...checkedReqs]}
+      />
+    );
   }
 
   return (
@@ -141,6 +208,7 @@ export default function UnirseScreen() {
           <RequirementsStep
             c={c}
             requirements={match.requirements}
+            optionalRequirements={match.optionalRequirements ?? []}
             checked={checkedReqs}
             onToggle={toggleReq}
             masterChecked={masterChecked}
@@ -160,9 +228,35 @@ export default function UnirseScreen() {
         <Button
           label="Continuar"
           disabled={step === 2 ? !selectedPayment : step === 3 ? !allReqsChecked : false}
-          onPress={() => setStep(step + 1)}
+          onPress={() => {
+            if (step === 1 && myProfile && match) {
+              const needed = match.missingPositions;
+              const hasPosition =
+                needed.length === 0 ||
+                needed.includes('cualquiera' as import('@/types/domain').Position) ||
+                myProfile.positions.some((p) => needed.includes(p));
+
+              if (!hasPosition) {
+                setOutOfPositionWarning(true);
+                return;
+              }
+            }
+            setStep(step + 1);
+          }}
         />
       </View>
+
+      <ConfirmSheet
+        visible={outOfPositionWarning}
+        onClose={() => setOutOfPositionWarning(false)}
+        title="Fuera de posición"
+        description={`Esta partida busca: ${match.missingPositions.join(', ')}. Tu posición registrada no coincide. ¿Continuar de todas formas?`}
+        confirmLabel="Continuar de todas formas"
+        onConfirm={() => {
+          setOutOfPositionWarning(false);
+          setStep(step + 1);
+        }}
+      />
     </Screen>
   );
 }
@@ -185,6 +279,7 @@ function ConfirmStep({
   router: ReturnType<typeof useRouter>;
 }) {
   const s = useMemo(() => makeStyles(c), [c]);
+  const bcvRate = useBcvRate();
   return (
     <View style={s.step}>
       <View style={s.stepHeader}>
@@ -242,10 +337,25 @@ function ConfirmStep({
         </View>
         <View style={s.bcvRow}>
           <Text variant="caption" color="textTertiary">
-            ≈ {formatVes(usdToVes(total))} · Tasa BCV {BCV_RATE.toFixed(2)} Bs/USD
+            ≈ {formatVes(usdToVes(total, bcvRate))} · Tasa BCV {bcvRate.toFixed(2)} Bs/USD
           </Text>
         </View>
       </Card>
+
+      {/* Requirements */}
+      {match.requirements.length > 0 ? (
+        <Card padded={false}>
+          {match.requirements.map((r, i) => (
+            <View key={r}>
+              <View style={s.reqPreviewRow}>
+                <CheckCircle size={15} color={c.primary} weight="fill" />
+                <Text variant="body" color="textPrimary" style={{ flex: 1 }}>{r}</Text>
+              </View>
+              {i < match.requirements.length - 1 ? <View style={s.rowDivider} /> : null}
+            </View>
+          ))}
+        </Card>
+      ) : null}
 
       {/* Organizer */}
       <PressableScale
@@ -331,6 +441,7 @@ function PaymentStep({
 function RequirementsStep({
   c,
   requirements,
+  optionalRequirements,
   checked,
   onToggle,
   masterChecked,
@@ -338,6 +449,7 @@ function RequirementsStep({
 }: {
   c: ColorPalette;
   requirements: string[];
+  optionalRequirements: string[];
   checked: Set<string>;
   onToggle: (r: string) => void;
   masterChecked: boolean;
@@ -376,6 +488,34 @@ function RequirementsStep({
         </Card>
       ) : null}
 
+      {optionalRequirements.length > 0 ? (
+        <>
+          <Text variant="caption" color="textSecondary" style={{ marginTop: spacing.md }}>
+            Opcionales (no requeridas)
+          </Text>
+          <Card padded={false}>
+            {optionalRequirements.map((r, i) => {
+              const on = checked.has(r);
+              return (
+                <View key={r}>
+                  <PressableScale
+                    style={[s.reqRow, on ? s.reqRowActive : null]}
+                    scaleTo={0.98}
+                    onPress={() => onToggle(r)}
+                  >
+                    <Text variant="body" color="textPrimary" style={{ flex: 1 }}>
+                      {r}
+                    </Text>
+                    <CheckBox c={c} checked={on} />
+                  </PressableScale>
+                  {i < optionalRequirements.length - 1 ? <View style={s.rowDivider} /> : null}
+                </View>
+              );
+            })}
+          </Card>
+        </>
+      ) : null}
+
       <PressableScale
         style={[s.masterRow, masterChecked ? s.masterRowActive : null]}
         scaleTo={0.98}
@@ -405,18 +545,29 @@ function RequirementsStep({
 function SuccessStep({
   match,
   router,
+  selectedPayment,
+  checkedRequirements,
 }: {
   match: import('@/types/domain').Match;
   router: ReturnType<typeof useRouter>;
+  selectedPayment: PaymentMethod | null;
+  checkedRequirements: string[];
 }) {
   const c = useColors();
   const s = useMemo(() => makeStyles(c), [c]);
-  const { mutate: joinMatch } = useJoinMatch();
+  const { mutate: joinMatch, isError: joinError, isPending: joinPending } = useJoinMatch();
   const scale = useSharedValue(0);
   const opacity = useSharedValue(0);
+  const hasSentRef = useRef(false);
 
   useEffect(() => {
-    joinMatch(match.id);
+    if (hasSentRef.current) return;
+    hasSentRef.current = true;
+    joinMatch({
+      matchId: match.id,
+      paymentMethod: selectedPayment ?? undefined,
+      checkedRequirements,
+    });
     scale.value = withSpring(1, { damping: 12, stiffness: 120 });
     opacity.value = withDelay(200, withSpring(1));
   }, []);
@@ -431,48 +582,78 @@ function SuccessStep({
       <View style={s.successWrap}>
         <ConfettiDecor c={c} />
 
-        <Animated.View style={[s.checkCircle, checkStyle]}>
-          <Check size={52} color={c.bg} weight="bold" />
+        <Animated.View style={[s.checkCircle, checkStyle, joinError ? { backgroundColor: c.alert } : null]}>
+          {joinError ? (
+            <X size={52} color={c.bg} weight="bold" />
+          ) : (
+            <Check size={52} color={c.bg} weight="bold" />
+          )}
         </Animated.View>
 
         <Animated.View style={[s.successContent, contentStyle]}>
-          <Text variant="h1" color="textPrimary">
-            ¡Ya estás dentro!
-          </Text>
-          <Text variant="body" color="textSecondary" style={s.successSub}>
-            Te hemos agregado a la partida.
-          </Text>
-
-          <View style={s.successMatchCard}>
-            <Text style={s.sportEmoji}>{SPORT_EMOJIS[match.sport]}</Text>
-            <View style={{ flex: 1 }}>
-              <View style={s.badgeRow}>
-                <MatchTypeBadge type={match.type} />
+          {joinError ? (
+            <>
+              <Text variant="h1" color="alert">Error al unirse</Text>
+              <Text variant="body" color="textSecondary" style={s.successSub}>
+                No se pudo enviar tu solicitud. Intenta de nuevo.
+              </Text>
+              <View style={s.successActions}>
+                <Button
+                  label="Reintentar"
+                  onPress={() => joinMatch({
+                    matchId: match.id,
+                    paymentMethod: selectedPayment ?? undefined,
+                    checkedRequirements,
+                  })}
+                  leading={<Eye size={18} color={c.bg} weight="fill" />}
+                />
+                <Button
+                  label="Ver partida"
+                  variant="secondary"
+                  onPress={() => router.replace(`/match/${match.id}`)}
+                />
               </View>
-              <Text variant="small" color="textSecondary" style={{ marginTop: 2 }}>
-                {formatMatchTime(match.startsAt)} · {match.location.name}
+            </>
+          ) : joinPending ? (
+            <>
+              <Text variant="h1" color="textPrimary">Enviando solicitud…</Text>
+              <Text variant="body" color="textSecondary" style={s.successSub}>
+                Estamos procesando tu solicitud.
               </Text>
-            </View>
-          </View>
+            </>
+          ) : (
+            <>
+              <Text variant="h1" color="textPrimary">¡Solicitud enviada!</Text>
+              <Text variant="body" color="textSecondary" style={s.successSub}>
+                El organizador revisará tu solicitud y te notificará cuando sea aceptada.
+              </Text>
 
-          <View style={s.successActions}>
-            <Button
-              label="Ir al chat"
-              onPress={() => router.replace(`/chat/${match.id}`)}
-              leading={<ChatCircle size={18} color={c.bg} weight="fill" />}
-            />
-            <Button
-              label="Ver partida"
-              variant="secondary"
-              onPress={() => router.replace(`/match/${match.id}`)}
-              leading={<Eye size={18} color={c.textPrimary} weight="fill" />}
-            />
-            <PressableScale onPress={() => router.replace('/(tabs)')} scaleTo={0.97}>
-              <Text variant="bodyMedium" color="primary" style={{ textAlign: 'center' }}>
-                Volver al inicio
-              </Text>
-            </PressableScale>
-          </View>
+              <View style={s.successMatchCard}>
+                <Text style={s.sportEmoji}>{SPORT_EMOJIS[match.sport]}</Text>
+                <View style={{ flex: 1 }}>
+                  <View style={s.badgeRow}>
+                    <MatchTypeBadge type={match.type} />
+                  </View>
+                  <Text variant="small" color="textSecondary" style={{ marginTop: 2 }}>
+                    {formatMatchTime(match.startsAt)} · {match.location.name}
+                  </Text>
+                </View>
+              </View>
+
+              <View style={s.successActions}>
+                <Button
+                  label="Ver partida"
+                  onPress={() => router.replace(`/match/${match.id}`)}
+                  leading={<Eye size={18} color={c.bg} weight="fill" />}
+                />
+                <PressableScale onPress={() => router.replace('/(tabs)')} scaleTo={0.97}>
+                  <Text variant="bodyMedium" color="primary" style={{ textAlign: 'center' }}>
+                    Volver al inicio
+                  </Text>
+                </PressableScale>
+              </View>
+            </>
+          )}
         </Animated.View>
       </View>
     </Screen>
@@ -598,6 +779,13 @@ function makeStyles(c: ColorPalette) {
       paddingTop: spacing.sm,
       borderTopWidth: 1,
       borderTopColor: c.border,
+    },
+    reqPreviewRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.sm,
+      paddingHorizontal: spacing.md,
+      paddingVertical: spacing.sm + 2,
     },
     organizerRow: {
       flexDirection: 'row',
