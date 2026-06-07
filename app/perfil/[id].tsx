@@ -7,22 +7,27 @@ import {
   Flag,
   MapPin,
   Prohibit,
+  SealCheck,
   SoccerBall,
+  Star,
   UserPlus,
+  WarningCircle,
 } from 'phosphor-react-native';
 import { useMemo, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   ScrollView,
   StyleSheet,
   TextInput as RNTextInput,
+  TouchableOpacity,
   View,
 } from 'react-native';
 
+import { ConfirmSheet } from '@/components/ui/ConfirmSheet';
 import { Avatar } from '@/components/ui/Avatar';
 import { BackHeader } from '@/components/ui/BackHeader';
 import { Button } from '@/components/ui/Button';
+import { Card } from '@/components/ui/Card';
 import { Chip } from '@/components/ui/Chip';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { PressableScale } from '@/components/ui/PressableScale';
@@ -31,14 +36,21 @@ import { Sheet } from '@/components/ui/Sheet';
 import { Stars } from '@/components/ui/Stars';
 import { Text } from '@/components/ui/Text';
 import { MatchTypeBadge } from '@/features/match/MatchTypeBadge';
+import { PlayerPositions } from '@/components/feature/PlayerPositions';
 import { useColors } from '@/hooks/useColors';
-import { useMatches, useMyMatches } from '@/hooks/useMatches';
-import { useProfile } from '@/hooks/useProfiles';
+import { useInviteToMatch, useMatches, useMyMatches, usePlayerJoinedMatches, usePlayerOrganizedMatches } from '@/hooks/useMatches';
+import { useProfile, usePlayerRatings, useVerifyPlayer } from '@/hooks/useProfiles';
 import { formatMatchTime, labelModality, labelPosition, labelSport } from '@/lib/format';
 import { useSession } from '@/store/session';
 import { fonts, radius, spacing } from '@/theme';
 import type { ColorPalette } from '@/theme/palettes';
 import type { Sport } from '@/types/domain';
+
+const VERIFIED_BLUE = '#1D9BF0';
+
+const POSITIVE_TAGS = new Set([
+  'Puntual', 'Fair Play', 'Buena actitud', 'Organizado', 'Nivel acorde', 'Buen compañero',
+]);
 
 const SPORT_EMOJIS: Record<Sport, string> = {
   futbol: '⚽',
@@ -69,10 +81,34 @@ export default function PlayerProfileScreen() {
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
   const userId = useSession((st) => st.user?.id);
+  const currentUser = useSession((st) => st.user);
   const c = useColors();
   const s = useMemo(() => makeStyles(c), [c]);
+  const { mutate: inviteToMatchMutate } = useInviteToMatch();
+  const { mutate: verifyPlayer } = useVerifyPlayer();
 
   const { data: player, isLoading } = useProfile(id);
+  const { data: playerRatings, isLoading: ratingsLoading } = usePlayerRatings(id);
+
+  // Computed reputation from actual review data — overrides stale profile value
+  const computedRep = useMemo(() => {
+    if (!playerRatings || playerRatings.length === 0) return player?.reputation ?? null;
+    return (
+      Math.round(
+        (playerRatings.reduce((s, r) => s + r.stars, 0) / playerRatings.length) * 10,
+      ) / 10
+    );
+  }, [playerRatings, player?.reputation]);
+
+  // Attendance derived from ratings tags
+  const computedAttendance = useMemo(() => {
+    if (!playerRatings || playerRatings.length === 0) return null;
+    const attended = playerRatings.filter((r) => r.tags.includes('Asistió')).length;
+    const missed = playerRatings.filter((r) => r.tags.includes('No asistió')).length;
+    const total = attended + missed;
+    if (total === 0) return null;
+    return Math.round((attended / total) * 100);
+  }, [playerRatings]);
 
   // Recent matches organised by this player
   const { data: organizedMatches } = useMatches(
@@ -91,13 +127,39 @@ export default function PlayerProfileScreen() {
   const myUpcomingMatches = useMemo(
     () =>
       (myMatches?.created ?? []).filter(
-        (m) => new Date(m.startsAt).getTime() > Date.now(),
+        (m) => !m.startedAt && !m.endedAt && new Date(m.startsAt).getTime() > Date.now(),
       ),
     [myMatches],
   );
 
+  const [partidasOpen, setPartidasOpen] = useState(false);
+  const [organizadasOpen, setOrganizadasOpen] = useState(false);
+  const [reputacionOpen, setReputacionOpen] = useState(false);
+
+  const { data: joinedMatches = [], isLoading: joinedLoading } = usePlayerJoinedMatches(id, partidasOpen);
+  const { data: organizedMatchesFull = [], isLoading: organizedLoading } = usePlayerOrganizedMatches(id, organizadasOpen);
+
   const [inviteOpen, setInviteOpen] = useState(false);
   const [invitedMatchId, setInvitedMatchId] = useState<string | null>(null);
+  const [inviteConfirmOpen, setInviteConfirmOpen] = useState<{ matchId: string } | null>(null);
+  const [messageLoading, setMessageLoading] = useState(false);
+  const [noSharedMatch, setNoSharedMatch] = useState(false);
+
+  const handleSendMessage = async () => {
+    if (!id || !userId) return;
+    setMessageLoading(true);
+    try {
+      const { fetchSharedMatchId } = await import('@/lib/chatApi');
+      const matchId = await fetchSharedMatchId(userId, id);
+      if (!matchId) {
+        setNoSharedMatch(true);
+      } else {
+        router.push(`/chat/${matchId}`);
+      }
+    } finally {
+      setMessageLoading(false);
+    }
+  };
   const [menuOpen, setMenuOpen] = useState(false);
   const [reportOpen, setReportOpen] = useState(false);
   const [reportDoneOpen, setReportDoneOpen] = useState(false);
@@ -155,31 +217,34 @@ export default function PlayerProfileScreen() {
       <ScrollView contentContainerStyle={s.scroll} showsVerticalScrollIndicator={false}>
         {/* Hero */}
         <View style={s.hero}>
-          <Avatar name={player.name} uri={player.avatarUrl} size={88} />
-          <Text variant="h2" color="textPrimary" style={s.heroName}>
-            {player.name}
-          </Text>
-          {player.username ? (
-            <Text variant="body" color="textTertiary">
-              @{player.username}
-            </Text>
-          ) : null}
-
-          <View style={s.heroMeta}>
-            <View style={s.skillBadge}>
-              <Stars level={player.skillLevel} size={13} />
-              <Text variant="caption" color="textSecondary">
-                {SKILL_LABEL[player.skillLevel]}
-              </Text>
-            </View>
+          <View style={{ position: 'relative' }}>
+            <Avatar name={player.name} uri={player.avatarUrl} size={96} />
             {player.verified ? (
-              <View style={s.verifiedBadge}>
-                <CheckCircle size={13} color={c.primary} weight="fill" />
-                <Text variant="caption" color="primary">
-                  Verificado
-                </Text>
+              <View style={s.avatarVerifiedBadge}>
+                <SealCheck size={22} color={VERIFIED_BLUE} weight="fill" />
               </View>
             ) : null}
+          </View>
+
+          <View style={s.heroText}>
+            <Text variant="h2" color="textPrimary" style={{ textAlign: 'center' }}>
+              {player.name}
+            </Text>
+            {player.username ? (
+              <Text variant="body" color="textTertiary">
+                @{player.username}
+              </Text>
+            ) : null}
+          </View>
+
+          {/* Badges row: skill (dots, not stars) + verified */}
+          <View style={s.heroMeta}>
+            <View style={s.skillBadge}>
+              <SkillDots level={player.skillLevel} c={c} />
+              <Text variant="caption" color="textSecondary">
+                Nivel · {SKILL_LABEL[player.skillLevel]}
+              </Text>
+            </View>
           </View>
 
           {player.city ? (
@@ -194,16 +259,29 @@ export default function PlayerProfileScreen() {
 
         {/* Stats */}
         <View style={s.statsCard}>
-          <StatBlock label="Partidas" value={String(player.matchesPlayed ?? 0)} />
+          <StatBlock
+            label="Partidas"
+            value={String(player.matchesPlayed ?? 0)}
+            onPress={() => setPartidasOpen(true)}
+          />
           <View style={s.statDivider} />
-          <StatBlock label="Organizadas" value={String(player.matchesOrganized ?? 0)} />
+          <StatBlock
+            label="Organizadas"
+            value={String(player.matchesOrganized ?? 0)}
+            onPress={() => setOrganizadasOpen(true)}
+          />
           <View style={s.statDivider} />
-          <StatBlock label="Asistencia" value={`${player.attendancePct ?? 100}%`} />
+          <StatBlock
+            label="Asistencia"
+            value={computedAttendance != null ? `${computedAttendance}%` : '—'}
+          />
           <View style={s.statDivider} />
           <StatBlock
             label="Reputación"
-            value={player.reputation?.toFixed(1) ?? '—'}
+            value={computedRep != null ? computedRep.toFixed(1) : '—'}
             accent
+            stars={computedRep ?? undefined}
+            onPress={() => setReputacionOpen(true)}
           />
         </View>
 
@@ -229,16 +307,12 @@ export default function PlayerProfileScreen() {
         ) : null}
 
         {/* Positions */}
-        {player.positions.length > 0 ? (
+        {player.sports.length > 0 ? (
           <View style={s.section}>
             <Text variant="caption" color="textSecondary" style={s.sectionLabel}>
               Posiciones
             </Text>
-            <View style={s.chipsWrap}>
-              {player.positions.map((p) => (
-                <Chip key={p} label={labelPosition(p)} selected />
-              ))}
-            </View>
+            <PlayerPositions sports={player.sports} positions={player.positions} />
           </View>
         ) : null}
 
@@ -248,9 +322,11 @@ export default function PlayerProfileScreen() {
             <Text variant="caption" color="textSecondary" style={s.sectionLabel}>
               Sobre mí
             </Text>
-            <Text variant="body" color="textPrimary" style={s.bioText}>
-              {player.bio}
-            </Text>
+            <Card>
+              <Text variant="body" color="textPrimary" style={s.bioText}>
+                {player.bio}
+              </Text>
+            </Card>
           </View>
         ) : null}
 
@@ -304,15 +380,72 @@ export default function PlayerProfileScreen() {
             </View>
           </View>
         ) : null}
+        {/* Reseñas */}
+        {!ratingsLoading ? (
+          <View style={s.section}>
+            {/* Header */}
+            <View style={s.reviewsHeader}>
+              <View>
+                <Text variant="caption" color="textSecondary">
+                  RESEÑAS{playerRatings && playerRatings.length > 0 ? ` (${playerRatings.length})` : ''}
+                </Text>
+              </View>
+              {computedRep != null ? (
+                <PressableScale scaleTo={0.95} onPress={() => setReputacionOpen(true)}>
+                  <View style={s.reviewsRating}>
+                    <Star size={13} color={c.seria} weight="fill" />
+                    <Text variant="bodySemibold" color="primary">{computedRep.toFixed(1)}</Text>
+                    <Text variant="caption" color="textTertiary">
+                      ({playerRatings?.length ?? 0} reseñas)
+                    </Text>
+                  </View>
+                </PressableScale>
+              ) : null}
+            </View>
+
+            {playerRatings && playerRatings.length > 0 ? (
+              <View style={s.reviewList}>
+                {/* Summary bars */}
+                <ReviewSummaryBars ratings={playerRatings} c={c} s={s} />
+
+                {/* Review cards */}
+                {playerRatings.slice(0, 3).map((r, i) => (
+                  <ReviewCard
+                    key={r.id}
+                    r={r}
+                    isLast={i === Math.min(playerRatings.length, 3) - 1}
+                    c={c}
+                    s={s}
+                  />
+                ))}
+
+                {playerRatings.length > 3 ? (
+                  <PressableScale scaleTo={0.97} onPress={() => setReputacionOpen(true)}>
+                    <Text variant="smallMedium" color="primary" style={{ textAlign: 'center', paddingVertical: spacing.xs }}>
+                      Ver todas las reseñas →
+                    </Text>
+                  </PressableScale>
+                ) : null}
+              </View>
+            ) : (
+              <Card>
+                <Text variant="small" color="textTertiary" style={{ textAlign: 'center' }}>
+                  Sin reseñas aún
+                </Text>
+              </Card>
+            )}
+          </View>
+        ) : null}
       </ScrollView>
 
       {/* Footer — only show when viewing another user's profile */}
       {id !== userId ? (
         <View style={s.footer}>
           <Button
-            label="Enviar mensaje"
+            label={messageLoading ? 'Buscando…' : 'Enviar mensaje'}
             variant="secondary"
-            onPress={() => router.push(`/chat/${player.id}`)}
+            onPress={handleSendMessage}
+            disabled={messageLoading}
             leading={<ChatCircle size={18} color={c.textPrimary} weight="fill" />}
           />
           <Button
@@ -324,6 +457,19 @@ export default function PlayerProfileScreen() {
       ) : null}
 
       {/* ── Sheets ── */}
+
+      <Sheet visible={noSharedMatch} onClose={() => setNoSharedMatch(false)}>
+        <View style={s.doneBody}>
+          <View style={[s.doneIcon, { backgroundColor: c.surface }]}>
+            <ChatCircle size={36} color={c.textTertiary} weight="regular" />
+          </View>
+          <Text variant="h3" color="textPrimary">Sin partida compartida</Text>
+          <Text variant="body" color="textSecondary" style={{ textAlign: 'center' }}>
+            Solo puedes chatear con jugadores con quienes hayas compartido una partida.
+          </Text>
+          <Button label="Entendido" onPress={() => setNoSharedMatch(false)} />
+        </View>
+      </Sheet>
 
       <Sheet
         visible={menuOpen}
@@ -510,18 +656,151 @@ export default function PlayerProfileScreen() {
               label="Enviar invitación"
               disabled={!invitedMatchId}
               onPress={() => {
+                if (!invitedMatchId) return;
                 setInviteOpen(false);
-                setInvitedMatchId(null);
-                Alert.alert(
-                  'Invitación enviada',
-                  `${player.name} recibirá tu invitación a la partida.`,
-                );
+                setTimeout(() => setInviteConfirmOpen({ matchId: invitedMatchId }), 300);
               }}
             />
           </View>
         )}
       </Sheet>
+      {/* ── Partidas sheet ──────────────────────────── */}
+      <Sheet
+        visible={partidasOpen}
+        onClose={() => setPartidasOpen(false)}
+        title={`Partidas de ${player?.name ?? ''}`}
+      >
+        <ScrollView style={{ maxHeight: 400 }} showsVerticalScrollIndicator={false}>
+          <View style={{ gap: spacing.xs, paddingBottom: spacing.xl }}>
+            {joinedLoading ? (
+              <ActivityIndicator color={c.primary} style={{ marginVertical: spacing.xl }} />
+            ) : joinedMatches.length === 0 ? (
+              <Text variant="body" color="textTertiary" style={{ textAlign: 'center', padding: spacing.lg }}>
+                Sin partidas registradas
+              </Text>
+            ) : joinedMatches.map((m) => (
+              <PressableScale
+                key={m.id}
+                style={s.sheetMatchRow}
+                scaleTo={0.97}
+                onPress={() => { setPartidasOpen(false); setTimeout(() => router.push(`/match/${m.id}`), 200); }}
+              >
+                <Text style={s.recentEmoji}>{SPORT_EMOJIS[m.sport] ?? '🏅'}</Text>
+                <View style={{ flex: 1 }}>
+                  <Text variant="bodyMedium" color="textPrimary">{labelModality(m.modality)}</Text>
+                  <Text variant="small" color="textSecondary">{m.location.name} · {formatMatchTime(m.startsAt)}</Text>
+                </View>
+                <MatchTypeBadge type={m.type} />
+              </PressableScale>
+            ))}
+          </View>
+        </ScrollView>
+      </Sheet>
+
+      {/* ── Organizadas sheet ───────────────────────── */}
+      <Sheet
+        visible={organizadasOpen}
+        onClose={() => setOrganizadasOpen(false)}
+        title={`Partidas organizadas por ${player?.name ?? ''}`}
+      >
+        <ScrollView style={{ maxHeight: 400 }} showsVerticalScrollIndicator={false}>
+          <View style={{ gap: spacing.xs, paddingBottom: spacing.xl }}>
+            {organizedLoading ? (
+              <ActivityIndicator color={c.primary} style={{ marginVertical: spacing.xl }} />
+            ) : organizedMatchesFull.length === 0 ? (
+              <Text variant="body" color="textTertiary" style={{ textAlign: 'center', padding: spacing.lg }}>
+                Sin partidas organizadas
+              </Text>
+            ) : organizedMatchesFull.map((m) => (
+              <PressableScale
+                key={m.id}
+                style={s.sheetMatchRow}
+                scaleTo={0.97}
+                onPress={() => { setOrganizadasOpen(false); setTimeout(() => router.push(`/match/${m.id}`), 200); }}
+              >
+                <Text style={s.recentEmoji}>{SPORT_EMOJIS[m.sport] ?? '🏅'}</Text>
+                <View style={{ flex: 1 }}>
+                  <Text variant="bodyMedium" color="textPrimary">{labelModality(m.modality)}</Text>
+                  <Text variant="small" color="textSecondary">{m.location.name} · {formatMatchTime(m.startsAt)}</Text>
+                </View>
+                <MatchTypeBadge type={m.type} />
+              </PressableScale>
+            ))}
+          </View>
+        </ScrollView>
+      </Sheet>
+
+      {/* ── Reputación / todas las reseñas sheet ─────── */}
+      <Sheet
+        visible={reputacionOpen}
+        onClose={() => setReputacionOpen(false)}
+        title="Reseñas recibidas"
+      >
+        <ScrollView style={{ maxHeight: 520 }} showsVerticalScrollIndicator={false}>
+          <View style={{ gap: spacing.sm, paddingBottom: spacing.xl }}>
+            {!playerRatings || playerRatings.length === 0 ? (
+              <Text variant="body" color="textTertiary" style={{ textAlign: 'center', padding: spacing.lg }}>
+                Sin reseñas aún
+              </Text>
+            ) : (
+              <>
+                <ReviewSummaryBars ratings={playerRatings} c={c} s={s} />
+                {playerRatings.map((r, i) => (
+                  <ReviewCard
+                    key={r.id}
+                    r={r}
+                    isLast={i === playerRatings.length - 1}
+                    c={c}
+                    s={s}
+                  />
+                ))}
+              </>
+            )}
+          </View>
+        </ScrollView>
+      </Sheet>
+
+      <ConfirmSheet
+        visible={inviteConfirmOpen !== null}
+        onClose={() => { setInviteConfirmOpen(null); setInvitedMatchId(null); }}
+        title="Invitar a jugar"
+        description={`¿Enviar invitación a ${player?.name ?? ''}? Recibirá una notificación con el enlace a la partida.`}
+        confirmLabel="Enviar invitación"
+        confirmColor={c.primary}
+        onConfirm={() => {
+          if (!inviteConfirmOpen) return;
+          const m = myUpcomingMatches.find((match) => match.id === inviteConfirmOpen.matchId);
+          if (!m || !player) return;
+          inviteToMatchMutate({
+            matchId: inviteConfirmOpen.matchId,
+            inviteeId: player.id,
+            organizerName: currentUser?.name ?? '',
+            sport: m.sport,
+            modality: m.modality,
+          });
+          setInvitedMatchId(null);
+        }}
+      />
     </Screen>
+  );
+}
+
+/** Skill level as filled/empty dots — visually distinct from star ratings */
+function SkillDots({ level, c }: { level: number; c: ColorPalette }) {
+  return (
+    <View style={{ flexDirection: 'row', gap: 4, alignItems: 'center' }}>
+      {[1, 2, 3, 4, 5].map((n) => (
+        <View
+          key={n}
+          style={{
+            width: 7,
+            height: 7,
+            borderRadius: 3.5,
+            backgroundColor: n <= level ? c.primary : c.border,
+          }}
+        />
+      ))}
+    </View>
   );
 }
 
@@ -529,26 +808,148 @@ function StatBlock({
   label,
   value,
   accent,
+  onPress,
+  stars,
 }: {
   label: string;
   value: string;
   accent?: boolean;
+  onPress?: () => void;
+  stars?: number;
 }) {
   return (
-    <View style={staticStyles.statBlock}>
+    <TouchableOpacity
+      style={[staticStyles.statBlock, onPress ? staticStyles.tappable : null]}
+      onPress={onPress}
+      activeOpacity={onPress ? 0.6 : 1}
+    >
       <Text variant="h2" color={accent ? 'primary' : 'textPrimary'}>
         {value}
       </Text>
-      <Text variant="caption" color="textSecondary" style={{ textAlign: 'center' }}>
+      {stars != null ? (
+        <Stars level={stars} size={11} />
+      ) : null}
+      <Text variant="caption" color={onPress ? 'primary' : 'textSecondary'} style={{ textAlign: 'center' }}>
         {label}
       </Text>
-    </View>
+    </TouchableOpacity>
   );
 }
 
 const staticStyles = StyleSheet.create({
-  statBlock: { flex: 1, alignItems: 'center', gap: 2 },
+  statBlock: { flex: 1, alignItems: 'center', gap: 2, paddingVertical: spacing.xs },
+  tappable: { opacity: 1 },
 });
+
+// ─── Review sub-components ────────────────────────────────────────────────────
+
+type StylesType = ReturnType<typeof makeStyles>;
+type RatingRow = import('@/lib/ratingsApi').RatingRow;
+
+const SUMMARY_ATTRS: { label: string; positive: string[]; negative: string[] }[] = [
+  { label: 'Puntualidad',  positive: ['Puntual'],                        negative: ['Impuntual'] },
+  { label: 'Fair Play',    positive: ['Fair Play'],                      negative: ['Tóxico', 'Abandonó'] },
+  { label: 'Actitud',      positive: ['Buena actitud', 'Organizado'],    negative: ['Tóxico', 'Abandonó'] },
+  { label: 'Compañerismo', positive: ['Buen compañero', 'Nivel acorde'], negative: ['Nivel no acorde'] },
+];
+
+function attrPct(ratings: RatingRow[], positive: string[], negative: string[]): number | null {
+  let pos = 0, neg = 0;
+  for (const r of ratings) {
+    const hasPos = positive.some((t) => r.tags.includes(t));
+    const hasNeg = negative.some((t) => r.tags.includes(t));
+    if (hasPos) pos++;
+    else if (hasNeg) neg++;
+  }
+  const total = pos + neg;
+  if (total === 0) return null;
+  return Math.round((pos / total) * 100);
+}
+
+function attrColor(pct: number | null, c: ColorPalette): string {
+  if (pct == null) return c.border;
+  if (pct >= 75) return c.primary;   // green — good
+  if (pct >= 40) return c.seria;     // amber — fair
+  return c.alert;                    // red — bad
+}
+
+function ReviewSummaryBars({
+  ratings, c, s,
+}: { ratings: RatingRow[]; c: ColorPalette; s: StylesType }) {
+  if (ratings.length === 0) return null;
+  return (
+    <View style={s.summaryContainer}>
+      {SUMMARY_ATTRS.map(({ label, positive, negative }) => {
+        const pct = attrPct(ratings, positive, negative);
+        const color = attrColor(pct, c);
+        return (
+          <View key={label} style={s.summaryRow}>
+            <Text variant="caption" color="textSecondary" style={s.summaryLabel}>{label}</Text>
+            <View style={[s.summaryTrack, { backgroundColor: c.border }]}>
+              {pct != null ? (
+                <View style={[s.summaryFill, { backgroundColor: color, width: `${pct}%` as unknown as number }]} />
+              ) : null}
+            </View>
+            <Text
+              variant="caption"
+              style={[s.summaryPct, { color: pct != null ? color : c.textTertiary }]}
+            >
+              {pct != null ? `${pct}%` : '—'}
+            </Text>
+          </View>
+        );
+      })}
+    </View>
+  );
+}
+
+function ReviewCard({
+  r, isLast, c, s,
+}: { r: RatingRow; isLast: boolean; c: ColorPalette; s: StylesType }) {
+  return (
+    <View style={[s.reviewCard, isLast && { borderBottomWidth: 0 }]}>
+      {/* Header */}
+      <View style={s.reviewTop}>
+        <Avatar name={r.raterName} uri={r.raterAvatarUrl} size={36} />
+        <View style={{ flex: 1, gap: 2 }}>
+          <Text variant="bodyMedium" color="textPrimary">{r.raterName}</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
+            <Star size={11} color={c.seria} weight="fill" />
+            <Text variant="caption" color="textSecondary">{r.stars}</Text>
+          </View>
+        </View>
+        <Text variant="caption" color="textTertiary">
+          {new Date(r.createdAt).toLocaleDateString('es-VE', { day: 'numeric', month: 'short' }).toUpperCase()}
+        </Text>
+      </View>
+
+      {/* Comment — primary element */}
+      {r.comment ? (
+        <Text variant="small" color="textSecondary" style={s.reviewComment}>
+          {r.comment}
+        </Text>
+      ) : null}
+
+      {/* Tags — subtle, no color */}
+      {r.tags.length > 0 ? (
+        <View style={s.reviewTags}>
+          {r.tags.map((t, tIdx) => {
+            const pos = POSITIVE_TAGS.has(t);
+            return (
+              <View key={`${tIdx}-${t}`} style={s.reviewTag}>
+                {pos
+                  ? <Check size={10} color={c.textTertiary} weight="bold" />
+                  : <WarningCircle size={10} color={c.textTertiary} weight="bold" />
+                }
+                <Text variant="caption" color="textTertiary">{t}</Text>
+              </View>
+            );
+          })}
+        </View>
+      ) : null}
+    </View>
+  );
+}
 
 function makeStyles(c: ColorPalette) {
   return StyleSheet.create({
@@ -568,8 +969,8 @@ function makeStyles(c: ColorPalette) {
       alignItems: 'center',
       justifyContent: 'center',
     },
-    hero: { alignItems: 'center', gap: spacing.sm },
-    heroName: { marginTop: spacing.sm },
+    hero: { alignItems: 'center', gap: spacing.md },
+    heroText: { alignItems: 'center', gap: 2 },
     heroMeta: {
       flexDirection: 'row',
       gap: spacing.sm,
@@ -580,7 +981,7 @@ function makeStyles(c: ColorPalette) {
     skillBadge: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: spacing.xs,
+      gap: spacing.sm,
       paddingHorizontal: spacing.md,
       paddingVertical: spacing.xs,
       backgroundColor: c.surface,
@@ -588,16 +989,13 @@ function makeStyles(c: ColorPalette) {
       borderWidth: 1,
       borderColor: c.border,
     },
-    verifiedBadge: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 4,
-      paddingHorizontal: spacing.md,
-      paddingVertical: spacing.xs,
-      backgroundColor: c.primarySoft,
+    avatarVerifiedBadge: {
+      position: 'absolute',
+      bottom: 0,
+      right: 0,
+      backgroundColor: c.bg,
       borderRadius: radius.full,
-      borderWidth: 1,
-      borderColor: c.primary,
+      padding: 2,
     },
     locationRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
     statsCard: {
@@ -744,6 +1142,95 @@ function makeStyles(c: ColorPalette) {
       borderRadius: radius.full,
       alignItems: 'center',
       justifyContent: 'center',
+    },
+    ratingOverview: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
+    reviewsHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+    },
+    reviewsRating: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.xs,
+    },
+    reviewList: {
+      backgroundColor: c.surface,
+      borderRadius: radius.lg,
+      borderWidth: 1,
+      borderColor: c.border,
+      overflow: 'hidden',
+      gap: 0,
+    },
+    // Summary bars
+    summaryContainer: {
+      gap: spacing.sm,
+      paddingHorizontal: spacing.md,
+      paddingVertical: spacing.md,
+      borderBottomWidth: 1,
+      borderBottomColor: c.border,
+    },
+    summaryRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.sm,
+    },
+    summaryLabel: { width: 100 },
+    summaryTrack: {
+      flex: 1,
+      height: 3,
+      borderRadius: radius.full,
+      overflow: 'hidden',
+    },
+    summaryFill: {
+      height: 3,
+      borderRadius: radius.full,
+    },
+    summaryPct: { width: 32, textAlign: 'right' },
+    // Review card
+    reviewCard: {
+      paddingHorizontal: spacing.md,
+      paddingVertical: spacing.md,
+      gap: spacing.sm,
+      borderBottomWidth: 1,
+      borderBottomColor: c.border,
+    },
+    reviewTop: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.sm,
+    },
+    reviewComment: {
+      lineHeight: 20,
+      fontStyle: 'italic',
+    },
+    reviewTags: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: spacing.xs,
+    },
+    reviewTag: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 4,
+      paddingHorizontal: spacing.sm,
+      paddingVertical: 3,
+      borderRadius: radius.full,
+      borderWidth: 1,
+      borderColor: c.border,
+      backgroundColor: `${c.textPrimary}06`,
+    },
+    commentText: { lineHeight: 18 },
+    sheetMatchRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.md,
+      paddingHorizontal: spacing.sm,
+      paddingVertical: spacing.md,
+      backgroundColor: c.surface,
+      borderRadius: radius.lg,
+      borderWidth: 1,
+      borderColor: c.border,
     },
     inviteList: { gap: spacing.md, paddingBottom: spacing.md },
     inviteRow: {

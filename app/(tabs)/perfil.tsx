@@ -3,19 +3,23 @@ import {
   CaretRight,
   CheckCircle,
   FileText,
+  SealCheck,
   Gear,
   Lock,
   PencilSimple,
   Shield,
+  ShieldStar,
   SignOut,
   Trophy,
 } from 'phosphor-react-native';
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 
 import { Avatar } from '@/components/ui/Avatar';
+import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
-import { Chip } from '@/components/ui/Chip';
+import { Sheet } from '@/components/ui/Sheet';
+import { PlayerPositions } from '@/components/feature/PlayerPositions';
 import { Stars } from '@/components/ui/Stars';
 import { Divider } from '@/components/ui/Divider';
 import { IconCircle } from '@/components/ui/IconCircle';
@@ -23,11 +27,14 @@ import { PressableScale } from '@/components/ui/PressableScale';
 import { Screen } from '@/components/ui/Screen';
 import { Text } from '@/components/ui/Text';
 import { useColors } from '@/hooks/useColors';
-import { labelPosition, labelSkill, labelSport } from '@/lib/format';
+import { useRequestVerification } from '@/hooks/useProfiles';
+import { labelSkill, labelSport } from '@/lib/format';
 import { useSession } from '@/store/session';
 import { radius, spacing } from '@/theme';
 import type { ColorPalette } from '@/theme/palettes';
 import type { Sport } from '@/types/domain';
+
+const VERIFIED_BLUE = '#1D9BF0';
 
 const SPORT_EMOJIS: Record<Sport, string> = {
   futbol: '⚽',
@@ -43,6 +50,9 @@ export default function PerfilScreen() {
   const signOut = useSession((s) => s.signOut);
   const c = useColors();
   const s = useMemo(() => makeStyles(c), [c]);
+  const [verifySheetOpen, setVerifySheetOpen] = useState(false);
+  const [verifyDoneOpen, setVerifyDoneOpen] = useState(false);
+  const { mutate: sendVerifyRequest } = useRequestVerification();
 
   if (!u) {
     return (
@@ -74,7 +84,14 @@ export default function PerfilScreen() {
         showsVerticalScrollIndicator={false}
       >
         <View style={s.head}>
-          <Avatar name={u.name} uri={u.avatarUrl} size={88} />
+          <View style={{ position: 'relative' }}>
+            <Avatar name={u.name} uri={u.avatarUrl} size={88} />
+            {u.verified ? (
+              <View style={s.avatarVerifiedBadge}>
+                <SealCheck size={20} color={VERIFIED_BLUE} weight="fill" />
+              </View>
+            ) : null}
+          </View>
           <View style={s.headInfo}>
             <Text variant="h2">{u.name}</Text>
             {u.username ? (
@@ -87,8 +104,8 @@ export default function PerfilScreen() {
             </Text>
             {u.verified ? (
               <View style={s.verified}>
-                <CheckCircle size={16} color={c.primary} weight="fill" />
-                <Text variant="smallMedium" color="primary">
+                <SealCheck size={16} color={VERIFIED_BLUE} weight="fill" />
+                <Text variant="smallMedium" style={{ color: VERIFIED_BLUE }}>
                   Jugador verificado
                 </Text>
               </View>
@@ -144,18 +161,26 @@ export default function PerfilScreen() {
           </Card>
         </View>
 
-        <View>
-          <Text variant="caption" color="textSecondary">
-            Posiciones
-          </Text>
-          <View style={s.chips}>
-            {u.positions.map((p) => (
-              <Chip key={p} label={labelPosition(p)} selected />
-            ))}
+        {u.sports.length > 0 ? (
+          <View style={{ gap: spacing.sm }}>
+            <Text variant="caption" color="textSecondary">Posiciones</Text>
+            <PlayerPositions sports={u.sports} positions={u.positions} />
           </View>
-        </View>
+        ) : null}
 
         <Card padded={false}>
+          {u.isAdmin ? (
+            <>
+              <SettingsRow
+                icon={<ShieldStar size={20} color={c.primary} weight="fill" />}
+                label="Verificaciones pendientes"
+                onPress={() => router.push('/admin/verificaciones')}
+                c={c}
+                s={s}
+              />
+              <Divider inset />
+            </>
+          ) : null}
           <SettingsRow
             icon={<Trophy size={20} color={c.primary} weight="fill" />}
             label="Historial de partidas"
@@ -195,6 +220,18 @@ export default function PerfilScreen() {
             c={c}
             s={s}
           />
+          {!u.verified ? (
+            <>
+              <Divider inset />
+              <SettingsRow
+                icon={<SealCheck size={20} color={c.primary} weight="fill" />}
+                label="Solicitar verificación"
+                onPress={() => setVerifySheetOpen(true)}
+                c={c}
+                s={s}
+              />
+            </>
+          ) : null}
           <Divider inset />
           <SettingsRow
             icon={<SignOut size={20} color={c.alert} weight="bold" />}
@@ -209,6 +246,61 @@ export default function PerfilScreen() {
           />
         </Card>
       </ScrollView>
+
+      <Sheet visible={verifySheetOpen} onClose={() => setVerifySheetOpen(false)} title="Verificación de jugador">
+        <View style={{ gap: spacing.lg, paddingBottom: spacing.md }}>
+          <View style={{ alignItems: 'center', gap: spacing.md }}>
+            <View style={{
+              width: 72, height: 72, borderRadius: 36,
+              backgroundColor: c.primarySoft,
+              alignItems: 'center', justifyContent: 'center',
+            }}>
+              <SealCheck size={40} color={c.primary} weight="fill" />
+            </View>
+            <Text variant="body" color="textSecondary" style={{ textAlign: 'center', lineHeight: 22 }}>
+              La insignia verificada confirma que eres un jugador de confianza en La Cancha.
+              Revisaremos tu perfil y actividades en un plazo de 24–48 horas.
+            </Text>
+          </View>
+          <View style={{ gap: spacing.sm }}>
+            {[
+              'Perfil completo con foto y bio',
+              'Al menos 5 partidas jugadas',
+              'Sin reportes de comportamiento',
+            ].map((req) => (
+              <View key={req} style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
+                <SealCheck size={14} color={c.primary} weight="fill" />
+                <Text variant="small" color="textSecondary">{req}</Text>
+              </View>
+            ))}
+          </View>
+          <Button
+            label="Enviar solicitud"
+            onPress={() => {
+              if (u?.id) sendVerifyRequest(u.id);
+              setVerifySheetOpen(false);
+              setTimeout(() => setVerifyDoneOpen(true), 300);
+            }}
+          />
+        </View>
+      </Sheet>
+
+      <Sheet visible={verifyDoneOpen} onClose={() => setVerifyDoneOpen(false)}>
+        <View style={{ alignItems: 'center', gap: spacing.md, paddingBottom: spacing.md }}>
+          <View style={{
+            width: 72, height: 72, borderRadius: 36,
+            backgroundColor: c.primarySoft,
+            alignItems: 'center', justifyContent: 'center',
+          }}>
+            <SealCheck size={40} color={c.primary} weight="fill" />
+          </View>
+          <Text variant="h3" color="textPrimary">Solicitud enviada</Text>
+          <Text variant="body" color="textSecondary" style={{ textAlign: 'center' }}>
+            Revisaremos tu perfil en las próximas 24–48 horas. Te notificaremos cuando sea aprobado.
+          </Text>
+          <Button label="Entendido" onPress={() => setVerifyDoneOpen(false)} />
+        </View>
+      </Sheet>
     </Screen>
   );
 }
@@ -270,6 +362,14 @@ function makeStyles(c: ColorPalette) {
       borderColor: c.primary,
       alignItems: 'center',
       justifyContent: 'center',
+    },
+    avatarVerifiedBadge: {
+      position: 'absolute',
+      bottom: 0,
+      right: 0,
+      backgroundColor: c.bg,
+      borderRadius: radius.full,
+      padding: 2,
     },
     bio: { marginTop: spacing.xs },
     sportsRow: {
