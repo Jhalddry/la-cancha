@@ -1,7 +1,7 @@
 import { useRouter } from 'expo-router';
-import { Bell, CaretRight, MagnifyingGlass, MapPin, Plus } from 'phosphor-react-native';
-import { useMemo, useState } from 'react';
-import { ScrollView, StyleSheet, View } from 'react-native';
+import { Bell, CaretRight, MagnifyingGlass, MapPin, Plus, WifiSlash } from 'phosphor-react-native';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Animated, type DimensionValue, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 
 import { Avatar } from '@/components/ui/Avatar';
 import { PressableScale } from '@/components/ui/PressableScale';
@@ -10,11 +10,45 @@ import { Text } from '@/components/ui/Text';
 import { CityPickerSheet } from '@/components/feature/CityPickerSheet';
 import { useSession } from '@/store/session';
 import { useMatches } from '@/hooks/useMatches';
+import { useUnreadCount } from '@/hooks/useNotifications';
 import { MatchCard } from '@/features/match/MatchCard';
 import { MatchTypePromoCard } from '@/features/match/MatchTypePromoCard';
 import { useColors } from '@/hooks/useColors';
 import { radius, spacing } from '@/theme';
 import type { ColorPalette } from '@/theme/palettes';
+
+function SkeletonPulse({
+  width,
+  height,
+  borderRadius: br,
+  bgColor,
+  borderColor,
+}: {
+  width: DimensionValue;
+  height: number;
+  borderRadius: number;
+  bgColor: string;
+  borderColor: string;
+}) {
+  const opacity = useRef(new Animated.Value(0.3)).current;
+  useEffect(() => {
+    const anim = Animated.loop(
+      Animated.sequence([
+        Animated.timing(opacity, { toValue: 1, duration: 800, useNativeDriver: true }),
+        Animated.timing(opacity, { toValue: 0.3, duration: 800, useNativeDriver: true }),
+      ]),
+    );
+    anim.start();
+    return () => anim.stop();
+  }, [opacity]);
+  return (
+    <View style={{ width, height }}>
+      <Animated.View
+        style={{ flex: 1, borderRadius: br, backgroundColor: bgColor, borderWidth: 1, borderColor, opacity }}
+      />
+    </View>
+  );
+}
 
 export default function HomeScreen() {
   const router = useRouter();
@@ -23,7 +57,14 @@ export default function HomeScreen() {
   const displayName = user?.name ?? '…';
   const city = user?.city ?? '';
   const [locationOpen, setLocationOpen] = useState(false);
-  const { data: nearbyMatches = [] } = useMatches({ limit: 3 });
+  const {
+    data: nearbyMatches = [],
+    isLoading: matchesLoading,
+    isError: matchesError,
+    refetch: refetchMatches,
+    isRefetching: matchesRefreshing,
+  } = useMatches({ limit: 3 });
+  const { data: unreadCount = 0 } = useUnreadCount();
 
   const handleSelectCity = (selected: string) => {
     setCityStore(selected);
@@ -36,6 +77,14 @@ export default function HomeScreen() {
       <ScrollView
         contentContainerStyle={s.scroll}
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={matchesRefreshing}
+            onRefresh={() => void refetchMatches()}
+            tintColor={c.primary}
+            colors={[c.primary]}
+          />
+        }
       >
         <View style={s.header}>
           <View style={s.headerLeft}>
@@ -60,7 +109,7 @@ export default function HomeScreen() {
             onPress={() => router.push('/notificaciones')}
           >
             <Bell size={22} color={c.textPrimary} weight="regular" />
-            <View style={s.bellDot} />
+            {unreadCount > 0 ? <View style={s.bellDot} /> : null}
           </PressableScale>
         </View>
 
@@ -92,21 +141,23 @@ export default function HomeScreen() {
               Encuentra partidas cerca de ti
             </Text>
           </PressableScale>
-          <PressableScale
-            style={[s.cta, s.ctaSecondary]}
-            scaleTo={0.97}
-            onPress={() => router.push('/crear')}
-          >
-            <View style={s.ctaIconWrapSecondary}>
-              <Plus size={22} color={c.primary} weight="bold" />
-            </View>
-            <Text variant="h3" color="textPrimary">
-              Crear{'\n'}partida
-            </Text>
-            <Text variant="small" color="textSecondary">
-              Publica tu partida y encuentra jugadores
-            </Text>
-          </PressableScale>
+          {!user?.isAdmin ? (
+            <PressableScale
+              style={[s.cta, s.ctaSecondary]}
+              scaleTo={0.97}
+              onPress={() => router.push('/crear')}
+            >
+              <View style={s.ctaIconWrapSecondary}>
+                <Plus size={22} color={c.primary} weight="bold" />
+              </View>
+              <Text variant="h3" color="textPrimary">
+                Crear{'\n'}partida
+              </Text>
+              <Text variant="small" color="textSecondary">
+                Publica tu partida y encuentra jugadores
+              </Text>
+            </PressableScale>
+          ) : null}
         </View>
 
         <View style={s.section}>
@@ -127,15 +178,35 @@ export default function HomeScreen() {
             <Text variant="h3" color="textPrimary">
               Partidas cerca de ti
             </Text>
+            <PressableScale scaleTo={0.95} onPress={() => router.push('/(tabs)/buscar')}>
+              <Text variant="smallMedium" color="primary">Ver todas</Text>
+            </PressableScale>
           </View>
           <View style={s.matchList}>
-            {nearbyMatches.map((m) => (
-              <MatchCard
-                key={m.id}
-                match={m}
-                onPress={() => router.push(`/match/${m.id}`)}
-              />
-            ))}
+            {matchesLoading && nearbyMatches.length === 0 ? (
+              <>
+                <SkeletonPulse width="100%" height={120} borderRadius={radius.lg} bgColor={c.surface} borderColor={c.border} />
+                <SkeletonPulse width="100%" height={120} borderRadius={radius.lg} bgColor={c.surface} borderColor={c.border} />
+              </>
+            ) : matchesError ? (
+              <View style={s.inlineError}>
+                <WifiSlash size={18} color={c.alert} weight="bold" />
+                <Text variant="small" color="textTertiary" style={{ flex: 1 }}>
+                  Error al cargar partidas
+                </Text>
+                <PressableScale scaleTo={0.95} onPress={() => void refetchMatches()}>
+                  <Text variant="smallMedium" color="primary">Reintentar</Text>
+                </PressableScale>
+              </View>
+            ) : (
+              nearbyMatches.map((m) => (
+                <MatchCard
+                  key={m.id}
+                  match={m}
+                  onPress={() => router.push(`/match/${m.id}`)}
+                />
+              ))
+            )}
           </View>
         </View>
       </ScrollView>
@@ -243,5 +314,16 @@ function makeStyles(c: ColorPalette) {
     },
     typesRow: { flexDirection: 'row', gap: spacing.md, marginTop: spacing.xs },
     matchList: { gap: spacing.md, marginTop: spacing.xs },
+    inlineError: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.sm,
+      paddingVertical: spacing.md,
+      paddingHorizontal: spacing.md,
+      backgroundColor: c.surface,
+      borderRadius: radius.md,
+      borderWidth: 1,
+      borderColor: c.border,
+    },
   });
 }
