@@ -36,7 +36,8 @@ import {
   positionsForModality,
   sportModalities,
 } from '@/features/match/helpers';
-import { BCV_RATE, formatVes, usdToVes } from '@/lib/exchange';
+import { formatVes, usdToVes } from '@/lib/exchange';
+import { useBcvRate } from '@/hooks/useExchange';
 import {
   labelModality,
   labelPayment,
@@ -228,6 +229,23 @@ export default function CrearWizard() {
   const errors = useMemo(() => validateStep(step, draft), [step, draft]);
   const isValid = Object.keys(errors).length === 0;
   const shownErrors: StepErrors = triedNext ? errors : {};
+
+  // Admin accounts are read-only — cannot create matches
+  if (user?.isAdmin) {
+    return (
+      <Screen edges={['top']}>
+        <BackHeader title="Crear partida" onBack={() => router.back()} />
+        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 32 }}>
+          <Text variant="h3" color="textPrimary" style={{ textAlign: 'center' }}>
+            Las cuentas de administrador no pueden crear partidas
+          </Text>
+          <Text variant="body" color="textSecondary" style={{ textAlign: 'center', marginTop: 8 }}>
+            Esta cuenta es de solo lectura.
+          </Text>
+        </View>
+      </Screen>
+    );
+  }
 
   // Clear validation flag when step changes.
   useEffect(() => {
@@ -699,8 +717,9 @@ const PRICE_ACCESSORY_ID = 'price-done';
 function Step4LocationPrice({ draft, setKey, errors }: StepProps) {
   const c = useColors();
   const s = useMemo(() => makeStyles(c), [c]);
+  const bcvRate = useBcvRate();
   const priceNum = Number(draft.pricePerHour) || 0;
-  const vesAmount = usdToVes(priceNum);
+  const vesAmount = usdToVes(priceNum, bcvRate);
   const [locationOpen, setLocationOpen] = useState(false);
   const [dateOpen, setDateOpen] = useState(false);
   const [timeOpen, setTimeOpen] = useState(false);
@@ -799,7 +818,7 @@ function Step4LocationPrice({ draft, setKey, errors }: StepProps) {
             ≈ {formatVes(vesAmount)}
           </Text>
           <Text variant="caption" color="textTertiary">
-            BCV {BCV_RATE.toFixed(2)} Bs/USD
+            BCV {bcvRate.toFixed(2)} Bs/USD
           </Text>
         </View>
         <ErrorMessage message={errors.pricePerHour} />
@@ -863,6 +882,64 @@ function Step4LocationPrice({ draft, setKey, errors }: StepProps) {
 // Step 5 — Pagos + Requisitos + Resumen
 // ---------------------------------------------------------------------------
 
+function CustomRequirements({
+  values,
+  onChange,
+}: {
+  values: string[];
+  onChange: (v: string[]) => void;
+}) {
+  const [input, setInput] = useState('');
+  const c = useColors();
+  const s = useMemo(() => makeStyles(c), [c]);
+
+  const add = () => {
+    const trimmed = input.trim();
+    if (!trimmed) return;
+    onChange([...values, trimmed]);
+    setInput('');
+  };
+
+  const remove = (idx: number) => {
+    onChange(values.filter((_, i) => i !== idx));
+  };
+
+  return (
+    <View style={staticStyles.customReqWrap}>
+      <Text variant="caption" color="textSecondary">
+        Requisitos personalizados (opcional)
+      </Text>
+      {values.map((v, i) => (
+        <View key={i} style={staticStyles.customReqItem}>
+          <Text variant="body" color="textPrimary" style={{ flex: 1 }}>{v}</Text>
+          <PressableScale scaleTo={0.9} onPress={() => remove(i)}>
+            <Minus size={16} color={c.alert} weight="bold" />
+          </PressableScale>
+        </View>
+      ))}
+      <View style={staticStyles.customReqRow}>
+        <View style={{ flex: 1 }}>
+          <TextInput
+            placeholder="Ej: Camiseta blanca obligatoria"
+            value={input}
+            onChangeText={setInput}
+            maxLength={100}
+            returnKeyType="done"
+            onSubmitEditing={add}
+          />
+        </View>
+        <PressableScale
+          scaleTo={0.9}
+          onPress={add}
+          style={[s.addReqBtn, !input.trim() && { opacity: 0.4 }]}
+        >
+          <Plus size={16} color={c.bg} weight="bold" />
+        </PressableScale>
+      </View>
+    </View>
+  );
+}
+
 function Step5PaymentsExtras({
   draft,
   setKey,
@@ -875,6 +952,7 @@ function Step5PaymentsExtras({
 }) {
   const c = useColors();
   const s = useMemo(() => makeStyles(c), [c]);
+  const bcvRate = useBcvRate();
   const typeMeta = draft.type ? matchTypeMeta[draft.type] : null;
   const priceNum = Number(draft.pricePerHour) || 0;
   const reqs = draft.sport ? REQUIREMENTS_BY_SPORT[draft.sport] : DEFAULT_REQUIREMENTS;
@@ -933,7 +1011,7 @@ function Step5PaymentsExtras({
               BCV
             </Text>
             <Text variant="small" color="textSecondary">
-              {BCV_RATE.toFixed(2)} Bs / USD
+              {bcvRate.toFixed(2)} Bs / USD
             </Text>
           </View>
         </Card>
@@ -968,15 +1046,10 @@ function Step5PaymentsExtras({
             </PressableScale>
           ))}
         </View>
-        <View style={staticStyles.customReqWrap}>
-          <TextInput
-            label="Requisito personalizado (opcional)"
-            placeholder="Ej: Camiseta blanca obligatoria"
-            value={draft.extraRequirement}
-            onChangeText={(v) => setKey('extraRequirement', v)}
-            maxLength={100}
-          />
-        </View>
+        <CustomRequirements
+          values={draft.extraRequirements}
+          onChange={(v) => setKey('extraRequirements', v)}
+        />
       </View>
 
       {/* Summary */}
@@ -996,7 +1069,7 @@ function Step5PaymentsExtras({
             </Text>
             {priceNum > 0 ? (
               <Text variant="small" color="textTertiary">
-                ≈ {formatVes(usdToVes(priceNum))}
+                ≈ {formatVes(usdToVes(priceNum, bcvRate))}
               </Text>
             ) : null}
           </View>
@@ -1107,7 +1180,19 @@ const staticStyles = StyleSheet.create({
     paddingVertical: spacing.md,
   },
   reqList: { gap: spacing.sm, marginTop: spacing.sm, marginBottom: spacing.lg },
-  customReqWrap: { marginTop: spacing.sm },
+  customReqWrap: { marginTop: spacing.sm, gap: spacing.xs },
+  customReqItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    paddingVertical: spacing.xs,
+  },
+  customReqRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    marginTop: spacing.xs,
+  },
   summaryRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1270,6 +1355,14 @@ function makeStyles(c: ColorPalette) {
       justifyContent: 'center',
     },
     checkOn: { backgroundColor: c.primary, borderColor: c.primary },
+    addReqBtn: {
+      width: 40,
+      height: 40,
+      borderRadius: radius.md,
+      backgroundColor: c.primary,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
     reqRow: {
       flexDirection: 'row',
       alignItems: 'center',

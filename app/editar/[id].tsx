@@ -2,6 +2,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import {
   CalendarBlank,
   CaretRight,
+  Clock,
   ClockCounterClockwise,
   MapPin,
   ShieldCheck,
@@ -12,7 +13,9 @@ import {
   X,
 } from 'phosphor-react-native';
 import { useMemo, useState, type ReactNode } from 'react';
-import { ActivityIndicator, Alert, ScrollView, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, ScrollView, StyleSheet, View } from 'react-native';
+
+import { ConfirmSheet } from '@/components/ui/ConfirmSheet';
 
 import {
   DateTimePickerSheet,
@@ -26,6 +29,7 @@ import { Screen } from '@/components/ui/Screen';
 import { Text } from '@/components/ui/Text';
 import { MatchTypeBadge } from '@/features/match/MatchTypeBadge';
 import { labelModality, labelPayment, labelPosition } from '@/lib/format';
+import { cancelMatch } from '@/lib/matchesApi';
 import { useMatch, useUpdateMatch, useDeleteMatch } from '@/hooks/useMatches';
 import { useColors } from '@/hooks/useColors';
 import { radius, spacing } from '@/theme';
@@ -66,6 +70,7 @@ export default function EditarPartidaScreen() {
   const [durationMin, setDurationMin] = useState<number | null>(null);
   const [locationName, setLocationName] = useState<string | null>(null);
   const [locationAddress, setLocationAddress] = useState<string | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   // Initialise local state once match loads
   const effectiveDate = date ?? (match ? new Date(match.startsAt) : new Date());
@@ -75,6 +80,7 @@ export default function EditarPartidaScreen() {
 
   const handleSave = async () => {
     if (!match) return;
+    setSaveError(null);
     try {
       await updateMatch({
         id: match.id,
@@ -89,7 +95,7 @@ export default function EditarPartidaScreen() {
       });
       router.back();
     } catch (e) {
-      Alert.alert('Error', e instanceof Error ? e.message : 'Intenta de nuevo.');
+      setSaveError(e instanceof Error ? e.message : 'Intenta de nuevo.');
     }
   };
 
@@ -97,6 +103,8 @@ export default function EditarPartidaScreen() {
   const [timeOpen, setTimeOpen] = useState(false);
   const [durationOpen, setDurationOpen] = useState(false);
   const [locationOpen, setLocationOpen] = useState(false);
+  const [cancelSheetOpen, setCancelSheetOpen] = useState(false);
+  const [deleteSheetOpen, setDeleteSheetOpen] = useState(false);
 
   if (isLoading || !match) {
     return (
@@ -108,49 +116,8 @@ export default function EditarPartidaScreen() {
     );
   }
 
-  const handleCancel = () => {
-    Alert.alert(
-      'Cancelar partida',
-      'Esta acción eliminará la partida y notificará a los jugadores.',
-      [
-        { text: 'No cancelar', style: 'cancel' },
-        {
-          text: 'Cancelar partida',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await deleteMatch(match.id);
-              router.replace('/(tabs)');
-            } catch {
-              Alert.alert('Error', 'No se pudo cancelar la partida.');
-            }
-          },
-        },
-      ],
-    );
-  };
-
-  const handleDelete = () => {
-    Alert.alert(
-      'Eliminar partida',
-      'Esta acción no se puede deshacer. La partida será eliminada permanentemente.',
-      [
-        { text: 'No eliminar', style: 'cancel' },
-        {
-          text: 'Eliminar',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await deleteMatch(match.id);
-              router.replace('/(tabs)');
-            } catch {
-              Alert.alert('Error', 'No se pudo eliminar la partida.');
-            }
-          },
-        },
-      ],
-    );
-  };
+  const handleCancel = () => setCancelSheetOpen(true);
+  const handleDelete = () => setDeleteSheetOpen(true);
 
   return (
     <Screen edges={['top']}>
@@ -168,6 +135,14 @@ export default function EditarPartidaScreen() {
           )}
         </PressableScale>
       </View>
+
+      {saveError ? (
+        <View style={s.errorBanner}>
+          <Text variant="small" style={{ color: c.alert, textAlign: 'center' }}>
+            {saveError}
+          </Text>
+        </View>
+      ) : null}
 
       <ScrollView contentContainerStyle={s.scroll} showsVerticalScrollIndicator={false}>
         {/* Match identity card */}
@@ -193,9 +168,17 @@ export default function EditarPartidaScreen() {
           <SettingsRow
             c={c}
             icon={<CalendarBlank size={18} color={c.primary} weight="fill" />}
-            label="Fecha y hora"
-            value={`${fmtDate(effectiveDate)} · ${fmtTime(effectiveDate)}`}
+            label="Fecha"
+            value={fmtDate(effectiveDate)}
             onPress={() => setDateOpen(true)}
+          />
+          <View style={s.rowDivider} />
+          <SettingsRow
+            c={c}
+            icon={<Clock size={18} color={c.primary} weight="fill" />}
+            label="Hora"
+            value={fmtTime(effectiveDate)}
+            onPress={() => setTimeOpen(true)}
           />
           <View style={s.rowDivider} />
           <SettingsRow
@@ -315,6 +298,44 @@ export default function EditarPartidaScreen() {
           setLocationAddress(loc.address);
         }}
       />
+
+      <ConfirmSheet
+        visible={cancelSheetOpen}
+        onClose={() => setCancelSheetOpen(false)}
+        title="Cancelar partida"
+        description={
+          match.joinedPlayers.length > 0
+            ? `Se notificará a los ${match.joinedPlayers.length} jugador${match.joinedPlayers.length !== 1 ? 'es' : ''} confirmado${match.joinedPlayers.length !== 1 ? 's' : ''}. Esta acción no se puede deshacer.`
+            : 'Esta acción no se puede deshacer.'
+        }
+        confirmLabel="Cancelar partida"
+        countdown={5}
+        onConfirm={async () => {
+          try {
+            await cancelMatch(match.id);
+            router.replace('/(tabs)');
+          } catch {
+            setSaveError('No se pudo cancelar la partida.');
+          }
+        }}
+      />
+
+      <ConfirmSheet
+        visible={deleteSheetOpen}
+        onClose={() => setDeleteSheetOpen(false)}
+        title="Eliminar partida"
+        description="Esta acción no se puede deshacer. La partida será eliminada permanentemente."
+        confirmLabel="Eliminar"
+        countdown={10}
+        onConfirm={async () => {
+          try {
+            await deleteMatch(match.id);
+            router.replace('/(tabs)');
+          } catch {
+            setSaveError('No se pudo eliminar la partida.');
+          }
+        }}
+      />
     </Screen>
   );
 }
@@ -422,6 +443,13 @@ function makeStyles(c: ColorPalette) {
       alignItems: 'center',
       gap: spacing.md,
       padding: spacing.md,
+    },
+    errorBanner: {
+      paddingHorizontal: spacing.lg,
+      paddingVertical: spacing.sm,
+      backgroundColor: `${c.alert}22`,
+      borderBottomWidth: 1,
+      borderBottomColor: `${c.alert}44`,
     },
   });
 }
