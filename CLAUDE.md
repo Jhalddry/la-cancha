@@ -17,55 +17,65 @@ Core sports supported: **fútbol** (5/7/11), **basket** (3v3/5v5), **tenis** (si
 
 Match metadata covers Venezuelan context: bolívar/USD pricing with live BCV exchange rate, payment methods like **Pago Móvil**, **Zelle**, **USDT (Binance)**.
 
-**Design language**: dark-first, neon-green accent (`#7BFF00`), modern sports aesthetic. Full dark/light mode support — all screens use `useColors()` + `makeStyles(c)` pattern.
+**Design language**: dark-first, neon-green accent (`#7BFF00`), modern sports aesthetic. Full dark/light mode — all screens use `useColors()` + `makeStyles(c)` pattern.
 
-**Status**: Frontend-complete MVP with mock data. No backend, no auth, no real-time. State held in Zustand stores. Authentication is faked (`useSession.signIn()` toggles a flag). Next step: Supabase backend (Phase A).
+**Status**: Phase A + B (partial) complete. Real auth, real data, React Query, Supabase Realtime in chat, avatar upload, pull-to-refresh + skeletons + infinite scroll + error states on all list screens, real GPS distance in buscar. Mock data files still exist but are no longer used by screens.
 
 ---
 
 ## 2. Tech Stack
 
 ### Runtime
-- **Expo SDK 54** managed workflow — chosen for fast iteration in Expo Go.
+- **Expo SDK 54** managed workflow.
 - **React Native 0.81.5** + **React 19.1**.
 - **TypeScript 5.9** with `"strict": true`.
 
 ### Navigation
-- **expo-router 6.0.x** (file-based routing). `typedRoutes: false` in `app.json` because string interpolation in route paths (e.g. `` `/match/${id}` ``) doesn't satisfy generated typed-route unions. The `.expo/types/router.d.ts` file is excluded from `tsconfig.json` to silence regeneration noise.
+- **expo-router 6.0.x** (file-based routing). `typedRoutes: false` in `app.json` — string interpolation in route paths (e.g. `` `/match/${id}` ``) doesn't satisfy generated typed-route unions. `.expo/types/router.d.ts` excluded from `tsconfig.json`.
 
-### State
-- **Zustand 5.0** — `useSession`, `useDraftMatch`, `useTheme`, `useMatchOverrides`, `useJoinedMatches`. No middleware (no persist, no devtools wired). Simple `create<T>()(set => ({...}))` shape.
+### Backend
+- **Supabase** — postgres + auth + storage + realtime.
+- Client in `lib/supabase.ts`. Env vars: `EXPO_PUBLIC_SUPABASE_URL` + `EXPO_PUBLIC_SUPABASE_ANON_KEY` (required at startup, throws if missing).
+- DB tables: `profiles`, `matches`, `match_participants`, `messages`, `notifications`, `ratings`.
+
+### Data fetching
+- **@tanstack/react-query** — all server state. `QueryClient` in `lib/queryClient.ts` (staleTime 60s, gcTime 5min, retry 1, no refetchOnWindowFocus).
+- Hooks in `hooks/` wrap API functions from `lib/*Api.ts`.
+- **No mock data in screens** — all screens use hooks.
+
+### State (Zustand 5.0)
+- `useSession` — auth + user profile (real Supabase auth).
+- `useDraftMatch` — 5-step create wizard draft.
+- `useTheme` — dark/light/system mode.
+- `useMatchOverrides` — local in-memory match edits (legacy, mostly superseded by API mutations).
+- `useJoinedMatches` — local join tracking (legacy, superseded by `useMyParticipantStatus`).
 
 ### UI primitives
 - **React Native built-ins** (`View`, `Text`, `ScrollView`, `Pressable`).
-- **react-native-reanimated 4.1** — `PressableScale` uses worklets for scale animations.
+- **react-native-reanimated 4.1** — `PressableScale` + `calificar` success animation.
 - **react-native-gesture-handler 2.28**.
 - **react-native-safe-area-context 5.6**.
 - **react-native-screens 4.16**.
 
 ### Icons & Graphics
-- **phosphor-react-native 3.0** — all icons. Use `weight="fill"` for active states, `"regular"` for inactive, `"bold"` for emphasis.
-- **react-native-svg 15.12** — used by `Crosshair`, `PositionPitch` (football + basket courts), `BasketCourt`.
+- **phosphor-react-native 3.0** — all icons. `weight="fill"` active, `"regular"` inactive, `"bold"` emphasis.
+- **react-native-svg 15.12** — `Crosshair`, `PositionPitch`, `BasketCourt`.
 
 ### Typography
 - **@expo-google-fonts/inter** — 6 weights loaded via `useFonts` in `app/_layout.tsx`. Splash held until fonts resolve.
 
 ### Maps & DateTime
-- **react-native-maps 1.x** — `LocationPickerSheet` shows mock canchas as markers on a Caracas-centered map.
-- **@react-native-community/datetimepicker** — native date/time picker, plugin registered in `app.json`.
-
-### Forms / Validation
-- No form library. Validation is plain `useMemo` returning a `{ fieldKey: errorMessage }` object, gated by a `tried: boolean` flag flipped on submit.
+- **react-native-maps 1.x** — `LocationPickerSheet` + map modal in match detail.
+- **@react-native-community/datetimepicker** — native date/time picker.
 
 ### Other Expo modules
 - `expo-haptics`, `expo-linear-gradient`, `expo-splash-screen`, `expo-status-bar`, `expo-image`, `expo-symbols`, `expo-system-ui`, `expo-web-browser`, `expo-constants`.
 
-### What is NOT installed
-- No Supabase, no Firebase, no GraphQL client, no API layer.
-- No real-time (no socket / pusher).
-- No push notifications wired.
-- No analytics.
-- No test runner.
+### What is NOT wired yet
+- Push notifications (`expo-notifications` not configured).
+- Supabase realtime channels (chat reads from DB on mount, no live updates).
+- Analytics, error monitoring.
+- Test runner.
 
 ---
 
@@ -74,215 +84,209 @@ Match metadata covers Venezuelan context: bolívar/USD pricing with live BCV exc
 ```
 la-cancha/
 ├── app/                          # expo-router routes (file = route)
-│   ├── _layout.tsx               # Root Stack + ThemeProvider + fonts
-│   ├── index.tsx                 # Splash animation (SVG + Reanimated)
+│   ├── _layout.tsx               # Root Stack + ThemeProvider + fonts + QueryClientProvider
+│   ├── index.tsx                 # Splash / auth gate
 │   ├── login.tsx
 │   ├── register.tsx
 │   ├── onboarding.tsx
-│   ├── notificaciones.tsx
-│   ├── ajustes.tsx               # Settings (dark mode toggle, notifications, account)
-│   ├── historial.tsx
-│   ├── reputacion.tsx
+│   ├── notificaciones.tsx        # Notifications feed (Supabase-powered)
+│   ├── ajustes.tsx               # Settings (dark mode, notifications, account)
+│   ├── historial.tsx             # Match history (hardcoded mock for now)
+│   ├── reputacion.tsx            # Reputation + reviews (Supabase-powered)
 │   ├── terminos.tsx
 │   ├── privacidad.tsx
 │   ├── (tabs)/                   # Tab group (5 tabs)
 │   │   ├── _layout.tsx
 │   │   ├── index.tsx             # Home
-│   │   ├── buscar.tsx
-│   │   ├── mis-partidas.tsx
-│   │   ├── chats.tsx
-│   │   └── perfil.tsx
-│   ├── match/[id].tsx            # Match detail (dynamic)
-│   ├── chat/[id].tsx             # Chat thread (dynamic)
-│   ├── unirse/[id].tsx           # Join flow — 4-step wizard (slide_from_bottom)
-│   ├── editar/[id].tsx           # Edit match — settings-style screen (slide_from_right)
-│   ├── calificar/[id].tsx        # Post-match rating — 4-step wizard (slide_from_bottom)
+│   │   ├── buscar.tsx            # Search + filters (Supabase-powered)
+│   │   ├── mis-partidas.tsx      # Tabs: Próximas / Pasadas / Activas
+│   │   ├── chats.tsx             # Chat list (Supabase-powered)
+│   │   └── perfil.tsx            # Own profile
+│   ├── match/[id].tsx            # Match detail (Supabase)
+│   ├── chat/[id].tsx             # Chat thread (Supabase)
+│   ├── unirse/[id].tsx           # Join flow — 4-step wizard
+│   ├── editar/[id].tsx           # Edit match — settings-style
+│   ├── calificar/[id].tsx        # Post-match rating — 3-step wizard + success
 │   ├── crear/
 │   │   ├── _layout.tsx
 │   │   ├── index.tsx             # 5-step create wizard
-│   │   └── confirmacion.tsx
+│   │   └── confirmacion.tsx      # Success screen post-create
 │   ├── perfil/
-│   │   ├── [id].tsx              # Player profile (dynamic, slide_from_right)
+│   │   ├── [id].tsx              # Player profile (Supabase)
 │   │   └── editar.tsx            # Edit own profile
-│   └── cuenta/                   # Account settings (from ajustes)
+│   └── cuenta/
 │       ├── correo.tsx            # Change email
 │       └── contrasena.tsx        # Change password
 │
 ├── components/
 │   ├── brand/                    # Logo, Crosshair, SportIcon
 │   ├── ui/                       # Reusable primitives (see §8)
-│   └── feature/                  # Feature-level composites
+│   └── feature/
 │       ├── DateTimePickerSheet.tsx
 │       └── LocationPickerSheet.tsx
 │
 ├── features/
-│   └── match/                    # Match-domain composites
-│       ├── MatchCard.tsx         # Type-tinted border + sport emoji watermark
-│       ├── MiniPitchPreview.tsx  # Modality-aware dot-grid court previews
+│   └── match/
+│       ├── MatchCard.tsx
+│       ├── MiniPitchPreview.tsx  # Modality-aware dot-grid previews
 │       ├── MatchTypeBadge.tsx
 │       ├── MatchTypePromoCard.tsx
-│       ├── PositionPitch.tsx     # Football + basket SVG courts (full-size)
-│       ├── matchTypeMeta.ts      # Chill/Seria/Torneo metadata
-│       └── helpers.ts            # sportModalities, positions per modality
+│       ├── PositionPitch.tsx     # SVG courts (football + basket)
+│       ├── matchTypeMeta.ts
+│       └── helpers.ts
 │
 ├── store/                        # Zustand
-│   ├── session.ts                # Current user + auth flag
-│   ├── draftMatch.ts             # Wizard state (5 steps)
+│   ├── session.ts                # Auth + user profile (real Supabase auth)
+│   ├── draftMatch.ts             # Wizard state
 │   ├── theme.ts                  # dark | light | system
-│   ├── matchOverrides.ts         # Local edits to matches (editar screen)
-│   └── joinedMatches.ts          # Tracks which matches user has joined (unirse flow)
+│   ├── matchOverrides.ts         # Local match edits (legacy)
+│   └── joinedMatches.ts          # Local join tracking (legacy)
 │
 ├── hooks/
-│   └── useColors.ts              # Returns active palette
+│   ├── useColors.ts              # Returns active ColorPalette
+│   ├── useMatches.ts             # useMatches, useMatch, useMyMatches, useJoinMatch,
+│   │                             #   useLeaveMatch, useUpdateMatch, useDeleteMatch,
+│   │                             #   useStartMatch, useEndMatch, useApproveParticipant,
+│   │                             #   useRejectParticipant, useInviteToMatch,
+│   │                             #   useMyParticipantStatus, usePendingParticipants
+│   ├── useNotifications.ts       # useNotifications, useUnreadCount, useMarkAllRead, useMarkRead
+│   ├── useProfiles.ts            # useProfile
+│   └── useChat.ts                # useChat, useSendMessage
 │
-├── lib/                          # Pure helpers (no React)
+├── lib/                          # Pure async helpers (no React)
+│   ├── supabase.ts               # Supabase client (reads env vars, throws if missing)
+│   ├── queryClient.ts            # Shared QueryClient instance
+│   ├── matchesApi.ts             # CRUD + participant management for matches
+│   ├── profilesApi.ts            # fetchProfile
+│   ├── notificationsApi.ts       # fetchNotifications, markRead, etc.
+│   ├── chatApi.ts                # fetchThread, sendMessage, fetchSharedMatchId
+│   ├── ratingsApi.ts             # submitRating, fetchMyRatings
+│   ├── mappers.ts                # rowToPlayer (DB row → Player)
 │   ├── format.ts                 # labelSport, labelModality, formatPrice, etc.
 │   ├── time.ts                   # relativeTime, sameDay
-│   └── exchange.ts               # BCV_RATE, usdToVes, formatVes
+│   ├── exchange.ts               # BCV_RATE, usdToVes, formatVes
+│   └── cities.ts                 # Venezuelan city list
 │
-├── data/                         # Mock data
-│   ├── players.ts                # mockCurrentUser, mockPlayers (with extended stats)
-│   ├── matches.ts                # mockMatches (6 matches incl. one by mockCurrentUser)
-│   ├── chats.ts                  # mockChatThreads + mockMessages
-│   └── canchas.ts                # Caracas-area venues with lat/lng
+├── data/                         # Legacy mock data — NOT used by screens
+│   ├── players.ts
+│   ├── matches.ts
+│   ├── chats.ts
+│   └── canchas.ts                # Still used by LocationPickerSheet
 │
-├── types/                        # Pure TypeScript types
-│   ├── domain.ts                 # Sport, Modality, Match, Player, etc.
-│   └── chat.ts                   # Message, ChatThread
+├── types/
+│   ├── domain.ts                 # All domain types (see §7)
+│   └── chat.ts                   # ChatMessageData, ChatParticipant, ChatThread
 │
-├── theme/                        # Design tokens
+├── theme/
 │   ├── colors.ts                 # Re-exports darkPalette (back-compat)
 │   ├── palettes.ts               # darkPalette + lightPalette
-│   ├── typography.ts             # text variants + fonts
+│   ├── typography.ts
 │   ├── spacing.ts                # xxs..giant (4pt grid)
-│   ├── radius.ts                 # none..xxl, full
-│   ├── shadows.ts                # card, glow, glowSoft
-│   └── index.ts                  # Barrel export
+│   ├── radius.ts
+│   ├── shadows.ts
+│   └── index.ts
 │
-├── assets/                       # Icons, fonts, images
-├── app.json                      # Expo config (plugins, splash, icons)
-├── tsconfig.json                 # strict, path alias @/*
+├── assets/
+├── app.json
+├── tsconfig.json                 # strict, @/* alias
 ├── package.json
 └── CLAUDE.md (this file)
 ```
 
 ### Path alias
-`@/*` → project root. Configured in `tsconfig.json`. Use `@/components/ui/Text`, never relative paths like `../../components`.
+`@/*` → project root. Always use `@/components/ui/Text`, never relative paths.
 
 ---
 
 ## 4. Theme System
 
 ### Two palettes
+`theme/palettes.ts` exports `darkPalette` and `lightPalette` with identical keys. `ColorPalette = typeof darkPalette`.
 
-`theme/palettes.ts` exports `darkPalette` and `lightPalette` with **identical keys**. Type `ColorPalette = typeof darkPalette`. Brand colors (primary, accent, alert, chill/seria/competencia) are shared; only neutral surfaces/text differ.
+`theme/colors.ts` re-exports `darkPalette` as `colors` — back-compat only. **Do not use in new code.**
 
-`theme/colors.ts` re-exports `darkPalette` as `colors` — kept for back-compat only. **Do not use in new code.**
-
-### Reactive theme — required pattern for all screens
+### Required pattern — every screen and component
 
 ```ts
-// Every screen and component must follow this pattern:
 const c = useColors();
 const s = useMemo(() => makeStyles(c), [c]);
 
-// styles at bottom of file:
+// Color-independent styles only:
+const staticStyles = StyleSheet.create({ row: { flexDirection: 'row' } });
+
 function makeStyles(c: ColorPalette) {
   return StyleSheet.create({
     container: { backgroundColor: c.bg },
-    // ...
   });
 }
 ```
 
-For styles that don't use colors (spacing/radius only), use a module-level `staticStyles` to avoid recreation:
-```ts
-const staticStyles = StyleSheet.create({
-  row: { flexDirection: 'row', gap: spacing.md },
-});
-```
-
 ### Key palette tokens
 
-```ts
-// Dark                          Light
-primary:    '#7BFF00'            '#1A7A00'   // neon vs dark green
-primaryBg:  '#7BFF00'            '#1A7A00'   // use for filled button backgrounds
-primarySoft:'rgba(123,255,0,.12)' 'rgba(26,122,0,.12)'
-textOnPrimary: '#0B0F0C'         '#FFFFFF'   // text/icons ON primaryBg fills
-bg:         '#0B0F0C'            '#F5F5F5'
-surface:    '#12161C'            '#FFFFFF'
-border:     '#1F2630'            '#E0E0E0'
-textPrimary:'#FFFFFF'            '#0B0F0C'
-chill/seria/competencia — sport type accent colors, both modes
 ```
-
-### Reactive theme store
-
-```ts
-useTheme.mode: 'dark' | 'light' | 'system'
-useTheme.setMode(m)
-// Toggled via Switch in ajustes.tsx
+primary      #7BFF00 (dark) / #1A7A00 (light)   — neon / dark green
+primaryBg    same as primary — use for filled button backgrounds
+primarySoft  rgba(123,255,0,.12) / rgba(26,122,0,.12)
+textOnPrimary  #0B0F0C / #FFFFFF — text ON primaryBg fills
+bg           #0B0F0C / #F5F5F5
+surface      #12161C / #FFFFFF
+border       #1F2630 / #E0E0E0
+textPrimary  #FFFFFF / #0B0F0C
+seria        amber — match type accent
+seriaSoft    soft amber background
+chill        green-ish — match type accent
+chillSoft
+competencia  red — match type accent
+competenciaSoft
+alert        red — errors, destructive
 ```
-
-`app/_layout.tsx` reads `useColors()` to build a dynamic `navTheme`. `StatusBar style="auto"` adapts.
 
 ### Spacing scale (4pt grid)
 ```
 xxs:2  xs:4  sm:8  md:12  lg:16  xl:20  xxl:24  xxxl:32  huge:48  giant:64
 ```
 
-### Typography variants
-See `theme/typography.ts`. Always pass `variant` to the `Text` component — never raw `<RNText>` (would skip font + variant logic).
-
 ---
 
 ## 5. State Management
 
-### `useSession` (store/session.ts)
+### `useSession` (store/session.ts) — real Supabase auth
 ```ts
-{ user: Player | null, isAuthed: boolean, isOnboarded: boolean,
-  signIn, signOut, setUser, setOnboarded }
+{
+  user: Player | null,
+  isAuthed: boolean,
+  isLoading: boolean,       // true during session restore on app open
+  isOnboarded: boolean,
+  setUser, setOnboarded,
+  setCity: (city: string) => Promise<void>,
+  signIn: (email, password) => Promise<string | null>,   // returns error msg or null
+  signUp: (name, email, password) => Promise<string | null>,
+  signOut: () => Promise<void>,
+  initialize: () => () => void,   // call once in _layout, returns unsubscribe
+}
 ```
-Default: `mockCurrentUser` signed in (skip the auth wall during dev).
+`initialize()` restores session from AsyncStorage + subscribes to `onAuthStateChange`. Call once in root layout. Returns unsubscribe cleanup.
 
 ### `useDraftMatch` (store/draftMatch.ts)
-The 5-step create-match wizard state.
-- `draft: DraftMatch` — all fields (sport, modality, type, level, positions, location, date, price, payments, requirements).
-- `step: 1..5`, `next()`, `prev()`, `setStep(n)`.
-- `togglePosition`, `togglePayment`, `toggleRequirement` — set-style toggles.
-- `reset()` — resets to initial + fresh default date (today 8 PM).
-
-**date is `Date` (never null)** — initialized to today 20:00.
+5-step wizard state. `draft: DraftMatch` (sport, modality, type, level, positions, location, date, price, payments, requirements). `step: 1..5`, `next()`, `prev()`, `reset()`. Date is `Date` (never null), initialized to today 20:00.
 
 ### `useTheme` (store/theme.ts)
-Just `{ mode, setMode }`. See §4.
+`{ mode: 'dark' | 'light' | 'system', setMode }`. Wired to ajustes toggle.
 
-### `useMatchOverrides` (store/matchOverrides.ts)
-Local in-memory overrides for match fields (from `editar/[id]`).
-- `overrides: Record<string, Partial<Match>>` — keyed by match ID.
-- `setOverride(id, partial)` — merges fields.
-- `getMatch(base)` — returns `{ ...base, ...overrides[base.id] }`.
-- Used in: `match/[id]`, `editar/[id]`, `mis-partidas`.
-
-### `useJoinedMatches` (store/joinedMatches.ts)
-Tracks which matches the current user has joined via the join flow.
-- `joinedIds: Set<string>`.
-- `join(matchId)` — adds to set.
-- `hasJoined(matchId): boolean`.
-- Used in: `unirse/[id]` (join action), `match/[id]` (shows "Ya estás unido" badge).
+### React Query hooks (the main data layer)
+See `hooks/useMatches.ts`, `hooks/useProfiles.ts`, `hooks/useNotifications.ts`, `hooks/useChat.ts`. All mutations invalidate relevant query keys on success.
 
 ---
 
 ## 6. Routing (expo-router)
 
-File-based. Folders = nested groups, `[id]` = dynamic, `_layout.tsx` = stack/tabs wrapper, `(name)` = group without URL segment.
+File-based. `typedRoutes: false` — string interpolation works.
 
-### Stack registered in `app/_layout.tsx`
-- `index` (splash)
+### Stack in `app/_layout.tsx`
+- `index` (splash / auth gate)
 - `onboarding`
 - `login`, `register` (slide_from_right)
-- `(tabs)` (tab group)
+- `(tabs)` — tab group
 - `match/[id]`, `chat/[id]`, `perfil/[id]`, `perfil/editar`, `editar/[id]` (slide_from_right)
 - `unirse/[id]`, `calificar/[id]` (slide_from_bottom)
 - `crear` (slide_from_bottom)
@@ -292,11 +296,11 @@ File-based. Folders = nested groups, `[id]` = dynamic, `_layout.tsx` = stack/tab
 ### Navigation patterns
 ```ts
 const router = useRouter();
-router.push('/match/abc');           // string interpolation works (typedRoutes off)
-router.push('/cuenta/correo');       // account sub-screens
-router.replace('/(tabs)');           // post-auth
+router.push('/match/abc');
+router.push(`/calificar/${playerId}?matchId=${matchId}`);  // calificar takes optional matchId param
+router.replace('/(tabs)');
 router.back();
-const { id } = useLocalSearchParams<{ id: string }>();
+const { id, matchId } = useLocalSearchParams<{ id: string; matchId?: string }>();
 ```
 
 ---
@@ -306,47 +310,29 @@ const { id } = useLocalSearchParams<{ id: string }>();
 ### Sport
 `'futbol' | 'tenis' | 'padel' | 'beachTennis' | 'basket'`
 
-### Modality (unambiguous keys per sport)
+### Modality
 - Football: `'futbol5' | 'futbol7' | 'futbol11'`
 - Basket: `'basket3v3' | 'basket5v5'`
 - Tennis: `'tenisSingles' | 'tenisDobles'`
-- Padel: `'padelDobles'` — **single modality only** (padel has no 1v1 or 3v3 variant)
+- Padel: `'padelDobles'` — single modality only (no 1v1)
 - Beach Tennis: `'beachDobles' | 'beachSimples'`
 
-`SINGLE_MODALITY_SPORTS: Sport[] = ['padel']` in `features/match/helpers.ts` — sports in this list skip the modality step in the create wizard.
-
-> **Don't** use `'5v5'` as a shared key — it was ambiguous between football and basket. Always use the sport-prefixed key.
-
-### Positions (sport-specific)
-- Football: `portero | defensa | lateral | mediocampo | extremo | delantero`
-- Basket: `base | escolta | alero | aleroPivot | pivot`
-- Other sports: `'cualquiera'` (no position selector).
-
-Per-modality position lists live in `features/match/helpers.ts`:
-- `footballPositionsByModality.futbol5` = 4 positions (no lateral, no extremo)
-- `footballPositionsByModality.futbol7` = 4 positions (no lateral)
-- `footballPositionsByModality.futbol11` = 6 positions (full set)
-- `basketPositionsByModality.basket3v3` = 3 positions
-- `basketPositionsByModality.basket5v5` = 5 positions
-
-Helper: `positionsForModality(sport, modality)`.
+`SINGLE_MODALITY_SPORTS: Sport[] = ['padel']` in `features/match/helpers.ts` — skips modality step in wizard.
 
 ### MatchType
-`'chill' | 'seria' | 'competencia'`. Display labels in `features/match/matchTypeMeta.ts`:
-- chill → "Chill" 😎 — color from `c.chill` / `c.chillSoft`
-- seria → "Seria" 👕 — color from `c.seria` / `c.seriaSoft`
-- competencia → "Torneo" 🏆 — color from `c.competencia` / `c.competenciaSoft`
-
-> Colors must come from `useColors()` — **not** from `matchTypeMeta` (which is static and dark-only).
+`'chill' | 'seria' | 'competencia'`
 
 ### SkillLevel
-`1 | 2 | 3 | 4 | 5` → "Principiante" … "Competitivo" via `labelSkill()`.
+`1 | 2 | 3 | 4 | 5`
 
 ### PaymentMethod
 `'pagoMovil' | 'transferencia' | 'efectivo' | 'zelle' | 'usdt'`
 
 ### Currency
-`'USD' | 'VES'`. BCV rate constant in `lib/exchange.ts` (`BCV_RATE = 36.72`). Replace with live API call later.
+`'USD' | 'VES'`
+
+### ExchangeRateSource
+`'bcv' | 'paralelo' | 'custom'`
 
 ### Player
 ```ts
@@ -354,21 +340,62 @@ interface Player {
   id: string;
   name: string;
   username?: string;
+  avatarUrl?: string;           // Supabase Storage URL
   skillLevel: 1|2|3|4|5;
-  positions: Position[];
   sports: Sport[];
+  positions: Position[];
   bio?: string;
   verified?: boolean;
-  reputation?: number;        // 1.0–5.0
+  reputation?: number;          // 1.0–5.0
   matchesPlayed?: number;
   matchesOrganized?: number;
-  attendancePct?: number;     // 0–100
+  attendancePct?: number;       // 0–100
   badges?: string[];
+  city?: string;                // Venezuelan city name
+  onboarded?: boolean;          // whether onboarding completed
 }
 ```
 
-### Match, MatchLocation
-See file. `MatchLocation` has optional `lat/lng` for map integration.
+### Match
+```ts
+interface Match {
+  id: string;
+  sport: Sport;
+  modality: Modality;
+  type: MatchType;
+  skillLevel: SkillLevel;
+  missingPositions: Position[];
+  missingCount: number;
+  location: MatchLocation;      // { name, address?, lat?, lng?, distanceKm? }
+  startsAt: string;             // ISO string
+  durationMin: number;
+  pricePerHour: number;
+  currency: Currency;
+  paymentMethods: PaymentMethod[];
+  requirements: string[];
+  optionalRequirements?: string[];
+  organizer: Player;
+  joinedPlayers: MatchParticipant[];
+  startedAt?: string;           // set when organizer starts match
+  endedAt?: string;             // set when organizer ends match
+}
+```
+
+### MatchParticipant
+```ts
+interface MatchParticipant extends Player {
+  paymentMethod?: PaymentMethod;
+  checkedRequirements?: string[];
+}
+type PendingParticipant = MatchParticipant;
+```
+
+### Positions
+- Football: `portero | defensa | lateral | mediocampo | extremo | delantero`
+- Basket: `base | escolta | alero | aleroPivot | pivot`
+- Others: `'cualquiera'`
+
+Per-modality lists in `features/match/helpers.ts` → `positionsForModality(sport, modality)`.
 
 ---
 
@@ -378,207 +405,230 @@ See file. `MatchLocation` has optional `lat/lng` for map integration.
 |---|---|---|
 | `Screen` | Root container with SafeArea | Props: `edges`, `bg` |
 | `Text` | All text — typed `variant` + `color` | NEVER use raw `<RNText>` |
-| `Button` | Primary/secondary/ghost CTAs | Props: `variant`, `fullWidth`, `leading`, `disabled`. Uses `c.primaryBg` fill + `c.textOnPrimary` label |
-| `PressableScale` | Tap with reanimated scale | Required `children`, `scaleTo` (0.9 typical) |
-| `Card` | Surface container | `padded` prop (default true), `style` forwarded to inner view |
-| `Chip` | Pill with optional emoji label | `selected`, `onPress`, `tone`. `flexShrink: 0` + `numberOfLines: 1` + `minHeight: 38` to prevent label clipping in horizontal ScrollViews |
-| `Badge` | Small static label | `tone: 'default' \| 'primary' \| 'accent' \| 'alert'` |
-| `Avatar` | Initials avatar | `name`, `size`, `bg` |
-| `AvatarStack` | Overlapping avatars | Props: `players`, `max` |
-| `Stars` | 1-5 star row | `level`, `size`. **Use size 10-12 inside compressed buttons** |
-| `TextInput` | Labeled input with error | `label` (caption above field), `error`, `leading`, `trailing`, `variant: 'default' \| 'plain'`. Omit `label` when a section heading already describes the field |
-| `BackHeader` | Top bar with back button | `title`, `transparent`, `trailing`. Uses `navigation.canGoBack()` — safe on screens reached via `router.replace` |
+| `Button` | Primary/secondary/ghost CTAs | Props: `variant`, `fullWidth`, `leading`, `disabled` |
+| `PressableScale` | Tap with reanimated scale | `children`, `scaleTo` (0.9 typical) |
+| `Card` | Surface container | `padded` (default true), `onPress` |
+| `Chip` | Pill label | `selected`, `onPress`, `tone`. Has `flexShrink:0` + `numberOfLines:1` |
+| `Badge` | Small static label | `tone: 'default' \| 'primary' \| 'accent' \| 'alert' \| 'neutral'` |
+| `Avatar` | Initials or image avatar | `name`, `size`, `uri` (Supabase URL), `bg` |
+| `AvatarStack` | Overlapping avatars | `players`, `max` |
+| `Stars` | 1-5 star row | `level`, `size`. Use size 10–12 inside compressed buttons |
+| `TextInput` | Labeled input with error | `label`, `error`, `leading`, `trailing`, `variant` |
+| `BackHeader` | Top bar with back button | `title`, `transparent`, `trailing`, `onBack` |
 | `EmptyState` | Icon + title + description | `icon`, `title`, `description`, `action` |
-| `SegmentedTabs` | Inline tab switcher | `tabs`, `value`, `onChange` |
+| `SegmentedTabs` | Inline tab switcher | `options`, `value`, `onChange` |
 | `StepperBar` | Wizard step indicator | `total`, `current` |
 | `ProgressDots` | Onboarding dot indicator | `count`, `index` |
 | `Sheet` | Bottom modal | `visible`, `onClose`, `title`, children |
-| `Divider` | 1px line | `inset` prop |
+| `ConfirmSheet` | Confirm/cancel modal | `visible`, `onClose`, `title`, `description`, `confirmLabel`, `confirmColor`, `countdown?`, `onConfirm` |
+| `Divider` | 1px horizontal line | `inset` |
 | `IconCircle` | Circular icon container | `size`, `bg`, `border`, children |
 
-### Components in `components/feature/`
-- `DateTimePickerSheet` — native date or time picker inside a Sheet. Also exports `DurationPickerSheet` with 9 presets + "Personalizada" custom input (5–480 min, validated).
-- `LocationPickerSheet` — fullscreen `Modal` with `MapView` and markers for `mockCanchas`. Filters markers by `filterSport` if passed. Calls `onSelect(cancha)` with `{ name, address, lat, lng }`.
+### `ConfirmSheet`
+Used for destructive actions: leave match, start/end match, cancel match, invite confirmation. `countdown` prop shows a numeric countdown before enabling confirm button (used for end-match to prevent accidents).
 
-### `MatchCard` (`features/match/MatchCard.tsx`)
-- Accepts optional `cardStyle` prop — forwarded to the inner `Card` style array.
-- Type-tinted background: `${typeColor}12` (~7% opacity).
-- Colored border per match type (`c.chill` / `c.seria` / `c.competencia`).
-- Sport emoji watermark: 80px, 10% opacity, rotated 12°, bottom-right absolute.
-- Used in mis-partidas with `cardStyle={{ borderBottomLeftRadius: 0, borderBottomRightRadius: 0, borderBottomWidth: 0 }}` when an action strip is attached below.
-
-### `MiniPitchPreview` (`features/match/MiniPitchPreview.tsx`)
-Modality-aware dot-grid previews. Football: landscape field. Basket / racket: portrait court. `MiniBeachTennisCourt` accepts `modality` prop.
+### Feature composites
+- `DateTimePickerSheet` — date or time picker inside Sheet. `DurationPickerSheet` with 9 presets + custom (5–480 min).
+- `LocationPickerSheet` — fullscreen Modal with MapView + `mockCanchas` markers. `onSelect(cancha)`.
+- `MiniPitchPreview` — modality-aware dot-grid. Football: `66×58` landscape. Basket/racket: `44×66` portrait. `MiniBeachTennisCourt` accepts `modality` prop (simples=1v1, dobles=2v2).
 
 ---
 
 ## 9. Data Layer
 
-All mocks. When wiring a real backend:
+### API modules (`lib/`)
+| File | What it does |
+|---|---|
+| `supabase.ts` | Supabase client. Reads env vars at startup. Manages token refresh via AppState. |
+| `matchesApi.ts` | `fetchMatches`, `fetchMatch`, `fetchMyMatches`, `createMatch`, `updateMatch`, `deleteMatch`, `joinMatch`, `leaveMatch`, `startMatch`, `endMatch`, `approveParticipant`, `rejectParticipant`, `inviteToMatch`, `fetchMyParticipantStatus`, `fetchPendingParticipants` |
+| `profilesApi.ts` | `fetchProfile` |
+| `notificationsApi.ts` | `fetchNotifications`, `countUnreadNotifications`, `markNotificationRead`, `markAllNotificationsRead` |
+| `chatApi.ts` | `fetchThread`, `sendMessage`, `fetchSharedMatchId` — only players who shared a match can chat |
+| `ratingsApi.ts` | `submitRating` (inserts to `ratings` table + creates notification), `fetchMyRatings` |
+| `mappers.ts` | `rowToPlayer(row)` — DB snake_case → `Player` camelCase |
 
-1. Replace `data/*.ts` with API calls (suggest `tanstack/react-query`).
-2. Match the existing types in `types/domain.ts` — they are the contract.
-3. `useSession` currently sets `mockCurrentUser` on mount. Swap for an auth check + fetch.
-4. `mockCanchas` has lat/lng for Caracas venues. Replace with geocoded API result.
-5. `BCV_RATE` is a constant. Wire to BCV's published rate (cache 24h).
-6. `useMatchOverrides` and `useJoinedMatches` are in-memory only — replace with server mutations.
+### DB schema (Supabase tables)
+- `profiles` — mirrors `Player` fields: `id (uuid, FK auth.users)`, `name`, `username`, `avatar_url`, `skill_level`, `sports[]`, `positions[]`, `bio`, `verified`, `reputation`, `matches_played`, `matches_organized`, `attendance_pct`, `badges[]`, `city`, `onboarded`
+- `matches` — mirrors `Match` fields. Key cols: `organizer_id`, `started_at`, `ended_at`, `missing_positions[]`, `payment_methods[]`, `requirements[]`, `optional_requirements[]`
+- `match_participants` — `match_id`, `profile_id`, `status (pending|joined|rejected)`, `payment_method`, `checked_requirements[]`
+- `messages` — `match_id` (thread), `author_id`, `body`, `sent_at`
+- `notifications` — `profile_id`, `kind`, `payload (jsonb)`, `read`, `navigate_to`
+- `ratings` — `match_id`, `rater_id`, `ratee_id`, `stars`, `tags[]`, `comment`, unique(match_id, rater_id, ratee_id)
 
-`mockMatches` contains 6 matches. `m_6` is organized by `mockCurrentUser` — required so the "Creadas" tab in mis-partidas and the invite sheet have content.
+### Environment variables
+```
+EXPO_PUBLIC_SUPABASE_URL=...
+EXPO_PUBLIC_SUPABASE_ANON_KEY=...
+```
+Both required. App throws at startup if missing.
+
+### Legacy mock data (`data/`)
+Files still exist but screens no longer import them. `data/canchas.ts` still used by `LocationPickerSheet`.
 
 ---
 
 ## 10. Key Features Implemented
 
+### Auth
+Real Supabase auth. Login + Register with inline validation. `useSession.initialize()` called in root layout restores session on app open. `signIn`/`signUp`/`signOut` wired. Profile auto-created via DB trigger on `auth.users` insert (with race-condition fallback upsert in `fetchOrCreateProfile`).
+
 ### Home
-Greeting + location pin (city picker Sheet with 10 Venezuelan cities), bell icon → `/notificaciones`, 2 CTAs (search / create), 3 type promo cards, list of 3 nearby `MatchCard`s (no "Ver todos" button).
+Greeting + city picker (Sheet with Venezuelan cities from `lib/cities.ts`), bell icon → `/notificaciones`, 2 CTAs (search / create), 3 type promo cards, nearby match list (Supabase).
 
 ### Buscar
-Search bar + filter sheet (chill/seria/torneo/level/distance), sport filter chips, type filter chips, `MatchCard` list with empty state.
+Search bar + filter sheet (chill/seria/torneo/level/distance/sport). All matches from Supabase. Empty state. `paddingBottom: 160` to clear nav bar.
 
 ### Create wizard (5 steps)
 1. **Deporte** — sport list
-2. **Modalidad** — short label icon + full label. Padel skips this step.
-3. **Tipo + Nivel + Posiciones** — type cards, skill level buttons, positions per modality. SVG courts for fútbol + basket.
-4. **Ubicación + Fecha + Precio** — map picker, date/time/duration pickers, price with BCV conversion. iOS "Listo" dismiss via `InputAccessoryView`.
-5. **Pagos + Requisitos + Resumen** — payment checklist, sport-specific requirements, custom requirement input, summary card.
+2. **Modalidad** — skipped for padel (`SINGLE_MODALITY_SPORTS`). Informal Venezuelan subtitle per sport. Beach tennis shows correct 1v1 vs 2v2 dot preview.
+3. **Tipo + Nivel + Posiciones** — type cards, skill buttons, SVG courts (fútbol/basket).
+4. **Ubicación + Fecha + Precio** — map picker, date/time/duration pickers, price with BCV conversion. iOS "Listo" button via `InputAccessoryView`.
+5. **Pagos + Requisitos + Resumen** — payment checklist, sport requirements, custom req input, summary card.
 
-Validation: `validateStep(step, draft)` → `{ field: message }`. Button always enabled; validates on tap.
+On submit: `createMatch` → `router.push('/crear/confirmacion?matchId=...')`.
 
-### Match detail (`match/[id]`)
-- Hero: sport emoji + modality + missing count + price.
-- Info Card: date/location/type/level in a single `Card padded={false}` with `Divider inset` between rows.
-- Sections: Posiciones, Formas de pago, Sobre la partida, Organizador, Jugadores confirmados — each with uppercase caption label + Card.
-- Sticky footer: "Quiero unirme" CTA or "Ya estás unido" badge (from `useJoinedMatches`).
-- Organizer sees pencil icon in header → `/editar/[id]`.
+### Match detail (`match/[id].tsx`)
+Uses `useMatch(id)` (Supabase). Hero: sport emoji, status (active / ended / missing count), price. Info card: date/location/type/level. Positions, payment, requirements, organizer card (→ `/perfil/[id]`). Map modal when lat/lng available.
+
+**Organizer view**: pending participants panel with approve/reject (per-participant detail Sheet), joined players list with payment info. Edit button in header → `/editar/[id]`.
+
+**Player view**: joined players avatars (→ `/perfil/[id]`). Footer CTAs:
+- `pending` → "Solicitud enviada — en espera"
+- `joined` → "Ya estás unido" badge + "Salirme" button
+- `rejected` → "Tu solicitud no fue aceptada"
+- default → "Quiero unirme" → `/unirse/[id]`
 
 ### Join flow (`unirse/[id]`) — 4 steps
-1. **Resumen** — sport hero, info card (date/location), price card (with BCV), organizer row.
-2. **Pago** — radio-select payment method with color-coded icons.
-3. **Requisitos** — checkbox per requirement + master toggle.
-4. **Éxito** — animated checkmark + confetti, CTAs. Calls `useJoinedMatches.join(matchId)`.
+1. Match summary (sport, type, date, location, price + BCV, organizer)
+2. Payment method radio-select
+3. Requirements checkboxes + master toggle
+4. Success (animated checkmark + confetti)
 
-### Edit match (`editar/[id]`)
-Settings-style screen. Tappable rows for date/time, duration, location. Changes persisted to `useMatchOverrides`. Danger zone with `Alert.alert` confirmation.
+Calls `joinMatch` on Supabase.
 
-### Post-match rating (`calificar/[id]`)
-4-step flow. Stars → Tags → Comentario → Éxito. Triggered from mis-partidas "Pasadas" tab.
+### Edit match (`editar/[id].tsx`)
+Settings-style. Tappable rows: Fecha y hora → DateTimePickerSheet, Duración → DurationPickerSheet, Ubicación → LocationPickerSheet. Danger zone: "Cancelar partida" + "Eliminar partida" with `ConfirmSheet`. Calls `useUpdateMatch` / `useDeleteMatch`.
 
-### Player profile (`perfil/[id]`)
-Stats, sports, positions, badges, recent matches. Footer: message + invite (with Alert feedback). Invite Sheet lists organizer's upcoming matches.
+### Mis partidas (`(tabs)/mis-partidas.tsx`)
+Tabs: **Próximas** / **Pasadas** / **Activas**. Uses `useMyMatches()` (returns `{ upcoming, past, created }`).
 
-### Mis partidas (`(tabs)/mis-partidas`)
-Three tabs: Próximas / Pasadas / Creadas. Matches merged with `useMatchOverrides`.
-- **Creadas** tab: "Editar partida" strip attached to card bottom (`surface` bg, no top border, bottom radius only).
-- **Pasadas** tab: "Calificar jugadores" strip (`c.seria` amber fill, bottom radius only).
-- Both strips use `cardStyle` on MatchCard to remove bottom radius/border, creating a visual attachment.
+- **Activas**: matches created by user that haven't ended. Shows "Editar partida" strip, "Iniciar partida" strip (before `startedAt`), "Finalizar partida" strip (after `startedAt`, before `endedAt`). Each has `ConfirmSheet`. Start/end call `useStartMatch`/`useEndMatch`.
+- **Pasadas**: shows "Calificar jugadores (N)" strip. Tapping opens Sheet listing all rateable players → navigates to `/calificar/${playerId}?matchId=${matchId}`.
 
-### Chat (`chat/[id]`)
-`KeyboardAvoidingView` with `keyboardVerticalOffset={0}` (BackHeader is outside KAV). Bottom padding uses `useSafeAreaInsets().bottom`. Message bubbles grouped by day.
+### Post-match rating (`calificar/[id].tsx`)
+`[id]` = player being rated. `matchId` optional query param. 3 steps + success.
+1. Stars (1–5, interactive 48px stars)
+2. Tags (positive=green, negative=red multi-select chips)
+3. Comment (textarea, 200 char max)
+4. Success (animated checkmark scale-in)
 
-### Own profile (`(tabs)/perfil`)
-Avatar, bio, sports grid, level stars, position chips, settings card. Cerrar sesión → `signOut()` + `router.replace('/login')`.
+Calls `submitRating(matchId, raterId, rateeId, stars, tags, comment)` which also inserts a `rating_received` notification.
 
-### Auth
-Login + Register with inline validation. Social buttons stub to `signIn`.
+### Player profile (`perfil/[id].tsx`)
+Uses `useProfile(id)`. Stats row, sports grid, positions, bio, badges, recent matches. Footer (hidden when viewing own profile): "Enviar mensaje" (checks `fetchSharedMatchId` — only allowed for shared-match players) + "Invitar a jugar" → Sheet → `ConfirmSheet` → `useInviteToMatch`. Menu (⋮): report + block flows with `ConfirmSheet`.
 
-### Ajustes
-Dark mode Switch (wired to `useTheme`), notification toggles (local state), account section:
-- "Cambiar contraseña" → `/cuenta/contrasena`
-- "Correo electrónico" → `/cuenta/correo`
-- "Eliminar cuenta" → destructive `Alert.alert`
+### Chat (`chat/[id].tsx`)
+`[id]` = match ID (thread). Uses `useChat`. `KeyboardAvoidingView`, day-grouped bubbles, composer. Only available between players who share a match (enforced in `fetchSharedMatchId`).
 
-### Cuenta — Correo (`cuenta/correo`)
-Shows current email. Inputs: new email + confirm. Validates format, not-same-as-current, match. On submit: Alert confirmation → success card with verification instructions.
+### Notificaciones
+Uses `useNotifications`. Kinds: `join_request`, `join_approved`, `join_rejected`, `match_started`, `match_ended`, `match_cancelled`, `rating_received`, `match_invitation`. Unread dot indicator. "Marcar todas" button. Tap → deep-link via `notif.navigateTo`.
 
-### Cuenta — Contraseña (`cuenta/contrasena`)
-Inputs: current password, new password, confirm. Eye toggle on each field. Live requirement indicators (dots): min 6 chars, different from current, passwords match. On success: inline success card.
+### Reputación
+Uses `useQuery` + `fetchMyRatings`. Shows overall rating, stars, review count, stats. Review list with rater avatar, stars, tags, comment.
+
+### Own profile (`(tabs)/perfil.tsx`)
+Avatar (Supabase Storage), bio, sports emojis, level stars, position chips, settings card. Cerrar sesión → `signOut()` + `router.replace('/login')`.
+
+### Auth screens
+Login + Register: inline validation (email regex, password min 6, terms checkbox). Real Supabase auth calls. Social buttons stubbed (Alert "próximamente").
 
 ### Other screens
-`notificaciones`, `historial`, `reputacion`, `terminos`, `privacidad`, `onboarding` (3 slides + ProgressDots).
+`ajustes` (theme toggle, notification toggles, account links), `historial` (hardcoded mock cards — not yet connected to API), `reputacion`, `terminos`, `privacidad`, `onboarding` (3 slides + ProgressDots), `cuenta/correo`, `cuenta/contrasena`.
 
 ---
 
 ## 11. Roadmap / Next Steps
 
-### Phase A — Backend (highest priority)
-- [ ] **Supabase** setup: project + schema (matches, players, chats, messages, ratings).
-- [ ] Real auth: replace `useSession.signIn` stub. Email/password + social providers.
-- [ ] CRUD endpoints via tanstack/react-query.
-- [ ] Replace `mock*` imports with `useQuery` hooks.
-- [ ] Image storage for avatars + cancha photos (Supabase Storage).
-- [ ] BCV rate cron job (cache server-side, expose via edge function).
-- [ ] Replace `useMatchOverrides` + `useJoinedMatches` with server mutations + optimistic updates.
+### Immediate
+- [ ] `historial.tsx` — connect to real past matches API (currently hardcoded mock list)
+- [x] ~~Supabase realtime — chat messages~~ — done: `useChat` subscribes to `chat_messages` INSERT/DELETE
+- [x] ~~Unread notification badge on bell icon~~ — done: `useUnreadCount` + dot in home header
+- [ ] Unread notification badge on **tab bar** — count badge on Chats/Notificaciones tabs
 
 ### Phase B — Real-time + Notifications
-- [ ] Supabase realtime channels for chat messages and match-join events.
-- [ ] `expo-notifications` setup: APNs + FCM credentials, permission request, token registration.
-- [ ] Notification deeplinks (tap → `/match/[id]` or `/chat/[id]`).
-- [ ] Replace mock notifications with real feed.
+- [x] ~~Supabase realtime: `messages` channel~~ — done in `hooks/useChat.ts`
+- [ ] Supabase realtime: `match_participants` + `notifications` channels
+- [ ] `expo-notifications` setup: APNs + FCM credentials, permission request, token registration
+- [ ] Notification deeplinks (tap → `/match/[id]` or `/chat/[id]`)
 
 ### Phase C — Location
-- [ ] `expo-location` permission + current position.
-- [ ] Calculate real `distanceKm` (haversine).
-- [ ] Replace mock canchas with geocoded venue DB or Google Places.
-- [ ] Reverse geocoding on custom pin drop.
-- [ ] Map clustering on zoom out.
+- [x] ~~`expo-location` permission + current position~~ — done: `hooks/useUserLocation.ts`
+- [x] ~~Real `distanceKm` (haversine using user coords)~~ — done: `lib/geo.ts` + wired in `buscar.tsx`
+- [ ] Replace `mockCanchas` in `LocationPickerSheet` with geocoded DB or Google Places
+- [ ] Reverse geocoding on custom pin drop
 
-### Phase D — Payments
-- [ ] Stripe Connect or local processor for Venezuela.
-- [ ] Hold-and-release flow: pay on join, release to organizer post-match.
-- [ ] Dispute / refund flow.
+### Phase D — Storage & Avatars
+- [x] ~~Avatar upload in `perfil/editar.tsx` → Supabase Storage~~ — done
+- [ ] Cancha photos (organizer can attach photo to match location)
 
-### Phase E — Reputation & matchmaking
-- [ ] Wire `calificar/[id]` to persist ratings → recalculate `reputation`.
-- [ ] Post-match rating prompt automation.
-- [ ] Match recommendation engine (skill + distance + history).
+### Phase E — Payments
+- [ ] Payment flow is currently honor-system (user selects method, organizer trusts them)
+- [ ] Phase E: escrow via Stripe Connect or local processor
 
-### Phase F — Quality
-- [ ] Test runner: `jest` + `@testing-library/react-native`. Unit tests for `lib/`, `features/match/helpers`, validation logic.
-- [ ] Accessibility audit (`accessibilityLabel` on all `PressableScale`).
-- [ ] i18n (currently Spanish-only hardcoded).
-- [ ] Error monitoring (Sentry).
-- [ ] Analytics (Posthog or Amplitude).
+### Phase F — Reputation refinement
+- [ ] Auto-trigger `calificar` prompt after `endedAt` (in-app banner)
+- [x] ~~Aggregate ratings → `profiles.reputation` via DB trigger~~ — done: `sync_reputation` trigger
+- [ ] Display received ratings breakdown (per tag frequency)
 
-### Phase G — Build & Store
-- [ ] EAS Build profiles (development, preview, production).
-- [ ] iOS bundle id `com.lacancha.app` — Apple Developer enrollment needed.
-- [ ] Android `com.lacancha.app` — Play Console + signing key.
-- [ ] App Store screenshots + descriptions (es-VE).
-- [ ] Privacy nutrition labels.
+### Phase G — Quality
+- [x] ~~UX: pull-to-refresh, loading skeletons, infinite scroll, error states~~ — done on all list screens
+- [ ] Test runner: `jest` + `@testing-library/react-native`
+- [ ] Accessibility audit (`accessibilityLabel` on all PressableScale)
+- [ ] i18n (all strings currently Spanish hardcoded)
+- [ ] Error monitoring (Sentry)
+
+### Phase H — Build & Store
+- [ ] EAS Build profiles (development, preview, production)
+- [ ] iOS: Apple Developer enrollment, bundle id `com.lacancha.app`
+- [ ] Android: Play Console + signing key
+- [ ] AltStore distribution for personal device (no store needed)
+- [ ] App icons + splash at all sizes (currently template)
+- [ ] Privacy policy at public URL
 
 ---
 
 ## 12. How-To
 
 ### Add a new screen
-1. Create `app/<name>.tsx` with `export default function NameScreen() { ... }`.
+1. Create `app/<name>.tsx` with `export default function NameScreen()`.
 2. Register in `app/_layout.tsx` `<Stack>` block.
 3. Link: `router.push('/<name>')`.
-4. Use `Screen` + `BackHeader` + `useColors()` + `makeStyles(c)`.
+4. Pattern: `Screen` + `BackHeader` + `useColors()` + `makeStyles(c)`.
+
+### Add a new API hook
+1. Add fetch function in relevant `lib/*Api.ts`.
+2. Add React Query hook in relevant `hooks/*.ts`.
+3. Use in screen: `const { data, isLoading } = useMyHook()`.
 
 ### Add a new sport
 1. Add to `Sport` union in `types/domain.ts`.
 2. Add label in `lib/format.ts` (`SPORT_LABEL`).
 3. Add icon in `components/brand/SportIcon.tsx`.
 4. Add to `sportModalities` in `features/match/helpers.ts`.
-5. If positions apply, add entry to `positionsForModality()`.
+5. If positions apply, add to `positionsForModality()`.
 6. Add to `REQUIREMENTS_BY_SPORT` in `app/crear/index.tsx`.
 7. Add to `SPORTS` const in `app/crear/index.tsx`.
 8. Add dot layout to `MiniPitchPreview.tsx`.
 9. Add `modalidadSub` entry in Step2Modality (if not single-modality).
 
-### Add a new modality to existing sport
-1. Add key to modality type alias in `types/domain.ts` — use sport-prefixed key (`futbol3` not `3v3`).
-2. Add label in `lib/format.ts` `MODALITY_LABEL` and `MODALITY_SHORT`.
-3. Add to `sportModalities[sport]` array.
-4. Add per-modality positions to relevant `*positionsByModality`.
-5. Add layout to `FOOTBALL_LAYOUTS` / `BASKET_LAYOUTS` in `PositionPitch.tsx`.
+### Add a new modality
+1. Add key to modality type in `types/domain.ts` (sport-prefixed: `futbol3` not `3v3`).
+2. Add labels in `lib/format.ts` `MODALITY_LABEL` + `MODALITY_SHORT`.
+3. Add to `sportModalities[sport]`.
+4. Add per-modality positions to helpers.
+5. Add layout to `PositionPitch.tsx`.
 6. Update `modalityShortLabel()` in `app/crear/index.tsx`.
 7. Add dot layout to `MiniPitchPreview.tsx`.
-
-### Add a new color token
-1. Add to **both** `darkPalette` and `lightPalette` in `theme/palettes.ts`.
-2. Use via `useColors()` only — never import `colors` directly in new code.
 
 ### Add validation to a form
 ```ts
@@ -589,16 +639,15 @@ const errors = useMemo(() => {
 }, [field]);
 const [tried, setTried] = useState(false);
 const shown = tried ? errors : {};
-// On submit:
-setTried(true);
-if (Object.keys(errors).length > 0) return;
+// On submit: setTried(true); if (Object.keys(errors).length > 0) return;
+// Pass shown.field as error prop to TextInput
 ```
-Pass `shown.field` as `error` prop to `TextInput`. Never disable the submit button.
+Never disable submit button — validate on tap.
 
 ### Add iOS keyboard "Listo" button
 ```tsx
 import { InputAccessoryView, Keyboard, Platform } from 'react-native';
-const ACCESSORY_ID = 'my-input-done';
+const ACCESSORY_ID = 'my-input';
 // On TextInput:
 inputAccessoryViewID={Platform.OS === 'ios' ? ACCESSORY_ID : undefined}
 returnKeyType="done"
@@ -606,7 +655,7 @@ onSubmitEditing={Keyboard.dismiss}
 // Below screen JSX:
 {Platform.OS === 'ios' && (
   <InputAccessoryView nativeID={ACCESSORY_ID}>
-    <View style={styles.inputAccessory}>
+    <View style={styles.accessory}>
       <PressableScale onPress={Keyboard.dismiss} scaleTo={0.95}>
         <Text variant="bodyMedium" color="primary">Listo</Text>
       </PressableScale>
@@ -615,53 +664,51 @@ onSubmitEditing={Keyboard.dismiss}
 )}
 ```
 
+### Use ConfirmSheet for destructive actions
+```tsx
+<ConfirmSheet
+  visible={open}
+  onClose={() => setOpen(false)}
+  title="Eliminar partida"
+  description="Esta acción no se puede deshacer."
+  confirmLabel="Eliminar"
+  confirmColor={c.alert}
+  countdown={5}           // optional: seconds before confirm enables
+  onConfirm={() => { deleteMatch(id); setOpen(false); }}
+/>
+```
+
 ---
 
 ## 13. Conventions
 
 ### Styling — mandatory pattern
 ```ts
-// At top of component:
 const c = useColors();
 const s = useMemo(() => makeStyles(c), [c]);
+// Color-independent: module-level staticStyles
 
-// At bottom of file:
 function makeStyles(c: ColorPalette) {
   return StyleSheet.create({ ... });
 }
-
-// For color-independent styles only:
-const staticStyles = StyleSheet.create({ ... });
 ```
-Never use `colors` (static dark import) in new code. Never hardcode color hex values outside palette files.
+Never hardcode hex colors in components. Never import `colors` (dark-only) in new code.
 
 ### TypeScript
 - `"strict": true` — no implicit any.
 - `interface` for public shapes, `type` for unions/aliases.
 - Domain types in `types/`. UI prop types inline as `interface Props`.
 
-### Styling rules
-- Spacing tokens (`spacing.md`), never raw numbers (except fine tweaks like `marginTop: 2`).
-- `radius.*` not raw px for border radii.
-- Flexbox over absolute positioning.
-- Semi-transparent: `${c.alert}44` (hex alpha suffix).
-- For horizontal ScrollViews of chips: add `paddingBottom` to `contentContainerStyle`.
-
-### File naming
-- Components & screens: `PascalCase.tsx` / `lowercase.tsx` (routes).
-- Stores: `camelCase.ts`.
-- Mocks: `mock` prefix.
-
 ### Imports order
-External → `@/components` → `@/features` → `@/lib` → `@/store` → `@/theme` → `@/types`.
+External → `@/components` → `@/features` → `@/hooks` → `@/lib` → `@/store` → `@/theme` → `@/types`.
 
 ### Language
 - UI strings: **Spanish** (es-VE).
 - Code identifiers, types, comments: **English**.
-- Exception: domain values like `'cualquiera'`, `'portero'` are Spanish (serialized).
+- Domain values like `'cualquiera'`, `'portero'`: Spanish (serialized to DB).
 
 ### Icon weights
-- `weight="fill"` — active / selected / primary.
+- `weight="fill"` — active / primary.
 - `weight="bold"` — emphasis.
 - `weight="regular"` — inactive / secondary.
 
@@ -669,56 +716,38 @@ External → `@/components` → `@/features` → `@/lib` → `@/store` → `@/th
 
 ## 14. Known Gotchas
 
-### `expo-router` typed routes
-`typedRoutes: false`. `.expo/types/router.d.ts` excluded from tsconfig. Don't re-include without removing string-interpolation pushes.
+### Supabase env vars required at startup
+`lib/supabase.ts` throws `Error('Missing EXPO_PUBLIC_SUPABASE_URL...')` if either var is absent. Make sure `.env` is present before `npx expo start`.
+
+### `expo-router` typed routes off
+`typedRoutes: false`. `.expo/types/router.d.ts` excluded from tsconfig. String-interpolation pushes work fine.
 
 ### Can't nest dynamic routes under flat dynamic file
-`match/[id].tsx` is flat. Cannot create `match/[id]/something.tsx` without converting to directory layout. Use flat siblings (`editar/[id].tsx`) instead.
+`match/[id].tsx` is flat — cannot create `match/[id]/foo.tsx` without restructuring. Use flat siblings (`editar/[id].tsx`) instead.
+
+### `calificar/[id]` takes optional `matchId` query param
+`router.push('/calificar/${playerId}?matchId=${matchId}')`. The screen reads it via `useLocalSearchParams<{ id: string; matchId?: string }>()`. The `matchId` is passed to `submitRating` to link rating to the correct match.
+
+### `fetchSharedMatchId` gates chat
+Players can only open a chat thread if they shared a match. `perfil/[id].tsx` calls `fetchSharedMatchId(myId, theirId)` — if null, shows "Sin partida compartida" sheet instead of navigating to chat.
 
 ### `Stars` overflow
 5 stars at size 16 = 88px. In ~72px columns → overflow. Use size 10–12 inside compressed buttons.
 
-### Chip label clipping in horizontal ScrollView
-Fixed in `Chip.tsx`: `flexShrink: 0` + `numberOfLines: 1`.
-
-### Emoji clipping
-Emojis ~120% of fontSize. Need `lineHeight: fontSize * 1.3` minimum.
-
-### MatchCard action strip in mis-partidas
-The strip sits below the card with `gap: 0`. MatchCard must have `cardStyle={{ borderBottomLeftRadius: 0, borderBottomRightRadius: 0, borderBottomWidth: 0 }}` to remove the bottom border and let the strip attach seamlessly.
-
-### `MatchTypeBadge` / `MatchTypePromoCard` colors
-`matchTypeMeta[type].color` is static (dark palette). Always derive colors from `useColors()` via `typeColors(type, c)` helper inside the component.
-
-### `BackHeader` on screens reached via `router.replace`
-`navigation.canGoBack()` returns false → back button hidden automatically. Safe for login/splash.
-
-### Chat keyboard gap
-`KeyboardAvoidingView` must have `keyboardVerticalOffset={0}` when `BackHeader` is outside the KAV. Safe area bottom for composer via `useSafeAreaInsets().bottom`.
-
-### `Stars` overflow
-Phosphor `Star` at size 16 with gap 2 = 88px wide for 5 stars. In flex-1 button columns on a 390px screen, available width is ~72px → overflow. **Use size 10–12 inside compressed buttons.**
-
-### StepperBar last step compression
-Fixed: dot + line rendered as siblings, `dot.flexShrink: 0`, `line.flex: 1`.
-
-### PositionPitch height
-Field uses `aspectRatio: 0.6`. Wrap `height: 260`, field `height: 252`, `overflow: hidden` as safety.
-
-### React Native Maps + Android
-For standalone builds: set `GOOGLE_MAPS_API_KEY` in `app.json android.config.googleMaps.apiKey`.
-
-### DateTimePicker theming
-`themeVariant="dark"` iOS only. Android uses system colors.
+### `Avatar` uri prop
+Accepts Supabase Storage public URL. If `uri` is undefined, falls back to initials. Always pass `uri={player.avatarUrl}`.
 
 ### `InputAccessoryView` iOS-only
-Always gate with `Platform.OS === 'ios'`.
+Always gate with `Platform.OS === 'ios'`. Android handles `returnKeyType="done"` natively.
 
 ### Reanimated worklets
 `PressableScale` runs on UI thread. No hooks or non-worklet functions inside `useAnimatedStyle`.
 
 ### Splash hide
 `SplashScreen.preventAutoHideAsync()` at module load, `hideAsync()` after fonts load. Don't move.
+
+### `ConfirmSheet` countdown
+When `countdown` prop is set, confirm button shows a timer and is disabled until it reaches 0. Used for irreversible actions (end match).
 
 ---
 
@@ -731,13 +760,20 @@ npx expo start --ios        # iOS simulator
 npx expo start --android    # Android emulator
 ```
 
-### Lint + types
+### Env file required
 ```bash
-npx tsc --noEmit            # 0 errors expected
-npx expo lint               # 0 warnings expected
+# .env at project root:
+EXPO_PUBLIC_SUPABASE_URL=https://xxxx.supabase.co
+EXPO_PUBLIC_SUPABASE_ANON_KEY=eyJ...
 ```
 
-### Add an Expo-managed native module
+### Lint + types
+```bash
+npx tsc --noEmit
+npx expo lint
+```
+
+### Add Expo-managed native module
 ```bash
 npx expo install <pkg>
 ```
@@ -750,30 +786,33 @@ npm install
 npx expo start --clear
 ```
 
-### Reset wizard / dev data
-In console: `useDraftMatch.getState().reset()`
+### Reset wizard state
+`useDraftMatch.getState().reset()` in React Native Debugger console.
 
 ---
 
-## 16. Build & Deploy (future)
+## 16. Build & Deploy
 
+### AltStore (personal device, free)
+1. Install AltServer on PC/Mac → installs AltStore on iPhone via USB.
+2. Build IPA: `eas build --platform ios --profile preview`
+3. Install `.ipa` via AltStore. Re-signs every 7 days automatically while AltServer runs.
+
+### EAS Build
 ```bash
 npm install -g eas-cli
 eas login
 eas build:configure
 eas build --platform ios --profile preview
 eas build --platform android --profile preview
-eas submit
 ```
 
-Profiles in `eas.json`: `development`, `preview`, `production`.
-
-### Required before production
-- Apple Developer + Google Play Console accounts.
-- App icons + splash assets at all sizes.
-- Privacy policy + ToS at public URL.
-- BCV rate API.
-- Error monitoring (Sentry) + analytics.
+### Required before App Store
+- Apple Developer ($99/yr) + Google Play Console.
+- App icons + splash at all sizes.
+- Privacy policy at public URL.
+- BCV rate API (currently hardcoded constant).
+- Error monitoring (Sentry).
 
 ---
 
@@ -781,20 +820,16 @@ Profiles in `eas.json`: `development`, `preview`, `production`.
 
 | Task | Where |
 |---|---|
-| Change splash animation | `app/index.tsx` |
-| Add a mock match | `data/matches.ts` |
+| Add mock cancha to map | `data/canchas.ts` |
 | Change BCV rate | `lib/exchange.ts` (`BCV_RATE`) |
-| Add cancha to map | `data/canchas.ts` |
 | Edit wizard step copy | `app/crear/index.tsx` `<StepHeader>` |
 | Add payment method | `types/domain.ts` + `lib/format.ts` + `app/crear/index.tsx` |
 | Change tab icons | `app/(tabs)/_layout.tsx` |
 | Change app name / splash bg | `app.json` |
-| Toggle dev auth | `store/session.ts` initial `isAuthed` |
 | Navigate to player profile | `router.push('/perfil/${playerId}')` |
 | Navigate to join flow | `router.push('/unirse/${matchId}')` |
 | Navigate to edit match | `router.push('/editar/${matchId}')` |
-| Navigate to rate player | `router.push('/calificar/${playerId}')` |
-| Navigate to change email | `router.push('/cuenta/correo')` |
-| Navigate to change password | `router.push('/cuenta/contrasena')` |
-| Override match fields locally | `useMatchOverrides.getState().setOverride(id, partial)` |
-| Check if user joined match | `useJoinedMatches.getState().hasJoined(matchId)` |
+| Navigate to rate player | `router.push('/calificar/${playerId}?matchId=${matchId}')` |
+| Navigate to chat | `router.push('/chat/${matchId}')` (matchId = thread id) |
+| Invalidate matches cache | `queryClient.invalidateQueries({ queryKey: matchKeys.lists() })` |
+| Invalidate profile cache | `queryClient.invalidateQueries({ queryKey: ['profile', userId] })` |
