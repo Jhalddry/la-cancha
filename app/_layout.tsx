@@ -131,6 +131,10 @@ export default function RootLayout() {
                 options={{ animation: 'slide_from_right' }}
               />
               <Stack.Screen
+                name="direct/[id]"
+                options={{ animation: 'slide_from_right' }}
+              />
+              <Stack.Screen
                 name="perfil/editar"
                 options={{ animation: 'slide_from_right' }}
               />
@@ -168,6 +172,10 @@ export default function RootLayout() {
               />
               <Stack.Screen
                 name="cuenta/contrasena"
+                options={{ animation: 'slide_from_right' }}
+              />
+              <Stack.Screen
+                name="admin/verificaciones"
                 options={{ animation: 'slide_from_right' }}
               />
             </Stack>

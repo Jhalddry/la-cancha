@@ -49,8 +49,8 @@
       [
         "expo-image-picker",
         {
-          "photosPermission": "La Cancha necesita acceso a tus fotos para que puedas elegir una foto de perfil.",
-          "cameraPermission": "La Cancha necesita acceso a tu cámara para que puedas tomar una foto de perfil."
+          "photosPermission": "La Cancha necesita acceso a tus fotos para elegir foto de perfil y enviar imágenes en el chat.",
+          "cameraPermission": "La Cancha necesita acceso a tu cámara para tomar fotos de perfil y enviarlas en el chat."
         }
       ]
     ],

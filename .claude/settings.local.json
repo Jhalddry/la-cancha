@@ -12,7 +12,9 @@
       "WebSearch",
       "WebFetch(domain:docs.expo.dev)",
       "Bash(del \"C:\\\\Users\\\\User\\\\OneDrive\\\\Documents\\\\la-cancha\\\\lib\\\\native-fetch-stub.js\")",
-      "Bash(del \"C:\\\\Users\\\\User\\\\OneDrive\\\\Documents\\\\la-cancha\\\\lib\\\\fetch-setup.ts\")"
+      "Bash(del \"C:\\\\Users\\\\User\\\\OneDrive\\\\Documents\\\\la-cancha\\\\lib\\\\fetch-setup.ts\")",
+      "Bash(dir \"C:\\\\Users\\\\User\\\\OneDrive\\\\Documents\\\\la-cancha\\\\supabase\\\\migrations\" /b /o:-n)",
+      "Bash(xargs grep -l \"policy\\\\|rls\")"
     ]
   }
 }
