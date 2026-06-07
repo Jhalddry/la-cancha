@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
-import { Image, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
+import { Image } from 'expo-image';
 
 import { useColors } from '@/hooks/useColors';
 import { radius } from '@/theme';
@@ -29,7 +30,13 @@ export function Avatar({ name, uri, size = 40, bordered }: Props) {
       ]}
     >
       {uri ? (
-        <Image source={{ uri }} style={dim} />
+        <Image
+          source={{ uri }}
+          style={dim}
+          cachePolicy="memory-disk"
+          contentFit="cover"
+          transition={150}
+        />
       ) : (
         <Text variant="smallMedium" color="textPrimary">
           {initials}

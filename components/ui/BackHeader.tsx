@@ -13,12 +13,13 @@ import { Text } from './Text';
 
 interface Props {
   title?: string;
+  titleNode?: ReactNode;
   onBack?: () => void;
   trailing?: ReactNode;
   transparent?: boolean;
 }
 
-export function BackHeader({ title, onBack, trailing, transparent }: Props) {
+export function BackHeader({ title, titleNode, onBack, trailing, transparent }: Props) {
   const router = useRouter();
   const navigation = useNavigation();
   const c = useColors();
@@ -40,11 +41,11 @@ export function BackHeader({ title, onBack, trailing, transparent }: Props) {
         <View style={styles.iconBtn} />
       )}
       <View style={styles.titleWrap}>
-        {title ? (
+        {titleNode ?? (title ? (
           <Text variant="bodySemibold" color="textPrimary" numberOfLines={1}>
             {title}
           </Text>
-        ) : null}
+        ) : null)}
       </View>
       <View style={styles.trailing}>{trailing}</View>
     </View>
