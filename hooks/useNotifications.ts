@@ -1,4 +1,6 @@
+import { useEffect } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { supabase } from '@/lib/supabase';
 
 import {
   countUnreadNotifications,
@@ -28,6 +30,24 @@ export function useNotifications() {
 
 export function useUnreadCount() {
   const userId = useSession((s) => s.user?.id);
+  const queryClient = useQueryClient();
+
+  useEffect(() => {
+    if (!userId) return;
+    const channel = supabase
+      .channel(`notifications-realtime:${userId}`)
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'notifications', filter: `profile_id=eq.${userId}` },
+        () => {
+          void queryClient.invalidateQueries({ queryKey: notifKeys.list(userId) });
+          void queryClient.invalidateQueries({ queryKey: notifKeys.unread(userId) });
+        },
+      )
+      .subscribe();
+    return () => { void supabase.removeChannel(channel); };
+  }, [userId, queryClient]);
+
   return useQuery({
     queryKey: notifKeys.unread(userId ?? ''),
     queryFn: () => countUnreadNotifications(userId!),

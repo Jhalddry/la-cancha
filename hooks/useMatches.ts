@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { Match } from '@/types/domain';
 
@@ -102,6 +103,24 @@ export function useMatchesInfinite(filters: MatchFilters = {}) {
 }
 
 export function useMatch(id: string | undefined) {
+  const queryClient = useQueryClient();
+
+  useEffect(() => {
+    if (!id) return;
+    const channel = supabase
+      .channel(`match-participants:${id}`)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'match_participants', filter: `match_id=eq.${id}` },
+        () => {
+          void queryClient.invalidateQueries({ queryKey: matchKeys.detail(id) });
+          void queryClient.invalidateQueries({ queryKey: matchKeys.pending(id) });
+        },
+      )
+      .subscribe();
+    return () => { void supabase.removeChannel(channel); };
+  }, [id, queryClient]);
+
   return useQuery({
     queryKey: matchKeys.detail(id ?? ''),
     queryFn: () => fetchMatch(id!),
