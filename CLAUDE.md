@@ -585,7 +585,14 @@ Login + Register: inline validation (email regex, password min 6, terms checkbox
 - [ ] Test runner: `jest` + `@testing-library/react-native`
 - [ ] Accessibility audit (`accessibilityLabel` on all PressableScale)
 - [ ] i18n (all strings currently Spanish hardcoded)
-- [ ] Error monitoring (Sentry)
+- [x] ~~Error monitoring (Sentry)~~ — done: `lib/sentry.ts` + wraps root layout, DSN via `EXPO_PUBLIC_SENTRY_DSN`
+
+### Phase I — Social Sharing
+- [ ] Share match as image — capture match card with `react-native-view-shot`, share via `expo-sharing` with text "¡Únete a La Cancha! Busca esta partida en la app." — no links, image only
+- [ ] Share player profile as image — same mechanism, captures profile card
+- [ ] Share button on match detail (`app/match/[id].tsx`) → generates card screenshot → native share sheet
+- [ ] Share button on player profile (`app/perfil/[id].tsx`) → generates profile screenshot → native share sheet
+- [ ] Share card design: match card + sport/date/location/type info + La Cancha logo watermark at bottom
 
 ### Phase H — Build & Store
 - [ ] EAS Build profiles (development, preview, production)
