@@ -17,7 +17,8 @@
       "Bash(xargs grep -l \"policy\\\\|rls\")",
       "Bash(npm ls *)",
       "Bash(npm uninstall *)",
-      "Bash(del \"C:\\\\Users\\\\User\\\\OneDrive\\\\Documents\\\\la-cancha\\\\lib\\\\sentry.ts\")"
+      "Bash(del \"C:\\\\Users\\\\User\\\\OneDrive\\\\Documents\\\\la-cancha\\\\lib\\\\sentry.ts\")",
+      "Bash(npx eas *)"
     ]
   }
 }

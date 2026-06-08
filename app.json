@@ -60,7 +60,7 @@
           "photosPermission": "La Cancha necesita acceso a tus fotos para elegir foto de perfil y enviar imágenes en el chat.",
           "cameraPermission": "La Cancha necesita acceso a tu cámara para tomar fotos de perfil y enviarlas en el chat."
         }
-      ],
+      ]
     ],
     "experiments": {
       "typedRoutes": false,
@@ -71,6 +71,12 @@
       "eas": {
         "projectId": "303b62b0-5141-4cf8-931d-bb4121e186c2"
       }
+    },
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/303b62b0-5141-4cf8-931d-bb4121e186c2"
     }
   }
 }
