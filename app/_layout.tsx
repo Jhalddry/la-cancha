@@ -1,6 +1,3 @@
-import { initSentry, Sentry } from '@/lib/sentry';
-initSentry();
-
 import {
   Inter_400Regular,
   Inter_500Medium,
@@ -28,7 +25,7 @@ import { useTheme } from '@/store/theme';
 
 void SplashScreen.preventAutoHideAsync().catch(() => {});
 
-export default Sentry.wrap(function RootLayout() {
+export default function RootLayout() {
   const initialize = useSession((s) => s.initialize);
   const isLoading = useSession((s) => s.isLoading);
 
@@ -189,7 +186,7 @@ export default Sentry.wrap(function RootLayout() {
     </GestureHandlerRootView>
     </QueryClientProvider>
   );
-});
+}
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
