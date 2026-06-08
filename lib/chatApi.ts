@@ -43,8 +43,16 @@ export async function fetchThreadByMatchId(
     .select('id, match_id')
     .eq('match_id', matchId)
     .maybeSingle();
-  if (!data) return null;
-  return { id: data.id as string, matchId: data.match_id as string };
+  if (data) return { id: data.id as string, matchId: data.match_id as string };
+
+  // Thread doesn't exist yet — create it (organizer entering chat before anyone joins)
+  const { data: created, error } = await supabase
+    .from('chat_threads')
+    .insert({ match_id: matchId })
+    .select('id, match_id')
+    .single();
+  if (error || !created) return null;
+  return { id: created.id as string, matchId: created.match_id as string };
 }
 
 export async function fetchThreadParticipants(matchId: string): Promise<ChatParticipant[]> {
