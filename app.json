@@ -46,6 +46,14 @@
         }
       ],
       "expo-font",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/images/icon.png",
+          "color": "#7BFF00",
+          "sounds": []
+        }
+      ],
       "@react-native-community/datetimepicker",
       [
         "expo-location",

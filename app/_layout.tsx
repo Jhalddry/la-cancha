@@ -9,16 +9,18 @@ import {
 } from '@expo-google-fonts/inter';
 import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
 import { QueryClientProvider } from '@tanstack/react-query';
-import { Stack } from 'expo-router';
+import * as Notifications from 'expo-notifications';
+import { useRouter, Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { StyleSheet, useColorScheme, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import 'react-native-reanimated';
 
 import { queryClient } from '@/lib/queryClient';
+import { registerForPushNotifications } from '@/lib/pushNotifications';
 import { useColors } from '@/hooks/useColors';
 import { useSession } from '@/store/session';
 import { useTheme } from '@/store/theme';
@@ -28,6 +30,10 @@ void SplashScreen.preventAutoHideAsync().catch(() => {});
 export default function RootLayout() {
   const initialize = useSession((s) => s.initialize);
   const isLoading = useSession((s) => s.isLoading);
+  const userId = useSession((s) => s.user?.id);
+  const router = useRouter();
+  const notifListener = useRef<Notifications.EventSubscription | null>(null);
+  const responseListener = useRef<Notifications.EventSubscription | null>(null);
 
   const [fontsLoaded] = useFonts({
     Inter_400Regular,
@@ -73,6 +79,25 @@ export default function RootLayout() {
     const unsubscribe = initialize();
     return unsubscribe;
   }, [initialize]);
+
+  // Register push token when user logs in
+  useEffect(() => {
+    if (userId) void registerForPushNotifications(userId);
+  }, [userId]);
+
+  // Handle notification tap → deep link
+  useEffect(() => {
+    responseListener.current = Notifications.addNotificationResponseReceivedListener((response) => {
+      const navigateTo = response.notification.request.content.data?.navigateTo as string | undefined;
+      if (navigateTo) {
+        try { router.push(navigateTo as Parameters<typeof router.push>[0]); } catch { /* ignore */ }
+      }
+    });
+    return () => {
+      notifListener.current?.remove();
+      responseListener.current?.remove();
+    };
+  }, [router]);
 
   useEffect(() => {
     if (fontsLoaded && !isLoading) {

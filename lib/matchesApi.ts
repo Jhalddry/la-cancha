@@ -1,5 +1,8 @@
 import { supabase } from '@/lib/supabase';
 import { rowToPlayer } from '@/lib/mappers';
+import { sendPushToUser } from '@/lib/pushNotifications';
+import { labelModality, labelSport } from '@/lib/format';
+import type { Modality, Sport as SportType } from '@/types/domain';
 import type {
   Currency,
   Match,
@@ -351,18 +354,26 @@ export async function joinMatch(
 
     if (matchRow && playerRow) {
       const m = matchRow as { organizer_id: string; sport: string; modality: string };
+      const playerName = (playerRow as { name: string }).name;
+      const sportLabel = `${labelSport(m.sport as SportType)} ${labelModality(m.modality as Modality)}`;
       await supabase.from('notifications').insert({
         profile_id: m.organizer_id,
         kind: 'join_request',
         payload: {
           matchId,
           playerId: userId,
-          playerName: (playerRow as { name: string }).name,
+          playerName,
           paymentMethod: paymentMethod ?? null,
           sport: m.sport,
           modality: m.modality,
         },
       });
+      void sendPushToUser(
+        m.organizer_id,
+        '¡Solicitud de unión!',
+        `${playerName} quiere unirse a tu ${sportLabel}`,
+        `/match/${matchId}`,
+      );
     }
   } catch (e) {
     console.warn('[notifications] joinMatch notify error:', e);
@@ -441,6 +452,15 @@ async function notifyParticipants(
         payload,
       })),
     );
+    const sportLabel = `${labelSport(matchRes.data.sport as SportType)} ${labelModality(matchRes.data.modality as Modality)}`;
+    const pushTitle = kind === 'match_started' ? `¡Tu ${sportLabel} ha iniciado! ⚡` : `La ${sportLabel} finalizó 🏁`;
+    const pushBody = kind === 'match_ended' ? '¡Califica a tus compañeros!' : '';
+    const navigateTo = kind === 'match_ended' ? '/(tabs)/mis-partidas' : `/match/${matchId}`;
+    await Promise.all(
+      partsRes.data.map((row: { profile_id: string }) =>
+        sendPushToUser(row.profile_id, pushTitle, pushBody, navigateTo),
+      ),
+    );
   } catch {
     // non-critical
   }
@@ -490,6 +510,8 @@ export async function approveParticipant(matchId: string, profileId: string): Pr
       kind: 'join_approved',
       payload: { matchId, sport: m?.sport, modality: m?.modality },
     });
+    const sportLabel = m ? `${labelSport(m.sport as SportType)} ${labelModality(m.modality as Modality)}` : 'partida';
+    void sendPushToUser(profileId, '¡Solicitud aprobada! ✅', `Ya eres parte de la ${sportLabel}`, `/match/${matchId}`);
   } catch {}
 }
 
@@ -512,6 +534,8 @@ export async function rejectParticipant(matchId: string, profileId: string): Pro
       kind: 'join_rejected',
       payload: { matchId, sport: m?.sport, modality: m?.modality },
     });
+    const sportLabel = m ? `${labelSport(m.sport as SportType)} ${labelModality(m.modality as Modality)}` : 'partida';
+    void sendPushToUser(profileId, 'Solicitud no aceptada', `Tu solicitud para ${sportLabel} no fue aceptada`, `/match/${matchId}`);
   } catch {}
 }
 
@@ -527,6 +551,8 @@ export async function inviteToMatch(
     kind: 'match_invitation',
     payload: { matchId, organizerName, sport, modality },
   });
+  const sportLabel = `${labelSport(sport as SportType)} ${labelModality(modality as Modality)}`;
+  void sendPushToUser(inviteeId, '¡Te invitaron a jugar!', `${organizerName} te invitó a ${sportLabel}`, `/unirse/${matchId}`);
 }
 
 export async function cancelMatch(matchId: string): Promise<void> {
@@ -541,6 +567,7 @@ export async function cancelMatch(matchId: string): Promise<void> {
         .eq('status', 'joined'),
     ]);
     if (matchRes.data && partsRes.data?.length) {
+      const sportLabel = `${labelSport(matchRes.data.sport as SportType)} ${labelModality(matchRes.data.modality as Modality)}`;
       await supabase.from('notifications').insert(
         partsRes.data.map((row: { profile_id: string }) => ({
           profile_id: row.profile_id,
@@ -551,6 +578,11 @@ export async function cancelMatch(matchId: string): Promise<void> {
             modality: matchRes.data!.modality,
           },
         })),
+      );
+      await Promise.all(
+        partsRes.data.map((row: { profile_id: string }) =>
+          sendPushToUser(row.profile_id, 'Partida cancelada', `La ${sportLabel} fue cancelada`),
+        ),
       );
     }
   } catch {

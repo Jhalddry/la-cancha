@@ -1,4 +1,5 @@
 import { supabase } from '@/lib/supabase';
+import { sendPushToUser } from '@/lib/pushNotifications';
 
 export async function submitRating(
   matchId: string,
@@ -34,16 +35,13 @@ export async function submitRating(
       .select('name')
       .eq('id', raterId)
       .maybeSingle();
+    const raterName = (raterRow as { name: string } | null)?.name ?? 'Alguien';
     await supabase.from('notifications').insert({
       profile_id: rateeId,
       kind: 'rating_received',
-      payload: {
-        matchId,
-        raterId,
-        raterName: (raterRow as { name: string } | null)?.name ?? 'Alguien',
-        stars,
-      },
+      payload: { matchId, raterId, raterName, stars },
     });
+    void sendPushToUser(rateeId, '¡Nueva calificación! ⭐', `${raterName} te calificó con ${stars} estrella${stars === 1 ? '' : 's'}`, '/reputacion');
   } catch {
     // non-critical
   }
