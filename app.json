@@ -60,7 +60,7 @@
           "photosPermission": "La Cancha necesita acceso a tus fotos para elegir foto de perfil y enviar imágenes en el chat.",
           "cameraPermission": "La Cancha necesita acceso a tu cámara para tomar fotos de perfil y enviarlas en el chat."
         }
-      ]
+      ],
     ],
     "experiments": {
       "typedRoutes": false,
