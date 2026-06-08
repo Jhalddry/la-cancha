@@ -1,4 +1,5 @@
 import {
+  Badge,
   Icon,
   Label,
   NativeTabs,
@@ -6,6 +7,7 @@ import {
 import { Redirect } from 'expo-router';
 import { DynamicColorIOS, Platform } from 'react-native';
 
+import { useUnreadChatCount } from '@/hooks/useChat';
 import { useColors } from '@/hooks/useColors';
 import { useSession } from '@/store/session';
 
@@ -14,6 +16,7 @@ export default function TabsLayout() {
   const isOnboarded = useSession((s) => s.isOnboarded);
   const user = useSession((s) => s.user);
   const c = useColors();
+  const unreadChats = useUnreadChatCount();
 
   if (!isAuthed) return <Redirect href="/login" />;
   // isAuthed but no profile yet — fetchOrCreateProfile still running or failed.
@@ -51,6 +54,7 @@ export default function TabsLayout() {
           }}
         />
         <Label>Chats</Label>
+        <Badge hidden={unreadChats === 0}>{unreadChats > 99 ? '99+' : String(unreadChats)}</Badge>
       </NativeTabs.Trigger>
 
       <NativeTabs.Trigger name="perfil">

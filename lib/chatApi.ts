@@ -29,6 +29,7 @@ export interface ChatThreadData {
   participants: ChatParticipant[];
   lastMessage?: string;
   lastMessageAt?: string;
+  lastMessageAuthorId?: string;
 }
 
 // ─── Thread ───────────────────────────────────────────────────────────────────
@@ -208,6 +209,7 @@ export interface PrivateThreadData {
   otherUser: ChatParticipant;
   lastMessage?: string;
   lastMessageAt?: string;
+  lastMessageAuthorId?: string;
 }
 
 // ─── Private DM API ──────────────────────────────────────────────────────────
@@ -322,15 +324,15 @@ export async function fetchMyPrivateThreads(userId: string): Promise<PrivateThre
   const threadIds = typedRows.map((r) => r.id);
   const { data: allMsgs } = await supabase
     .from('private_messages')
-    .select('thread_id, body, sent_at')
+    .select('thread_id, body, sent_at, author_id')
     .in('thread_id', threadIds)
     .order('sent_at', { ascending: false });
 
-  const lastMsgMap = new Map<string, { body: string; sentAt: string }>();
+  const lastMsgMap = new Map<string, { body: string; sentAt: string; authorId: string }>();
   for (const msg of allMsgs ?? []) {
-    const m = msg as { thread_id: string; body: string; sent_at: string };
+    const m = msg as { thread_id: string; body: string; sent_at: string; author_id: string };
     if (!lastMsgMap.has(m.thread_id)) {
-      lastMsgMap.set(m.thread_id, { body: m.body, sentAt: m.sent_at });
+      lastMsgMap.set(m.thread_id, { body: m.body, sentAt: m.sent_at, authorId: m.author_id });
     }
   }
 
@@ -347,6 +349,7 @@ export async function fetchMyPrivateThreads(userId: string): Promise<PrivateThre
       },
       lastMessage: lastMsg?.body,
       lastMessageAt: lastMsg?.sentAt ?? r.updated_at,
+      lastMessageAuthorId: lastMsg?.authorId,
     };
   });
 }
@@ -372,15 +375,15 @@ export async function fetchMyThreads(): Promise<ChatThreadData[]> {
   // Last message per thread (batch)
   const { data: allMsgs } = await supabase
     .from('chat_messages')
-    .select('thread_id, body, sent_at')
+    .select('thread_id, body, sent_at, author_id')
     .in('thread_id', threadIds)
     .order('sent_at', { ascending: false });
 
-  const lastMsgByThread = new Map<string, { body: string; sentAt: string }>();
+  const lastMsgByThread = new Map<string, { body: string; sentAt: string; authorId: string }>();
   for (const msg of allMsgs ?? []) {
-    const m = msg as unknown as { thread_id: string; body: string; sent_at: string };
+    const m = msg as unknown as { thread_id: string; body: string; sent_at: string; author_id: string };
     if (!lastMsgByThread.has(m.thread_id)) {
-      lastMsgByThread.set(m.thread_id, { body: m.body, sentAt: m.sent_at });
+      lastMsgByThread.set(m.thread_id, { body: m.body, sentAt: m.sent_at, authorId: m.author_id });
     }
   }
 
@@ -434,6 +437,7 @@ export async function fetchMyThreads(): Promise<ChatThreadData[]> {
       participants: partsByMatch.get(r.match_id) ?? [],
       lastMessage: lastMsg?.body,
       lastMessageAt: lastMsg?.sentAt ?? r.updated_at,
+      lastMessageAuthorId: lastMsg?.authorId,
     };
   });
 }

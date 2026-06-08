@@ -197,6 +197,25 @@ export function useMyPrivateThreads() {
   });
 }
 
+/** Count of chat threads where the last message was NOT sent by the current user (proxy for unread). */
+export function useUnreadChatCount(): number {
+  const userId = useSession((s) => s.user?.id);
+  const { data: threads } = useMyThreads();
+  const { data: privateThreads } = useMyPrivateThreads();
+
+  if (!userId) return 0;
+
+  const matchUnread = (threads ?? []).filter(
+    (t) => t.lastMessageAuthorId && t.lastMessageAuthorId !== userId,
+  ).length;
+
+  const privateUnread = (privateThreads ?? []).filter(
+    (t) => t.lastMessageAuthorId && t.lastMessageAuthorId !== userId,
+  ).length;
+
+  return matchUnread + privateUnread;
+}
+
 export function usePrivateChat(otherId: string | undefined) {
   const userId = useSession((s) => s.user?.id);
   const user = useSession((s) => s.user);
