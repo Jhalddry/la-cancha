@@ -1,5 +1,5 @@
 import { useRouter } from 'expo-router';
-import { Check, Star, WarningCircle } from 'phosphor-react-native';
+import { ArrowUp, Check, Star, WarningCircle } from 'phosphor-react-native';
 import { useMemo } from 'react';
 import { ActivityIndicator, ScrollView, StyleSheet, View } from 'react-native';
 import { useQuery } from '@tanstack/react-query';
@@ -84,6 +84,20 @@ export default function ReputacionScreen() {
     return Math.round((attended / total) * 100);
   }, [ratings]);
 
+  const tagFreq = useMemo(() => {
+    if (!ratings || ratings.length === 0) return { positive: [], negative: [] };
+    const counts = new Map<string, number>();
+    for (const r of ratings) {
+      for (const tag of r.tags) {
+        counts.set(tag, (counts.get(tag) ?? 0) + 1);
+      }
+    }
+    const sorted = [...counts.entries()].sort((a, b) => b[1] - a[1]);
+    const positive = sorted.filter(([tag]) => POSITIVE_TAGS.has(tag));
+    const negative = sorted.filter(([tag]) => !POSITIVE_TAGS.has(tag));
+    return { positive, negative };
+  }, [ratings]);
+
   return (
     <Screen>
       <BackHeader title="Reputación" onBack={() => router.back()} />
@@ -143,6 +157,57 @@ export default function ReputacionScreen() {
                   </View>
                 );
               })}
+            </Card>
+          ) : null}
+
+          {/* Tag frequency breakdown */}
+          {ratings && ratings.length > 0 && (tagFreq.positive.length > 0 || tagFreq.negative.length > 0) ? (
+            <Card>
+              <Text variant="caption" color="textSecondary" style={{ marginBottom: spacing.sm }}>
+                Tags más frecuentes
+              </Text>
+              {tagFreq.positive.length > 0 ? (
+                <View style={{ marginBottom: tagFreq.negative.length > 0 ? spacing.md : 0 }}>
+                  <View style={staticStyles.tagFreqHeader}>
+                    <ArrowUp size={11} color={c.primary} weight="bold" />
+                    <Text variant="caption" color="primary">Positivos</Text>
+                  </View>
+                  {tagFreq.positive.slice(0, 5).map(([tag, count]) => {
+                    const maxCount = tagFreq.positive[0]?.[1] ?? 1;
+                    const pct = Math.round((count / maxCount) * 100);
+                    return (
+                      <View key={tag} style={staticStyles.tagFreqRow}>
+                        <Text variant="caption" color="textSecondary" style={staticStyles.tagFreqLabel} numberOfLines={1}>{tag}</Text>
+                        <View style={[staticStyles.tagFreqTrack, { backgroundColor: c.border }]}>
+                          <View style={[staticStyles.tagFreqFill, { backgroundColor: c.primary, width: `${pct}%` as unknown as number }]} />
+                        </View>
+                        <Text variant="caption" color="textTertiary" style={staticStyles.tagFreqCount}>{count}</Text>
+                      </View>
+                    );
+                  })}
+                </View>
+              ) : null}
+              {tagFreq.negative.length > 0 ? (
+                <View>
+                  <View style={staticStyles.tagFreqHeader}>
+                    <WarningCircle size={11} color={c.alert} weight="bold" />
+                    <Text variant="caption" color="alert">Negativos</Text>
+                  </View>
+                  {tagFreq.negative.slice(0, 5).map(([tag, count]) => {
+                    const maxCount = tagFreq.negative[0]?.[1] ?? 1;
+                    const pct = Math.round((count / maxCount) * 100);
+                    return (
+                      <View key={tag} style={staticStyles.tagFreqRow}>
+                        <Text variant="caption" color="textSecondary" style={staticStyles.tagFreqLabel} numberOfLines={1}>{tag}</Text>
+                        <View style={[staticStyles.tagFreqTrack, { backgroundColor: c.border }]}>
+                          <View style={[staticStyles.tagFreqFill, { backgroundColor: c.alert, width: `${pct}%` as unknown as number }]} />
+                        </View>
+                        <Text variant="caption" color="textTertiary" style={staticStyles.tagFreqCount}>{count}</Text>
+                      </View>
+                    );
+                  })}
+                </View>
+              ) : null}
             </Card>
           ) : null}
 
@@ -233,6 +298,12 @@ const staticStyles = StyleSheet.create({
   summaryTrack: { flex: 1, height: 3, borderRadius: 99, overflow: 'hidden' },
   summaryFill: { height: 3, borderRadius: 99 },
   summaryPct: { width: 32, textAlign: 'right' },
+  tagFreqHeader: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, marginBottom: spacing.xs },
+  tagFreqRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginBottom: spacing.xs },
+  tagFreqLabel: { width: 110 },
+  tagFreqTrack: { flex: 1, height: 4, borderRadius: 99, overflow: 'hidden' },
+  tagFreqFill: { height: 4, borderRadius: 99 },
+  tagFreqCount: { width: 20, textAlign: 'right' },
 });
 
 function makeStyles(c: ColorPalette) {
