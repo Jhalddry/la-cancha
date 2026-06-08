@@ -30,6 +30,7 @@ export interface ChatThreadData {
   lastMessage?: string;
   lastMessageAt?: string;
   lastMessageAuthorId?: string;
+  lastReadAt?: string;
 }
 
 // ─── Thread ───────────────────────────────────────────────────────────────────
@@ -210,9 +211,23 @@ export interface PrivateThreadData {
   lastMessage?: string;
   lastMessageAt?: string;
   lastMessageAuthorId?: string;
+  lastReadAt?: string;
 }
 
 // ─── Private DM API ──────────────────────────────────────────────────────────
+
+// ─── Read receipts ────────────────────────────────────────────────────────────
+
+export async function markThreadRead(
+  threadType: 'match' | 'private',
+  threadId: string,
+  userId: string,
+): Promise<void> {
+  await supabase.from('chat_reads').upsert(
+    { thread_type: threadType, thread_id: threadId, user_id: userId, last_read_at: new Date().toISOString() },
+    { onConflict: 'thread_type,thread_id,user_id' },
+  );
+}
 
 /** Find or create a private thread between two users. Always stores user1_id < user2_id. */
 export async function fetchOrCreatePrivateThread(
@@ -322,6 +337,23 @@ export async function fetchMyPrivateThreads(userId: string): Promise<PrivateThre
   );
 
   const threadIds = typedRows.map((r) => r.id);
+
+  // Read receipts for current user
+  const { data: { user: currentUser } } = await supabase.auth.getUser();
+  const currentUserId = currentUser?.id;
+  let readsMap = new Map<string, string>();
+  if (currentUserId && threadIds.length > 0) {
+    const { data: reads } = await supabase
+      .from('chat_reads')
+      .select('thread_id, last_read_at')
+      .eq('user_id', currentUserId)
+      .eq('thread_type', 'private')
+      .in('thread_id', threadIds);
+    readsMap = new Map(
+      (reads ?? []).map((r: { thread_id: string; last_read_at: string }) => [r.thread_id, r.last_read_at]),
+    );
+  }
+
   const { data: allMsgs } = await supabase
     .from('private_messages')
     .select('thread_id, body, sent_at, author_id')
@@ -350,6 +382,7 @@ export async function fetchMyPrivateThreads(userId: string): Promise<PrivateThre
       lastMessage: lastMsg?.body,
       lastMessageAt: lastMsg?.sentAt ?? r.updated_at,
       lastMessageAuthorId: lastMsg?.authorId,
+      lastReadAt: readsMap.get(r.id),
     };
   });
 }
@@ -371,6 +404,22 @@ export async function fetchMyThreads(): Promise<ChatThreadData[]> {
 
   const threadIds = threadRows.map((r) => r.id as string);
   const matchIds = threadRows.map((r) => r.match_id as string);
+
+  // Read receipts for current user
+  const { data: { user: currentUser } } = await supabase.auth.getUser();
+  const currentUserId = currentUser?.id;
+  let readsMap = new Map<string, string>();
+  if (currentUserId && threadIds.length > 0) {
+    const { data: reads } = await supabase
+      .from('chat_reads')
+      .select('thread_id, last_read_at')
+      .eq('user_id', currentUserId)
+      .eq('thread_type', 'match')
+      .in('thread_id', threadIds);
+    readsMap = new Map(
+      (reads ?? []).map((r: { thread_id: string; last_read_at: string }) => [r.thread_id, r.last_read_at]),
+    );
+  }
 
   // Last message per thread (batch)
   const { data: allMsgs } = await supabase
@@ -438,6 +487,7 @@ export async function fetchMyThreads(): Promise<ChatThreadData[]> {
       lastMessage: lastMsg?.body,
       lastMessageAt: lastMsg?.sentAt ?? r.updated_at,
       lastMessageAuthorId: lastMsg?.authorId,
+      lastReadAt: readsMap.get(r.id),
     };
   });
 }

@@ -19,7 +19,7 @@ import { PressableScale } from '@/components/ui/PressableScale';
 import { Screen } from '@/components/ui/Screen';
 import { Text } from '@/components/ui/Text';
 import { TextInput } from '@/components/ui/TextInput';
-import { useChat, useDeleteMessage } from '@/hooks/useChat';
+import { useChat, useDeleteMessage, useMarkThreadRead } from '@/hooks/useChat';
 import { useMatch } from '@/hooks/useMatches';
 import { useColors } from '@/hooks/useColors';
 import { useSession } from '@/store/session';
@@ -39,8 +39,9 @@ export default function ChatScreen() {
   const s = useMemo(() => makeStyles(c, insets.bottom), [c, insets.bottom]);
 
   const { data: match } = useMatch(matchId);
-  const { messages, loading, error, send } = useChat(matchId);
+  const { messages, loading, error, send, threadId } = useChat(matchId);
   const { mutate: deleteMessage } = useDeleteMessage();
+  const markRead = useMarkThreadRead();
   const [text, setText] = useState('');
   const [deleteMessageId, setDeleteMessageId] = useState<string | null>(null);
   const [participantsOpen, setParticipantsOpen] = useState(false);
@@ -54,6 +55,11 @@ export default function ChatScreen() {
       setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 80);
     }
   }, [messages.length]);
+
+  // Mark thread as read on mount and when new messages arrive
+  useEffect(() => {
+    if (threadId) markRead('match', threadId);
+  }, [threadId, messages.length, markRead]);
 
   const handleSend = async () => {
     const body = text.trim();

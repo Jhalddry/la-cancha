@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { queryClient } from '@/lib/queryClient';
 
@@ -12,6 +12,7 @@ import {
   fetchPrivateMessages,
   fetchThreadByMatchId,
   fetchThreadParticipants,
+  markThreadRead,
   sendMessage,
   sendPrivateMessage,
   type ChatMessageData,
@@ -197,7 +198,6 @@ export function useMyPrivateThreads() {
   });
 }
 
-/** Count of chat threads where the last message was NOT sent by the current user (proxy for unread). */
 export function useUnreadChatCount(): number {
   const userId = useSession((s) => s.user?.id);
   const { data: threads } = useMyThreads();
@@ -205,15 +205,37 @@ export function useUnreadChatCount(): number {
 
   if (!userId) return 0;
 
-  const matchUnread = (threads ?? []).filter(
-    (t) => t.lastMessageAuthorId && t.lastMessageAuthorId !== userId,
+  const isUnread = (lastMessageAt?: string, lastReadAt?: string, lastAuthorId?: string): boolean => {
+    if (!lastMessageAt) return false;
+    if (lastAuthorId === userId) return false; // own message never unread
+    if (!lastReadAt) return true; // never read
+    return new Date(lastMessageAt) > new Date(lastReadAt);
+  };
+
+  const matchUnread = (threads ?? []).filter((t) =>
+    isUnread(t.lastMessageAt, t.lastReadAt, t.lastMessageAuthorId),
   ).length;
 
-  const privateUnread = (privateThreads ?? []).filter(
-    (t) => t.lastMessageAuthorId && t.lastMessageAuthorId !== userId,
+  const privateUnread = (privateThreads ?? []).filter((t) =>
+    isUnread(t.lastMessageAt, t.lastReadAt, t.lastMessageAuthorId),
   ).length;
 
   return matchUnread + privateUnread;
+}
+
+export function useMarkThreadRead() {
+  const userId = useSession((s) => s.user?.id);
+  const queryClient = useQueryClient();
+  return useCallback(
+    (threadType: 'match' | 'private', threadId: string) => {
+      if (!userId) return;
+      void markThreadRead(threadType, threadId, userId).then(() => {
+        void queryClient.invalidateQueries({ queryKey: ['chat-threads'] });
+        void queryClient.invalidateQueries({ queryKey: ['private-threads', userId] });
+      });
+    },
+    [userId, queryClient],
+  );
 }
 
 export function usePrivateChat(otherId: string | undefined) {

@@ -18,7 +18,7 @@ import { PressableScale } from '@/components/ui/PressableScale';
 import { Screen } from '@/components/ui/Screen';
 import { Text } from '@/components/ui/Text';
 import { TextInput } from '@/components/ui/TextInput';
-import { usePrivateChat } from '@/hooks/useChat';
+import { useMarkThreadRead, usePrivateChat } from '@/hooks/useChat';
 import { useProfile } from '@/hooks/useProfiles';
 import { useColors } from '@/hooks/useColors';
 import { useSession } from '@/store/session';
@@ -36,16 +36,24 @@ export default function DirectChatScreen() {
   const s = useMemo(() => makeStyles(c, insets.bottom), [c, insets.bottom]);
 
   const { data: otherUser } = useProfile(otherId);
-  const { messages, loading, error, send } = usePrivateChat(otherId);
+  const { messages, loading, error, send, threadId } = usePrivateChat(otherId);
+  const markRead = useMarkThreadRead();
   const [text, setText] = useState('');
   const [deleteOpen, setDeleteOpen] = useState(false);
   const scrollRef = useRef<ScrollView>(null);
+  const grouped = useMemo(() => groupByDay(messages), [messages]);
 
+  // Scroll to bottom when new messages arrive
   useEffect(() => {
     if (messages.length > 0) {
       setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 80);
     }
   }, [messages.length]);
+
+  // Mark thread as read on mount and when new messages arrive
+  useEffect(() => {
+    if (threadId) markRead('private', threadId);
+  }, [threadId, messages.length, markRead]);
 
   const handleSend = async () => {
     const body = text.trim();
@@ -100,8 +108,17 @@ export default function DirectChatScreen() {
                 </Text>
               </View>
             ) : null}
-            {messages.map((msg) => (
-              <DirectBubble key={msg.id} message={msg} myId={userId ?? ''} c={c} />
+            {grouped.map(({ day, items }) => (
+              <View key={day} style={s.group}>
+                <View style={s.daySep}>
+                  <View style={s.dayLine} />
+                  <Text variant="caption" color="textTertiary">{day}</Text>
+                  <View style={s.dayLine} />
+                </View>
+                {items.map((msg) => (
+                  <DirectBubble key={msg.id} message={msg} myId={userId ?? ''} c={c} />
+                ))}
+              </View>
             ))}
           </ScrollView>
 
@@ -127,6 +144,23 @@ export default function DirectChatScreen() {
       )}
     </Screen>
   );
+}
+
+function groupByDay(msgs: ChatMessageData[]): { day: string; items: ChatMessageData[] }[] {
+  const map = new Map<string, ChatMessageData[]>();
+  for (const m of msgs) {
+    const key = labelDay(new Date(m.sentAt));
+    map.set(key, [...(map.get(key) ?? []), m]);
+  }
+  return Array.from(map.entries()).map(([day, items]) => ({ day, items }));
+}
+
+function labelDay(d: Date): string {
+  const today = new Date();
+  const yesterday = new Date(today.getTime() - 86_400_000);
+  if (d.toDateString() === today.toDateString()) return 'Hoy';
+  if (d.toDateString() === yesterday.toDateString()) return 'Ayer';
+  return d.toLocaleDateString('es-VE', { day: 'numeric', month: 'short' });
 }
 
 function DirectBubble({
@@ -172,6 +206,9 @@ function makeStyles(c: ColorPalette, bottomInset = 0) {
     emptyWrap: { flex: 1, alignItems: 'center', paddingTop: spacing.huge },
     headerUser: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
     scroll: { padding: spacing.lg, gap: spacing.sm, flexGrow: 1 },
+    group: { gap: spacing.sm },
+    daySep: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: spacing.sm },
+    dayLine: { flex: 1, height: 1, backgroundColor: c.border },
     bubbleRow: { flexDirection: 'row', alignItems: 'flex-end', gap: spacing.sm, maxWidth: '85%' },
     alignRight: { alignSelf: 'flex-end', justifyContent: 'flex-end' },
     alignLeft: { alignSelf: 'flex-start' },
