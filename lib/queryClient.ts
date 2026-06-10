@@ -1,5 +1,10 @@
-import { QueryClient } from '@tanstack/react-query';
-import { Alert } from 'react-native';
+import { focusManager, QueryClient } from '@tanstack/react-query';
+import { Alert, AppState } from 'react-native';
+
+// Pause refetchInterval / focus refetches while app is backgrounded
+AppState.addEventListener('change', (state) => {
+  focusManager.setFocused(state === 'active');
+});
 
 let lastNetworkAlertAt = 0;
 const ALERT_COOLDOWN_MS = 30_000;
