@@ -280,6 +280,13 @@ function MatchChatRow({
             {title}
           </Text>
           {lastTime ? <Text variant="caption" color="textTertiary">{lastTime}</Text> : null}
+          {thread.unreadCount > 0 ? (
+            <View style={s.unreadPill}>
+              <Text variant="caption" style={{ color: c.textOnPrimary }}>
+                {thread.unreadCount > 99 ? '99+' : thread.unreadCount}
+              </Text>
+            </View>
+          ) : null}
         </View>
         <Text variant="small" color="textSecondary" numberOfLines={1}>
           {thread.lastMessage ?? 'Sin mensajes aún'}
@@ -313,6 +320,13 @@ function PrivateChatRow({
             {thread.otherUser.name}
           </Text>
           {lastTime ? <Text variant="caption" color="textTertiary">{lastTime}</Text> : null}
+          {thread.unreadCount > 0 ? (
+            <View style={s.unreadPill}>
+              <Text variant="caption" style={{ color: c.textOnPrimary }}>
+                {thread.unreadCount > 99 ? '99+' : thread.unreadCount}
+              </Text>
+            </View>
+          ) : null}
         </View>
         <Text variant="small" color="textSecondary" numberOfLines={1}>
           {thread.lastMessage ?? 'Sin mensajes aún'}
@@ -344,5 +358,14 @@ function makeStyles(c: ColorPalette) {
     },
     col: { flex: 1, gap: 2 },
     titleRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+    unreadPill: {
+      minWidth: 20,
+      height: 20,
+      borderRadius: 10,
+      paddingHorizontal: 5,
+      backgroundColor: c.primary,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
   });
 }

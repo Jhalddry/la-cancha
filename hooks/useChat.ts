@@ -208,22 +208,8 @@ export function useUnreadChatCount(): number {
 
   if (!userId) return 0;
 
-  const isUnread = (lastMessageAt?: string, lastReadAt?: string, lastAuthorId?: string): boolean => {
-    if (!lastMessageAt) return false;
-    if (!lastAuthorId) return false; // empty thread — lastMessageAt is just the thread's updated_at fallback
-    if (lastAuthorId === userId) return false; // own message never unread
-    if (!lastReadAt) return true; // never read
-    return new Date(lastMessageAt) > new Date(lastReadAt);
-  };
-
-  const matchUnread = (threads ?? []).filter((t) =>
-    isUnread(t.lastMessageAt, t.lastReadAt, t.lastMessageAuthorId),
-  ).length;
-
-  const privateUnread = (privateThreads ?? []).filter((t) =>
-    isUnread(t.lastMessageAt, t.lastReadAt, t.lastMessageAuthorId),
-  ).length;
-
+  const matchUnread = (threads ?? []).reduce((sum, t) => sum + t.unreadCount, 0);
+  const privateUnread = (privateThreads ?? []).reduce((sum, t) => sum + t.unreadCount, 0);
   return matchUnread + privateUnread;
 }
 

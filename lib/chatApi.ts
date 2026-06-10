@@ -31,6 +31,7 @@ export interface ChatThreadData {
   lastMessageAt?: string;
   lastMessageAuthorId?: string;
   lastReadAt?: string;
+  unreadCount: number;
 }
 
 // ─── Thread ───────────────────────────────────────────────────────────────────
@@ -220,6 +221,7 @@ export interface PrivateThreadData {
   lastMessageAt?: string;
   lastMessageAuthorId?: string;
   lastReadAt?: string;
+  unreadCount: number;
 }
 
 // ─── Private DM API ──────────────────────────────────────────────────────────
@@ -376,6 +378,16 @@ export async function fetchMyPrivateThreads(userId: string): Promise<PrivateThre
     }
   }
 
+  const unreadByThread = new Map<string, number>();
+  for (const msg of allMsgs ?? []) {
+    const m = msg as { thread_id: string; sent_at: string; author_id: string };
+    if (m.author_id === currentUserId) continue;
+    const readAt = readsMap.get(m.thread_id);
+    if (!readAt || new Date(m.sent_at) > new Date(readAt)) {
+      unreadByThread.set(m.thread_id, (unreadByThread.get(m.thread_id) ?? 0) + 1);
+    }
+  }
+
   return typedRows.map((r) => {
     const otherId = r.user1_id === userId ? r.user2_id : r.user1_id;
     const other = profileMap.get(otherId);
@@ -391,6 +403,7 @@ export async function fetchMyPrivateThreads(userId: string): Promise<PrivateThre
       lastMessageAt: lastMsg?.sentAt ?? r.updated_at,
       lastMessageAuthorId: lastMsg?.authorId,
       lastReadAt: readsMap.get(r.id),
+      unreadCount: unreadByThread.get(r.id) ?? 0,
     };
   });
 }
@@ -441,6 +454,16 @@ export async function fetchMyThreads(): Promise<ChatThreadData[]> {
     const m = msg as unknown as { thread_id: string; body: string; sent_at: string; author_id: string };
     if (!lastMsgByThread.has(m.thread_id)) {
       lastMsgByThread.set(m.thread_id, { body: m.body, sentAt: m.sent_at, authorId: m.author_id });
+    }
+  }
+
+  const unreadByThread = new Map<string, number>();
+  for (const msg of allMsgs ?? []) {
+    const m = msg as unknown as { thread_id: string; sent_at: string; author_id: string };
+    if (m.author_id === currentUserId) continue;
+    const readAt = readsMap.get(m.thread_id);
+    if (!readAt || new Date(m.sent_at) > new Date(readAt)) {
+      unreadByThread.set(m.thread_id, (unreadByThread.get(m.thread_id) ?? 0) + 1);
     }
   }
 
@@ -496,6 +519,7 @@ export async function fetchMyThreads(): Promise<ChatThreadData[]> {
       lastMessageAt: lastMsg?.sentAt ?? r.updated_at,
       lastMessageAuthorId: lastMsg?.authorId,
       lastReadAt: readsMap.get(r.id),
+      unreadCount: unreadByThread.get(r.id) ?? 0,
     };
   });
 }
