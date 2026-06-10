@@ -155,7 +155,7 @@ export function useChat(matchId: string | undefined) {
     return () => {
       void supabase.removeChannel(channel);
     };
-  }, [threadId]);
+  }, [threadId, userId]);
 
   // Read receipts: others' last_read_at + realtime updates on chat_reads
   useEffect(() => {

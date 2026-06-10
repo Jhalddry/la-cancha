@@ -318,7 +318,6 @@ function makeStyles(c: ColorPalette, bottomInset = 0) {
       borderColor: c.border,
       borderBottomLeftRadius: 4,
     },
-    timeText: {},
     timeRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2 },
     timeRight: { justifyContent: 'flex-end' },
     timeLeft: { justifyContent: 'flex-start', marginLeft: spacing.sm },
