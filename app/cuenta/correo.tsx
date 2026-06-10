@@ -40,7 +40,7 @@ export default function CambiarCorreoScreen() {
     const e: Record<string, string> = {};
     if (!newEmail) e.newEmail = 'Ingresa el nuevo correo';
     else if (!isValidEmail(newEmail)) e.newEmail = 'Correo inválido';
-    else if (newEmail.trim().toLowerCase() === currentEmail.toLowerCase()) e.newEmail = 'Es el mismo correo actual';
+    else if (newEmail.trim().toLowerCase() === currentEmail.trim().toLowerCase()) e.newEmail = 'Es el mismo correo actual';
     if (!confirmEmail) e.confirmEmail = 'Confirma el correo';
     else if (confirmEmail.trim().toLowerCase() !== newEmail.trim().toLowerCase())
       e.confirmEmail = 'Los correos no coinciden';
