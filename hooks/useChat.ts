@@ -205,7 +205,7 @@ export function useChat(matchId: string | undefined) {
     ]);
 
     try {
-      await sendMessage(threadId, userId, trimmed);
+      await sendMessage(threadId, userId, trimmed, matchId);
       void queryClient.invalidateQueries({ queryKey: ['chat-threads'] });
     } catch {
       // Roll back optimistic message

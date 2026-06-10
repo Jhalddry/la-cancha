@@ -128,6 +128,7 @@ export async function sendMessage(
   threadId: string,
   authorId: string,
   body: string,
+  matchId?: string,
 ): Promise<void> {
   const { error } = await supabase
     .from('chat_messages')
@@ -137,16 +138,19 @@ export async function sendMessage(
   // Fire-and-forget push to other participants
   void (async () => {
     try {
-      const { data: thread } = await supabase
-        .from('chat_threads')
-        .select('match_id')
-        .eq('id', threadId)
-        .maybeSingle();
-      const matchId = thread?.match_id as string | undefined;
-      if (!matchId) return;
+      let resolvedMatchId = matchId;
+      if (!resolvedMatchId) {
+        const { data: thread } = await supabase
+          .from('chat_threads')
+          .select('match_id')
+          .eq('id', threadId)
+          .maybeSingle();
+        resolvedMatchId = thread?.match_id as string | undefined;
+      }
+      if (!resolvedMatchId) return;
 
       const [participants, { data: author }] = await Promise.all([
-        fetchThreadParticipants(matchId),
+        fetchThreadParticipants(resolvedMatchId),
         supabase.from('profiles').select('name').eq('id', authorId).maybeSingle(),
       ]);
       const authorName = (author?.name as string | undefined) ?? 'Alguien';
@@ -155,7 +159,7 @@ export async function sendMessage(
       await Promise.all(
         participants
           .filter((p) => p.id !== authorId)
-          .map((p) => sendPushToUser(p.id, `💬 ${authorName}`, preview, `/chat/${matchId}`)),
+          .map((p) => sendPushToUser(p.id, `💬 ${authorName}`, preview, `/chat/${resolvedMatchId}`)),
       );
     } catch {
       // push failures never block sending
@@ -373,21 +377,14 @@ export async function sendPrivateMessage(
   // Fire-and-forget push to the other user
   void (async () => {
     try {
-      const { data: thread } = await supabase
-        .from('private_threads')
-        .select('user1_id, user2_id')
-        .eq('id', threadId)
-        .maybeSingle();
-      if (!thread) return;
-      const t = thread as { user1_id: string; user2_id: string };
+      const [threadResult, authorResult] = await Promise.all([
+        supabase.from('private_threads').select('user1_id, user2_id').eq('id', threadId).maybeSingle(),
+        supabase.from('profiles').select('name').eq('id', authorId).maybeSingle(),
+      ]);
+      if (!threadResult.data) return;
+      const t = threadResult.data as { user1_id: string; user2_id: string };
       const otherId = t.user1_id === authorId ? t.user2_id : t.user1_id;
-
-      const { data: author } = await supabase
-        .from('profiles')
-        .select('name')
-        .eq('id', authorId)
-        .maybeSingle();
-      const authorName = (author?.name as string | undefined) ?? 'Alguien';
+      const authorName = (authorResult.data?.name as string | undefined) ?? 'Alguien';
       const preview = body.length > 80 ? `${body.slice(0, 77)}…` : body;
 
       await sendPushToUser(otherId, `💬 ${authorName}`, preview, `/direct/${authorId}`);
