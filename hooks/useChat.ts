@@ -29,6 +29,7 @@ export function useMyThreads() {
     queryKey: ['chat-threads'],
     queryFn: fetchMyThreads,
     staleTime: 15_000,
+    refetchInterval: 60_000,
   });
 }
 
@@ -177,6 +178,7 @@ export function useChat(matchId: string | undefined) {
 
     try {
       await sendMessage(threadId, userId, trimmed);
+      void queryClient.invalidateQueries({ queryKey: ['chat-threads'] });
     } catch {
       // Roll back optimistic message
       setMessages((prev) => prev.filter((m) => m.id !== optimisticId));
@@ -195,6 +197,7 @@ export function useMyPrivateThreads() {
     queryFn: () => fetchMyPrivateThreads(userId!),
     enabled: !!userId,
     staleTime: 15_000,
+    refetchInterval: 60_000,
   });
 }
 
