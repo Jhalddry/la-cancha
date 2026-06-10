@@ -9,6 +9,7 @@ import {
   fetchMyPrivateThreads,
   fetchMyThreads,
   fetchOrCreatePrivateThread,
+  fetchOthersLastReadAt,
   fetchPrivateMessages,
   fetchThreadByMatchId,
   fetchThreadParticipants,
@@ -29,6 +30,7 @@ export function useMyThreads() {
     queryKey: ['chat-threads'],
     queryFn: fetchMyThreads,
     staleTime: 15_000,
+    refetchInterval: 60_000,
   });
 }
 
@@ -41,6 +43,7 @@ export function useChat(matchId: string | undefined) {
   const [participants, setParticipants] = useState<Map<string, ChatParticipant>>(new Map());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [othersReadAt, setOthersReadAt] = useState<string | null>(null);
 
   // Keep a stable ref so the realtime callback always has fresh participant data
   const participantsRef = useRef(participants);
@@ -152,7 +155,33 @@ export function useChat(matchId: string | undefined) {
     return () => {
       void supabase.removeChannel(channel);
     };
-  }, [threadId]);
+  }, [threadId, userId]);
+
+  // Read receipts: others' last_read_at + realtime updates on chat_reads
+  useEffect(() => {
+    if (!threadId || !userId) return;
+
+    void fetchOthersLastReadAt('match', threadId, userId).then(setOthersReadAt);
+
+    const channel = supabase
+      .channel(`chat-reads:${threadId}`)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'chat_reads', filter: `thread_id=eq.${threadId}` },
+        (payload) => {
+          const row = payload.new as { user_id?: string; last_read_at?: string };
+          if (!row?.user_id || row.user_id === userId || !row.last_read_at) return;
+          setOthersReadAt((prev) =>
+            !prev || new Date(row.last_read_at!) > new Date(prev) ? row.last_read_at! : prev,
+          );
+        },
+      )
+      .subscribe();
+
+    return () => {
+      void supabase.removeChannel(channel);
+    };
+  }, [threadId, userId]);
 
   const send = async (body: string) => {
     if (!threadId || !userId || !body.trim()) return;
@@ -176,14 +205,15 @@ export function useChat(matchId: string | undefined) {
     ]);
 
     try {
-      await sendMessage(threadId, userId, trimmed);
+      await sendMessage(threadId, userId, trimmed, matchId);
+      void queryClient.invalidateQueries({ queryKey: ['chat-threads'] });
     } catch {
       // Roll back optimistic message
       setMessages((prev) => prev.filter((m) => m.id !== optimisticId));
     }
   };
 
-  return { messages, participants, loading, error, send, threadId };
+  return { messages, participants, loading, error, send, threadId, othersReadAt };
 }
 
 // ─── Private DM hooks ────────────────────────────────────────────────────────
@@ -195,6 +225,7 @@ export function useMyPrivateThreads() {
     queryFn: () => fetchMyPrivateThreads(userId!),
     enabled: !!userId,
     staleTime: 15_000,
+    refetchInterval: 60_000,
   });
 }
 
@@ -205,21 +236,8 @@ export function useUnreadChatCount(): number {
 
   if (!userId) return 0;
 
-  const isUnread = (lastMessageAt?: string, lastReadAt?: string, lastAuthorId?: string): boolean => {
-    if (!lastMessageAt) return false;
-    if (lastAuthorId === userId) return false; // own message never unread
-    if (!lastReadAt) return true; // never read
-    return new Date(lastMessageAt) > new Date(lastReadAt);
-  };
-
-  const matchUnread = (threads ?? []).filter((t) =>
-    isUnread(t.lastMessageAt, t.lastReadAt, t.lastMessageAuthorId),
-  ).length;
-
-  const privateUnread = (privateThreads ?? []).filter((t) =>
-    isUnread(t.lastMessageAt, t.lastReadAt, t.lastMessageAuthorId),
-  ).length;
-
+  const matchUnread = (threads ?? []).reduce((sum, t) => sum + t.unreadCount, 0);
+  const privateUnread = (privateThreads ?? []).reduce((sum, t) => sum + t.unreadCount, 0);
   return matchUnread + privateUnread;
 }
 

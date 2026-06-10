@@ -1,6 +1,6 @@
 import { useRouter } from 'expo-router';
 import { CheckCircle, EnvelopeSimple } from 'phosphor-react-native';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Alert, ScrollView, StyleSheet, View } from 'react-native';
 
 import { BackHeader } from '@/components/ui/BackHeader';
@@ -10,10 +10,9 @@ import { Screen } from '@/components/ui/Screen';
 import { Text } from '@/components/ui/Text';
 import { TextInput } from '@/components/ui/TextInput';
 import { useColors } from '@/hooks/useColors';
+import { supabase } from '@/lib/supabase';
 import { spacing } from '@/theme';
 import type { ColorPalette } from '@/theme/palettes';
-
-const CURRENT_EMAIL = 'jugador@lacancha.app';
 
 function isValidEmail(v: string) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v.trim());
@@ -24,32 +23,43 @@ export default function CambiarCorreoScreen() {
   const c = useColors();
   const s = useMemo(() => makeStyles(c), [c]);
 
+  const [currentEmail, setCurrentEmail] = useState<string>('');
   const [newEmail, setNewEmail] = useState('');
   const [confirmEmail, setConfirmEmail] = useState('');
   const [tried, setTried] = useState(false);
   const [sent, setSent] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    void supabase.auth.getUser().then(({ data }) => {
+      if (data.user?.email) setCurrentEmail(data.user.email);
+    });
+  }, []);
 
   const errors = useMemo(() => {
     const e: Record<string, string> = {};
     if (!newEmail) e.newEmail = 'Ingresa el nuevo correo';
     else if (!isValidEmail(newEmail)) e.newEmail = 'Correo inválido';
-    else if (newEmail.trim().toLowerCase() === CURRENT_EMAIL) e.newEmail = 'Es el mismo correo actual';
+    else if (newEmail.trim().toLowerCase() === currentEmail.trim().toLowerCase()) e.newEmail = 'Es el mismo correo actual';
     if (!confirmEmail) e.confirmEmail = 'Confirma el correo';
     else if (confirmEmail.trim().toLowerCase() !== newEmail.trim().toLowerCase())
       e.confirmEmail = 'Los correos no coinciden';
     return e;
-  }, [newEmail, confirmEmail]);
+  }, [newEmail, confirmEmail, currentEmail]);
 
   const shown = tried ? errors : {};
 
-  const handleSave = () => {
+  const handleSave = async () => {
     setTried(true);
     if (Object.keys(errors).length > 0) return;
-    Alert.alert(
-      'Verificación enviada',
-      `Hemos enviado un enlace a ${newEmail.trim()}. Confirma el correo para completar el cambio.`,
-      [{ text: 'Entendido', onPress: () => setSent(true) }],
-    );
+    setSaving(true);
+    const { error } = await supabase.auth.updateUser({ email: newEmail.trim() });
+    setSaving(false);
+    if (error) {
+      Alert.alert('Error', error.message);
+      return;
+    }
+    setSent(true);
   };
 
   return (
@@ -69,7 +79,7 @@ export default function CambiarCorreoScreen() {
                 CORREO ACTUAL
               </Text>
               <Text variant="bodyMedium" color="textPrimary">
-                {CURRENT_EMAIL}
+                {currentEmail || '—'}
               </Text>
             </View>
           </View>
@@ -125,7 +135,11 @@ export default function CambiarCorreoScreen() {
 
       {!sent ? (
         <View style={s.footer}>
-          <Button label="Enviar verificación" onPress={handleSave} />
+          <Button
+            label={saving ? 'Enviando…' : 'Enviar verificación'}
+            onPress={() => void handleSave()}
+            disabled={saving}
+          />
         </View>
       ) : null}
     </Screen>

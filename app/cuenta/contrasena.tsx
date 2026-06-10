@@ -3,6 +3,7 @@ import { CheckCircle, Eye, EyeSlash } from 'phosphor-react-native';
 import { useMemo, useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 
+import { supabase } from '@/lib/supabase';
 import { BackHeader } from '@/components/ui/BackHeader';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
@@ -27,6 +28,8 @@ export default function CambiarContrasenaScreen() {
   const [showConfirm, setShowConfirm] = useState(false);
   const [tried, setTried] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [authError, setAuthError] = useState<string | null>(null);
 
   const errors = useMemo(() => {
     const e: Record<string, string> = {};
@@ -41,10 +44,39 @@ export default function CambiarContrasenaScreen() {
 
   const shown = tried ? errors : {};
 
-  const handleSave = () => {
+  const handleSave = async () => {
     setTried(true);
+    setAuthError(null);
     if (Object.keys(errors).length > 0) return;
-    setSaved(true);
+
+    setSaving(true);
+    try {
+      const { data } = await supabase.auth.getUser();
+      const email = data.user?.email;
+      if (!email) {
+        setAuthError('No se pudo verificar tu sesión.');
+        return;
+      }
+
+      // Verify current password by re-signing in
+      const { error: signInError } = await supabase.auth.signInWithPassword({
+        email,
+        password: current,
+      });
+      if (signInError) {
+        setAuthError('La contraseña actual es incorrecta.');
+        return;
+      }
+
+      const { error: updateError } = await supabase.auth.updateUser({ password: next });
+      if (updateError) {
+        setAuthError(updateError.message);
+        return;
+      }
+      setSaved(true);
+    } finally {
+      setSaving(false);
+    }
   };
 
   function EyeToggle({ visible, onToggle }: { visible: boolean; onToggle: () => void }) {
@@ -103,7 +135,7 @@ export default function CambiarContrasenaScreen() {
           onChangeText={setCurrent}
           secureTextEntry={!showCurrent}
           placeholder="••••••••"
-          error={shown.current}
+          error={shown.current ?? authError ?? undefined}
           trailing={
             <EyeToggle visible={showCurrent} onToggle={() => setShowCurrent((v) => !v)} />
           }
@@ -146,7 +178,11 @@ export default function CambiarContrasenaScreen() {
       </ScrollView>
 
       <View style={s.footer}>
-        <Button label="Guardar contraseña" onPress={handleSave} />
+        <Button
+          label={saving ? 'Guardando…' : 'Guardar contraseña'}
+          onPress={() => void handleSave()}
+          disabled={saving}
+        />
       </View>
     </Screen>
   );

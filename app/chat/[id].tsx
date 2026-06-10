@@ -1,5 +1,5 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { PaperPlaneTilt, Users } from 'phosphor-react-native';
+import { Check, Checks, PaperPlaneTilt, Users } from 'phosphor-react-native';
 import { useEffect, useMemo, useRef } from 'react';
 import {
   ActivityIndicator,
@@ -39,7 +39,7 @@ export default function ChatScreen() {
   const s = useMemo(() => makeStyles(c, insets.bottom), [c, insets.bottom]);
 
   const { data: match } = useMatch(matchId);
-  const { messages, loading, error, send, threadId } = useChat(matchId);
+  const { messages, loading, error, send, threadId, othersReadAt } = useChat(matchId);
   const { mutate: deleteMessage } = useDeleteMessage();
   const markRead = useMarkThreadRead();
   const [text, setText] = useState('');
@@ -131,6 +131,7 @@ export default function ChatScreen() {
                     message={msg}
                     myId={userId ?? ''}
                     c={c}
+                    othersReadAt={othersReadAt}
                     onDelete={(id) => setDeleteMessageId(id)}
                     onAvatarPress={(authorId) => router.push(`/perfil/${authorId}`)}
                   />
@@ -207,12 +208,14 @@ function Bubble({
   message,
   myId,
   c,
+  othersReadAt,
   onDelete,
   onAvatarPress,
 }: {
   message: ChatMessageData;
   myId: string;
   c: ColorPalette;
+  othersReadAt?: string | null;
   onDelete?: (id: string) => void;
   onAvatarPress?: (authorId: string) => void;
 }) {
@@ -244,13 +247,18 @@ function Bubble({
             </Text>
           </View>
         </PressableScale>
-        <Text
-          variant="caption"
-          color="textTertiary"
-          style={[s.timeText, isMe ? s.timeRight : s.timeLeft]}
-        >
-          {timeOnly(message.sentAt)}
-        </Text>
+        <View style={[s.timeRow, isMe ? s.timeRight : s.timeLeft]}>
+          <Text variant="caption" color="textTertiary">
+            {timeOnly(message.sentAt)}
+          </Text>
+          {isMe && !isOptimistic ? (
+            othersReadAt && new Date(othersReadAt) >= new Date(message.sentAt) ? (
+              <Checks size={14} color={c.primary} weight="bold" />
+            ) : (
+              <Check size={14} color={c.textTertiary} weight="regular" />
+            )
+          ) : null}
+        </View>
       </View>
     </View>
   );
@@ -310,9 +318,9 @@ function makeStyles(c: ColorPalette, bottomInset = 0) {
       borderColor: c.border,
       borderBottomLeftRadius: 4,
     },
-    timeText: { marginTop: 2 },
-    timeRight: { textAlign: 'right' },
-    timeLeft: { textAlign: 'left', marginLeft: spacing.sm },
+    timeRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2 },
+    timeRight: { justifyContent: 'flex-end' },
+    timeLeft: { justifyContent: 'flex-start', marginLeft: spacing.sm },
     composer: {
       flexDirection: 'row',
       alignItems: 'center',

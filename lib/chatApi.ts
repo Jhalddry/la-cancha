@@ -1,4 +1,5 @@
 import { supabase } from '@/lib/supabase';
+import { sendPushToUser } from '@/lib/pushNotifications';
 
 const MINI_PROFILE = 'id, name, avatar_url';
 
@@ -31,6 +32,7 @@ export interface ChatThreadData {
   lastMessageAt?: string;
   lastMessageAuthorId?: string;
   lastReadAt?: string;
+  unreadCount: number;
 }
 
 // ─── Thread ───────────────────────────────────────────────────────────────────
@@ -126,11 +128,43 @@ export async function sendMessage(
   threadId: string,
   authorId: string,
   body: string,
+  matchId?: string,
 ): Promise<void> {
   const { error } = await supabase
     .from('chat_messages')
     .insert({ thread_id: threadId, author_id: authorId, body });
   if (error) throw new Error(error.message);
+
+  // Fire-and-forget push to other participants
+  void (async () => {
+    try {
+      let resolvedMatchId = matchId;
+      if (!resolvedMatchId) {
+        const { data: thread } = await supabase
+          .from('chat_threads')
+          .select('match_id')
+          .eq('id', threadId)
+          .maybeSingle();
+        resolvedMatchId = thread?.match_id as string | undefined;
+      }
+      if (!resolvedMatchId) return;
+
+      const [participants, { data: author }] = await Promise.all([
+        fetchThreadParticipants(resolvedMatchId),
+        supabase.from('profiles').select('name').eq('id', authorId).maybeSingle(),
+      ]);
+      const authorName = (author?.name as string | undefined) ?? 'Alguien';
+      const preview = body.length > 80 ? `${body.slice(0, 77)}…` : body;
+
+      await Promise.all(
+        participants
+          .filter((p) => p.id !== authorId)
+          .map((p) => sendPushToUser(p.id, `💬 ${authorName}`, preview, `/chat/${resolvedMatchId}`)),
+      );
+    } catch {
+      // push failures never block sending
+    }
+  })();
 }
 
 export async function deleteMessage(messageId: string): Promise<void> {
@@ -220,6 +254,7 @@ export interface PrivateThreadData {
   lastMessageAt?: string;
   lastMessageAuthorId?: string;
   lastReadAt?: string;
+  unreadCount: number;
 }
 
 // ─── Private DM API ──────────────────────────────────────────────────────────
@@ -235,6 +270,27 @@ export async function markThreadRead(
     { thread_type: threadType, thread_id: threadId, user_id: userId, last_read_at: new Date().toISOString() },
     { onConflict: 'thread_type,thread_id,user_id' },
   );
+}
+
+/** Latest last_read_at among OTHER users in a thread (for read receipts). */
+export async function fetchOthersLastReadAt(
+  threadType: 'match' | 'private',
+  threadId: string,
+  myId: string,
+): Promise<string | null> {
+  const { data } = await supabase
+    .from('chat_reads')
+    .select('user_id, last_read_at')
+    .eq('thread_type', threadType)
+    .eq('thread_id', threadId)
+    .neq('user_id', myId);
+
+  let latest: string | null = null;
+  for (const row of data ?? []) {
+    const r = row as { user_id: string; last_read_at: string };
+    if (!latest || new Date(r.last_read_at) > new Date(latest)) latest = r.last_read_at;
+  }
+  return latest;
 }
 
 /** Find or create a private thread between two users. Always stores user1_id < user2_id. */
@@ -317,6 +373,25 @@ export async function sendPrivateMessage(
     .from('private_threads')
     .update({ updated_at: new Date().toISOString() })
     .eq('id', threadId);
+
+  // Fire-and-forget push to the other user
+  void (async () => {
+    try {
+      const [threadResult, authorResult] = await Promise.all([
+        supabase.from('private_threads').select('user1_id, user2_id').eq('id', threadId).maybeSingle(),
+        supabase.from('profiles').select('name').eq('id', authorId).maybeSingle(),
+      ]);
+      if (!threadResult.data) return;
+      const t = threadResult.data as { user1_id: string; user2_id: string };
+      const otherId = t.user1_id === authorId ? t.user2_id : t.user1_id;
+      const authorName = (authorResult.data?.name as string | undefined) ?? 'Alguien';
+      const preview = body.length > 80 ? `${body.slice(0, 77)}…` : body;
+
+      await sendPushToUser(otherId, `💬 ${authorName}`, preview, `/direct/${authorId}`);
+    } catch {
+      // push failures never block sending
+    }
+  })();
 }
 
 export async function fetchMyPrivateThreads(userId: string): Promise<PrivateThreadData[]> {
@@ -361,6 +436,7 @@ export async function fetchMyPrivateThreads(userId: string): Promise<PrivateThre
       (reads ?? []).map((r: { thread_id: string; last_read_at: string }) => [r.thread_id, r.last_read_at]),
     );
   }
+  if (!currentUserId) return [];
 
   const { data: allMsgs } = await supabase
     .from('private_messages')
@@ -375,6 +451,12 @@ export async function fetchMyPrivateThreads(userId: string): Promise<PrivateThre
       lastMsgMap.set(m.thread_id, { body: m.body, sentAt: m.sent_at, authorId: m.author_id });
     }
   }
+
+  const unreadByThread = buildUnreadMap(
+    (allMsgs ?? []) as { thread_id: string; sent_at: string; author_id: string }[],
+    readsMap,
+    currentUserId,
+  );
 
   return typedRows.map((r) => {
     const otherId = r.user1_id === userId ? r.user2_id : r.user1_id;
@@ -391,8 +473,27 @@ export async function fetchMyPrivateThreads(userId: string): Promise<PrivateThre
       lastMessageAt: lastMsg?.sentAt ?? r.updated_at,
       lastMessageAuthorId: lastMsg?.authorId,
       lastReadAt: readsMap.get(r.id),
+      unreadCount: unreadByThread.get(r.id) ?? 0,
     };
   });
+}
+
+// ─── Shared unread counting helper ───────────────────────────────────────────
+
+function buildUnreadMap(
+  msgs: { thread_id: string; sent_at: string; author_id: string }[],
+  readsMap: Map<string, string>,
+  currentUserId: string,
+): Map<string, number> {
+  const unreadByThread = new Map<string, number>();
+  for (const m of msgs) {
+    if (m.author_id === currentUserId) continue;
+    const readAt = readsMap.get(m.thread_id);
+    if (!readAt || new Date(m.sent_at) > new Date(readAt)) {
+      unreadByThread.set(m.thread_id, (unreadByThread.get(m.thread_id) ?? 0) + 1);
+    }
+  }
+  return unreadByThread;
 }
 
 // ─── Thread list (chats tab) ──────────────────────────────────────────────────
@@ -428,6 +529,7 @@ export async function fetchMyThreads(): Promise<ChatThreadData[]> {
       (reads ?? []).map((r: { thread_id: string; last_read_at: string }) => [r.thread_id, r.last_read_at]),
     );
   }
+  if (!currentUserId) return [];
 
   // Last message per thread (batch)
   const { data: allMsgs } = await supabase
@@ -443,6 +545,12 @@ export async function fetchMyThreads(): Promise<ChatThreadData[]> {
       lastMsgByThread.set(m.thread_id, { body: m.body, sentAt: m.sent_at, authorId: m.author_id });
     }
   }
+
+  const unreadByThread = buildUnreadMap(
+    (allMsgs ?? []) as { thread_id: string; sent_at: string; author_id: string }[],
+    readsMap,
+    currentUserId,
+  );
 
   // Participants per match: joined players + organizers (batch)
   const { data: partRows } = await supabase
@@ -496,6 +604,7 @@ export async function fetchMyThreads(): Promise<ChatThreadData[]> {
       lastMessageAt: lastMsg?.sentAt ?? r.updated_at,
       lastMessageAuthorId: lastMsg?.authorId,
       lastReadAt: readsMap.get(r.id),
+      unreadCount: unreadByThread.get(r.id) ?? 0,
     };
   });
 }
