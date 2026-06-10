@@ -207,6 +207,7 @@ export function useUnreadChatCount(): number {
 
   const isUnread = (lastMessageAt?: string, lastReadAt?: string, lastAuthorId?: string): boolean => {
     if (!lastMessageAt) return false;
+    if (!lastAuthorId) return false; // empty thread — lastMessageAt is just the thread's updated_at fallback
     if (lastAuthorId === userId) return false; // own message never unread
     if (!lastReadAt) return true; // never read
     return new Date(lastMessageAt) > new Date(lastReadAt);
