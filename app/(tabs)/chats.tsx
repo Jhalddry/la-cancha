@@ -279,7 +279,7 @@ function MatchChatRow({
           <Text variant="bodySemibold" color="textPrimary" numberOfLines={1} style={{ flex: 1 }}>
             {title}
           </Text>
-          {lastTime ? <Text variant="caption" color="textTertiary">{lastTime}</Text> : null}
+          {lastTime ? <Text variant="caption" color="textTertiary" style={{ flexShrink: 0 }}>{lastTime}</Text> : null}
           {thread.unreadCount > 0 ? (
             <View style={s.unreadPill}>
               <Text variant="caption" style={{ color: c.textOnPrimary }}>
@@ -319,7 +319,7 @@ function PrivateChatRow({
           <Text variant="bodySemibold" color="textPrimary" numberOfLines={1} style={{ flex: 1 }}>
             {thread.otherUser.name}
           </Text>
-          {lastTime ? <Text variant="caption" color="textTertiary">{lastTime}</Text> : null}
+          {lastTime ? <Text variant="caption" color="textTertiary" style={{ flexShrink: 0 }}>{lastTime}</Text> : null}
           {thread.unreadCount > 0 ? (
             <View style={s.unreadPill}>
               <Text variant="caption" style={{ color: c.textOnPrimary }}>

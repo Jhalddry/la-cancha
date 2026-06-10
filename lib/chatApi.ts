@@ -363,6 +363,7 @@ export async function fetchMyPrivateThreads(userId: string): Promise<PrivateThre
       (reads ?? []).map((r: { thread_id: string; last_read_at: string }) => [r.thread_id, r.last_read_at]),
     );
   }
+  if (!currentUserId) return [];
 
   const { data: allMsgs } = await supabase
     .from('private_messages')
@@ -378,15 +379,11 @@ export async function fetchMyPrivateThreads(userId: string): Promise<PrivateThre
     }
   }
 
-  const unreadByThread = new Map<string, number>();
-  for (const msg of allMsgs ?? []) {
-    const m = msg as { thread_id: string; sent_at: string; author_id: string };
-    if (m.author_id === currentUserId) continue;
-    const readAt = readsMap.get(m.thread_id);
-    if (!readAt || new Date(m.sent_at) > new Date(readAt)) {
-      unreadByThread.set(m.thread_id, (unreadByThread.get(m.thread_id) ?? 0) + 1);
-    }
-  }
+  const unreadByThread = buildUnreadMap(
+    (allMsgs ?? []) as { thread_id: string; sent_at: string; author_id: string }[],
+    readsMap,
+    currentUserId,
+  );
 
   return typedRows.map((r) => {
     const otherId = r.user1_id === userId ? r.user2_id : r.user1_id;
@@ -406,6 +403,24 @@ export async function fetchMyPrivateThreads(userId: string): Promise<PrivateThre
       unreadCount: unreadByThread.get(r.id) ?? 0,
     };
   });
+}
+
+// ─── Shared unread counting helper ───────────────────────────────────────────
+
+function buildUnreadMap(
+  msgs: { thread_id: string; sent_at: string; author_id: string }[],
+  readsMap: Map<string, string>,
+  currentUserId: string,
+): Map<string, number> {
+  const unreadByThread = new Map<string, number>();
+  for (const m of msgs) {
+    if (m.author_id === currentUserId) continue;
+    const readAt = readsMap.get(m.thread_id);
+    if (!readAt || new Date(m.sent_at) > new Date(readAt)) {
+      unreadByThread.set(m.thread_id, (unreadByThread.get(m.thread_id) ?? 0) + 1);
+    }
+  }
+  return unreadByThread;
 }
 
 // ─── Thread list (chats tab) ──────────────────────────────────────────────────
@@ -441,6 +456,7 @@ export async function fetchMyThreads(): Promise<ChatThreadData[]> {
       (reads ?? []).map((r: { thread_id: string; last_read_at: string }) => [r.thread_id, r.last_read_at]),
     );
   }
+  if (!currentUserId) return [];
 
   // Last message per thread (batch)
   const { data: allMsgs } = await supabase
@@ -457,15 +473,11 @@ export async function fetchMyThreads(): Promise<ChatThreadData[]> {
     }
   }
 
-  const unreadByThread = new Map<string, number>();
-  for (const msg of allMsgs ?? []) {
-    const m = msg as unknown as { thread_id: string; sent_at: string; author_id: string };
-    if (m.author_id === currentUserId) continue;
-    const readAt = readsMap.get(m.thread_id);
-    if (!readAt || new Date(m.sent_at) > new Date(readAt)) {
-      unreadByThread.set(m.thread_id, (unreadByThread.get(m.thread_id) ?? 0) + 1);
-    }
-  }
+  const unreadByThread = buildUnreadMap(
+    (allMsgs ?? []) as { thread_id: string; sent_at: string; author_id: string }[],
+    readsMap,
+    currentUserId,
+  );
 
   // Participants per match: joined players + organizers (batch)
   const { data: partRows } = await supabase
