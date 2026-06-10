@@ -239,6 +239,27 @@ export async function markThreadRead(
   );
 }
 
+/** Latest last_read_at among OTHER users in a thread (for read receipts). */
+export async function fetchOthersLastReadAt(
+  threadType: 'match' | 'private',
+  threadId: string,
+  myId: string,
+): Promise<string | null> {
+  const { data } = await supabase
+    .from('chat_reads')
+    .select('user_id, last_read_at')
+    .eq('thread_type', threadType)
+    .eq('thread_id', threadId)
+    .neq('user_id', myId);
+
+  let latest: string | null = null;
+  for (const row of data ?? []) {
+    const r = row as { user_id: string; last_read_at: string };
+    if (!latest || new Date(r.last_read_at) > new Date(latest)) latest = r.last_read_at;
+  }
+  return latest;
+}
+
 /** Find or create a private thread between two users. Always stores user1_id < user2_id. */
 export async function fetchOrCreatePrivateThread(
   myId: string,
