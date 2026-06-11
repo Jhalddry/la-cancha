@@ -18,6 +18,7 @@ import {
   sendPrivateMessage,
   type ChatMessageData,
   type ChatParticipant,
+  type ChatThreadData,
   type PrivateThreadData,
 } from '@/lib/chatApi';
 import { supabase } from '@/lib/supabase';
@@ -247,6 +248,18 @@ export function useMarkThreadRead() {
   return useCallback(
     (threadType: 'match' | 'private', threadId: string) => {
       if (!userId) return;
+
+      // Optimistic: zero the count immediately so badge clears without waiting for refetch
+      if (threadType === 'match') {
+        queryClient.setQueryData<ChatThreadData[]>(['chat-threads'], (old) =>
+          old?.map((t) => (t.id === threadId ? { ...t, unreadCount: 0 } : t)) ?? old,
+        );
+      } else {
+        queryClient.setQueryData<PrivateThreadData[]>(['private-threads', userId], (old) =>
+          old?.map((t) => (t.id === threadId ? { ...t, unreadCount: 0 } : t)) ?? old,
+        );
+      }
+
       void markThreadRead(threadType, threadId, userId).then(() => {
         void queryClient.invalidateQueries({ queryKey: ['chat-threads'] });
         void queryClient.invalidateQueries({ queryKey: ['private-threads', userId] });

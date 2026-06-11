@@ -99,6 +99,7 @@ export function useMatchesInfinite(filters: MatchFilters = {}) {
       lastPage.length === PAGE_SIZE ? allPages.length * PAGE_SIZE : undefined,
     enabled: !rejectedQuery.isLoading,
     staleTime: 30_000,
+    refetchInterval: 60_000,
   });
 }
 

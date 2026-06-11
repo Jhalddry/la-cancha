@@ -18,7 +18,9 @@
       "Bash(npm ls *)",
       "Bash(npm uninstall *)",
       "Bash(del \"C:\\\\Users\\\\User\\\\OneDrive\\\\Documents\\\\la-cancha\\\\lib\\\\sentry.ts\")",
-      "Bash(npx eas *)"
+      "Bash(npx eas *)",
+      "Bash(cd \"/c/Users/User/OneDrive/Documents/la-cancha\" && grep -rn \"profiles_username_format\" supabase/migrations/)",
+      "Bash(npx supabase *)"
     ]
   }
 }

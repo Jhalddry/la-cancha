@@ -17,9 +17,11 @@ import {
   X,
   XCircle,
 } from 'phosphor-react-native';
-import { useMemo, useState, type ReactNode } from 'react';
-import { ActivityIndicator, Modal, ScrollView, Share, StyleSheet, View } from 'react-native';
+import { useMemo, useRef, useState, type ReactNode } from 'react';
+import { ActivityIndicator, Modal, ScrollView, StyleSheet, View } from 'react-native';
 import MapView, { Marker } from 'react-native-maps';
+import { captureRef } from 'react-native-view-shot';
+import * as Sharing from 'expo-sharing';
 
 import { Avatar } from '@/components/ui/Avatar';
 import { BackHeader } from '@/components/ui/BackHeader';
@@ -34,6 +36,7 @@ import { Screen } from '@/components/ui/Screen';
 import { Sheet } from '@/components/ui/Sheet';
 import { Stars } from '@/components/ui/Stars';
 import { Text } from '@/components/ui/Text';
+import { MatchShareCard } from '@/features/match/MatchShareCard';
 import { MatchTypeBadge } from '@/features/match/MatchTypeBadge';
 import { PlayerPositions } from '@/components/feature/PlayerPositions';
 import { matchTypeMeta } from '@/features/match/matchTypeMeta';
@@ -75,6 +78,7 @@ export default function MatchDetailScreen() {
   const [leaveConfirmOpen, setLeaveConfirmOpen] = useState(false);
   const [selectedParticipant, setSelectedParticipant] = useState<MatchParticipant | null>(null);
 
+  const shareCardRef = useRef<View>(null);
   const isOrganizer = match?.organizer.id === userId;
   const { data: organizerProfile } = useProfile(match?.organizer.id);
   const { data: myStatus } = useMyParticipantStatus(!isOrganizer ? id : undefined);
@@ -100,11 +104,13 @@ export default function MatchDetailScreen() {
 
   const handleShare = async () => {
     try {
-      await Share.share({
-        message: `¡Únete a esta partida de ${labelModality(match.modality)} en ${match.location.name}! ${formatMatchTime(match.startsAt)} · ${formatPrice(match.pricePerHour, match.currency)}/h\n\nLa Cancha: lacancha.app/match/${match.id}`,
-      });
+      const available = await Sharing.isAvailableAsync();
+      if (available && shareCardRef.current) {
+        const uri = await captureRef(shareCardRef, { format: 'png', quality: 0.95, result: 'tmpfile' });
+        await Sharing.shareAsync(uri, { mimeType: 'image/png', dialogTitle: 'Compartir partida' });
+      }
     } catch {
-      // user cancelled
+      // user cancelled or capture failed
     }
   };
 
@@ -564,6 +570,15 @@ export default function MatchDetailScreen() {
           </View>
         </Modal>
       ) : null}
+
+      {/* Off-screen share card — rendered for captureRef, never visible to user */}
+      <View
+        ref={shareCardRef}
+        style={s.offScreen}
+        pointerEvents="none"
+      >
+        <MatchShareCard match={match} width={320} />
+      </View>
     </Screen>
   );
 }
@@ -939,6 +954,7 @@ function makeStyles(c: ColorPalette) {
       paddingBottom: 140,
       gap: spacing.xl,
     },
+    offScreen: { position: 'absolute', left: -9999, top: 0 },
     headerActions: { flexDirection: 'row', gap: spacing.sm },
     headerBtn: {
       width: 38,

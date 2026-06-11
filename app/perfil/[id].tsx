@@ -8,12 +8,13 @@ import {
   MapPin,
   Prohibit,
   SealCheck,
+  ShareNetwork,
   SoccerBall,
   Star,
   UserPlus,
   WarningCircle,
 } from 'phosphor-react-native';
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   ScrollView,
@@ -22,6 +23,8 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { captureRef } from 'react-native-view-shot';
+import * as Sharing from 'expo-sharing';
 
 import { ConfirmSheet } from '@/components/ui/ConfirmSheet';
 import { Avatar } from '@/components/ui/Avatar';
@@ -36,6 +39,7 @@ import { Sheet } from '@/components/ui/Sheet';
 import { Stars } from '@/components/ui/Stars';
 import { Text } from '@/components/ui/Text';
 import { MatchTypeBadge } from '@/features/match/MatchTypeBadge';
+import { PlayerShareCard } from '@/features/match/PlayerShareCard';
 import { PlayerPositions } from '@/components/feature/PlayerPositions';
 import { useColors } from '@/hooks/useColors';
 import { useInviteToMatch, useMatches, useMyMatches, usePlayerJoinedMatches, usePlayerOrganizedMatches } from '@/hooks/useMatches';
@@ -160,6 +164,20 @@ export default function PlayerProfileScreen() {
       setMessageLoading(false);
     }
   };
+  const shareCardRef = useRef<View>(null);
+
+  const handleShare = async () => {
+    try {
+      const available = await Sharing.isAvailableAsync();
+      if (available && shareCardRef.current) {
+        const uri = await captureRef(shareCardRef, { format: 'png', quality: 0.95, result: 'tmpfile' });
+        await Sharing.shareAsync(uri, { mimeType: 'image/png', dialogTitle: 'Compartir perfil' });
+      }
+    } catch {
+      // user cancelled or capture failed
+    }
+  };
+
   const [menuOpen, setMenuOpen] = useState(false);
   const [reportOpen, setReportOpen] = useState(false);
   const [reportDoneOpen, setReportDoneOpen] = useState(false);
@@ -201,16 +219,20 @@ export default function PlayerProfileScreen() {
         title=""
         transparent
         trailing={
-          // Hide menu when viewing own profile
-          id !== userId ? (
-            <PressableScale
-              style={s.menuBtn}
-              scaleTo={0.9}
-              onPress={() => setMenuOpen(true)}
-            >
-              <DotsThreeVertical size={22} color={c.textPrimary} weight="bold" />
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            <PressableScale style={s.menuBtn} scaleTo={0.9} onPress={handleShare}>
+              <ShareNetwork size={20} color={c.textPrimary} weight="regular" />
             </PressableScale>
-          ) : undefined
+            {id !== userId ? (
+              <PressableScale
+                style={s.menuBtn}
+                scaleTo={0.9}
+                onPress={() => setMenuOpen(true)}
+              >
+                <DotsThreeVertical size={22} color={c.textPrimary} weight="bold" />
+              </PressableScale>
+            ) : null}
+          </View>
         }
       />
 
@@ -781,6 +803,11 @@ export default function PlayerProfileScreen() {
           setInvitedMatchId(null);
         }}
       />
+
+      {/* Off-screen share card — rendered for captureRef, never visible to user */}
+      <View ref={shareCardRef} style={s.offScreen} pointerEvents="none">
+        <PlayerShareCard player={player} width={320} />
+      </View>
     </Screen>
   );
 }
@@ -959,6 +986,7 @@ function makeStyles(c: ColorPalette) {
       paddingBottom: 200,
       gap: spacing.xl,
     },
+    offScreen: { position: 'absolute', left: -9999, top: 0 },
     menuBtn: {
       width: 40,
       height: 40,
