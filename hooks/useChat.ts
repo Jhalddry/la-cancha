@@ -45,12 +45,17 @@ export function useChat(matchId: string | undefined) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [othersReadAt, setOthersReadAt] = useState<string | null>(null);
+  const [othersTyping, setOthersTyping] = useState<string[]>([]);
 
   // Keep a stable ref so the realtime callback always has fresh participant data
   const participantsRef = useRef(participants);
   useEffect(() => {
     participantsRef.current = participants;
   }, [participants]);
+
+  // Typing broadcast channel refs
+  const typingChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
+  const typingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Load thread + messages + participants
   useEffect(() => {
@@ -189,6 +194,45 @@ export function useChat(matchId: string | undefined) {
     };
   }, [threadId, userId]);
 
+  // Typing broadcast channel
+  useEffect(() => {
+    if (!threadId || !userId) return;
+    const ch = supabase
+      .channel(`typing:${threadId}`)
+      .on('broadcast', { event: 'typing' }, ({ payload }) => {
+        const p = payload as { userId: string; name: string; typing: boolean };
+        if (p.userId === userId) return;
+        setOthersTyping((prev) => {
+          if (p.typing && !prev.includes(p.name)) return [...prev, p.name];
+          if (!p.typing) return prev.filter((n) => n !== p.name);
+          return prev;
+        });
+        if (p.typing) {
+          setTimeout(() => setOthersTyping((cur) => cur.filter((n) => n !== p.name)), 4000);
+        }
+      })
+      .subscribe();
+    typingChannelRef.current = ch;
+    return () => {
+      if (typingTimerRef.current) clearTimeout(typingTimerRef.current);
+      void supabase.removeChannel(ch);
+      typingChannelRef.current = null;
+      setOthersTyping([]);
+    };
+  }, [threadId, userId]);
+
+  const sendTyping = useCallback(() => {
+    const ch = typingChannelRef.current;
+    if (!ch || !userId) return;
+    const me = participantsRef.current.get(userId);
+    const myName = me?.name ?? 'Usuario';
+    void ch.send({ type: 'broadcast', event: 'typing', payload: { userId, name: myName, typing: true } });
+    if (typingTimerRef.current) clearTimeout(typingTimerRef.current);
+    typingTimerRef.current = setTimeout(() => {
+      void ch.send({ type: 'broadcast', event: 'typing', payload: { userId, name: myName, typing: false } });
+    }, 3000);
+  }, [userId]);
+
   const send = async (body: string) => {
     if (!threadId || !userId || !body.trim()) return;
 
@@ -223,7 +267,7 @@ export function useChat(matchId: string | undefined) {
     }
   };
 
-  return { messages, participants, loading, error, send, threadId, othersReadAt };
+  return { messages, participants, loading, error, send, threadId, othersReadAt, othersTyping, sendTyping };
 }
 
 // ─── Private DM hooks ────────────────────────────────────────────────────────
@@ -285,6 +329,10 @@ export function usePrivateChat(otherId: string | undefined) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [othersReadAt, setOthersReadAt] = useState<string | null>(null);
+  const [othersTyping, setOthersTyping] = useState<string[]>([]);
+
+  const pmTypingChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
+  const pmTypingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     if (!userId || !otherId) return;
@@ -367,6 +415,44 @@ export function usePrivateChat(otherId: string | undefined) {
     };
   }, [threadId, userId]);
 
+  // Typing broadcast channel (private)
+  useEffect(() => {
+    if (!threadId || !userId) return;
+    const ch = supabase
+      .channel(`pm-typing:${threadId}`)
+      .on('broadcast', { event: 'typing' }, ({ payload }) => {
+        const p = payload as { userId: string; name: string; typing: boolean };
+        if (p.userId === userId) return;
+        setOthersTyping((prev) => {
+          if (p.typing && !prev.includes(p.name)) return [...prev, p.name];
+          if (!p.typing) return prev.filter((n) => n !== p.name);
+          return prev;
+        });
+        if (p.typing) {
+          setTimeout(() => setOthersTyping((cur) => cur.filter((n) => n !== p.name)), 4000);
+        }
+      })
+      .subscribe();
+    pmTypingChannelRef.current = ch;
+    return () => {
+      if (pmTypingTimerRef.current) clearTimeout(pmTypingTimerRef.current);
+      void supabase.removeChannel(ch);
+      pmTypingChannelRef.current = null;
+      setOthersTyping([]);
+    };
+  }, [threadId, userId]);
+
+  const sendTyping = useCallback(() => {
+    const ch = pmTypingChannelRef.current;
+    if (!ch || !userId) return;
+    const myName = user?.name ?? 'Usuario';
+    void ch.send({ type: 'broadcast', event: 'typing', payload: { userId, name: myName, typing: true } });
+    if (pmTypingTimerRef.current) clearTimeout(pmTypingTimerRef.current);
+    pmTypingTimerRef.current = setTimeout(() => {
+      void ch.send({ type: 'broadcast', event: 'typing', payload: { userId, name: myName, typing: false } });
+    }, 3000);
+  }, [userId, user?.name]);
+
   const send = async (body: string) => {
     if (!threadId || !userId || !body.trim()) return;
     const trimmed = body.trim();
@@ -386,7 +472,7 @@ export function usePrivateChat(otherId: string | undefined) {
     }
   };
 
-  return { messages, loading, error, send, threadId, othersReadAt };
+  return { messages, loading, error, send, threadId, othersReadAt, othersTyping, sendTyping };
 }
 
 // ─── Delete a single message ──────────────────────────────────────────────────

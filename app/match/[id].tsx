@@ -17,7 +17,7 @@ import {
   X,
   XCircle,
 } from 'phosphor-react-native';
-import { useMemo, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { ActivityIndicator, Modal, ScrollView, StyleSheet, View } from 'react-native';
 import MapView, { Marker } from 'react-native-maps';
 import { captureRef } from 'react-native-view-shot';
@@ -36,13 +36,17 @@ import { Screen } from '@/components/ui/Screen';
 import { Sheet } from '@/components/ui/Sheet';
 import { Stars } from '@/components/ui/Stars';
 import { Text } from '@/components/ui/Text';
+import { MatchPhotos } from '@/components/feature/MatchPhotos';
 import { MatchShareCard } from '@/features/match/MatchShareCard';
 import { MatchTypeBadge } from '@/features/match/MatchTypeBadge';
 import { PlayerPositions } from '@/components/feature/PlayerPositions';
 import { matchTypeMeta } from '@/features/match/matchTypeMeta';
 import { useColors } from '@/hooks/useColors';
 import { useMatch, useLeaveMatch, useMyParticipantStatus, usePendingParticipants, useApproveParticipant, useRejectParticipant, useInviteToMatch } from '@/hooks/useMatches';
+import { supabase } from '@/lib/supabase';
 import { useProfile } from '@/hooks/useProfiles';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { fetchMatchPhotos, type MatchPhoto } from '@/lib/matchPhotosApi';
 import { useSession } from '@/store/session';
 import {
   formatMatchTime,
@@ -79,6 +83,35 @@ export default function MatchDetailScreen() {
   const [selectedParticipant, setSelectedParticipant] = useState<MatchParticipant | null>(null);
 
   const shareCardRef = useRef<View>(null);
+  const [viewerCount, setViewerCount] = useState(0);
+
+  // Track who's viewing this match in real time via Supabase Presence
+  useEffect(() => {
+    if (!id || !userId) return;
+    const ch = supabase.channel(`viewing:${id}`, { config: { presence: { key: userId } } })
+      .on('presence', { event: 'sync' }, () => {
+        setViewerCount(Object.keys(ch.presenceState()).length);
+      })
+      .subscribe(async (status) => {
+        if (status === 'SUBSCRIBED') {
+          await ch.track({ user_id: userId });
+        }
+      });
+    return () => { void supabase.removeChannel(ch); };
+  }, [id, userId]);
+
+  const queryClient = useQueryClient();
+  const { data: photos = [] } = useQuery({
+    queryKey: ['match-photos', id],
+    queryFn: () => fetchMatchPhotos(id!),
+    enabled: !!id && !!match?.endedAt,
+    staleTime: 60_000,
+  });
+
+  const handlePhotoAdded = (photo: MatchPhoto) => {
+    queryClient.setQueryData<MatchPhoto[]>(['match-photos', id], (old) => [...(old ?? []), photo]);
+  };
+
   const isOrganizer = match?.organizer.id === userId;
   const { data: organizerProfile } = useProfile(match?.organizer.id);
   const { data: myStatus } = useMyParticipantStatus(!isOrganizer ? id : undefined);
@@ -172,6 +205,11 @@ export default function MatchDetailScreen() {
                 <Text variant="body" color="textTertiary"> · </Text>
                 <MatchTypeBadge type={match.type} size="sm" />
               </View>
+              {viewerCount > 1 ? (
+                <Text variant="small" color="textTertiary">
+                  👁 {viewerCount} viendo esto
+                </Text>
+              ) : null}
             </View>
           </View>
           <View style={s.priceTag}>
@@ -405,6 +443,21 @@ export default function MatchDetailScreen() {
         ) : null}
 
         {/* ── Joined players ────────────────────────────── */}
+        {/* ── Photos (only after match ends) ────────────── */}
+        {match.endedAt && (photos.length > 0 || isOrganizer || joined) ? (
+          <Section
+            title="Fotos de la partida"
+            icon={<Text style={{ fontSize: 13 }}>📸</Text>}
+          >
+            <MatchPhotos
+              matchId={match.id}
+              uploaderId={isOrganizer || joined ? userId : undefined}
+              photos={photos}
+              onPhotoAdded={handlePhotoAdded}
+            />
+          </Section>
+        ) : null}
+
         {match.joinedPlayers.length > 0 ? (
           <Section title={`${match.joinedPlayers.length} jugador${match.joinedPlayers.length !== 1 ? 'es' : ''} confirmado${match.joinedPlayers.length !== 1 ? 's' : ''}`}>
             {isOrganizer ? (

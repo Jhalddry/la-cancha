@@ -1,3 +1,4 @@
+import * as Haptics from 'expo-haptics';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import {
   Bank,
@@ -567,6 +568,10 @@ function SuccessStep({
       matchId: match.id,
       paymentMethod: selectedPayment ?? undefined,
       checkedRequirements,
+    }, {
+      onSuccess: () => {
+        void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      },
     });
     scale.value = withSpring(1, { damping: 12, stiffness: 120 });
     opacity.value = withDelay(200, withSpring(1));

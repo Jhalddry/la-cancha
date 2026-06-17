@@ -1,3 +1,4 @@
+import * as Haptics from 'expo-haptics';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Check, House, Star } from 'phosphor-react-native';
 import { useEffect, useMemo, useState } from 'react';
@@ -101,6 +102,7 @@ export default function CalificarScreen() {
       void queryClient.invalidateQueries({ queryKey: profileKeys.detail(player.id) });
       void queryClient.invalidateQueries({ queryKey: ratingKeys.forPlayer(player.id) });
       void queryClient.invalidateQueries({ queryKey: ratingKeys.given(userId) });
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       setStep(successStep);
     } catch (e) {
       Alert.alert(

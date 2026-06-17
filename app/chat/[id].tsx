@@ -1,3 +1,4 @@
+import * as Haptics from 'expo-haptics';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Check, Checks, PaperPlaneTilt, Users } from 'phosphor-react-native';
 import { useEffect, useMemo, useRef } from 'react';
@@ -40,7 +41,7 @@ export default function ChatScreen() {
   const s = useMemo(() => makeStyles(c, insets.bottom), [c, insets.bottom]);
 
   const { data: match } = useMatch(matchId);
-  const { messages, loading, error, send, threadId, othersReadAt } = useChat(matchId);
+  const { messages, loading, error, send, threadId, othersReadAt, othersTyping, sendTyping } = useChat(matchId);
   const { mutate: deleteMessage } = useDeleteMessage();
   const markRead = useMarkThreadRead();
   const [text, setText] = useState('');
@@ -79,6 +80,7 @@ export default function ChatScreen() {
     const body = text.trim();
     if (!body) return;
     setText('');
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     await send(body);
   };
 
@@ -154,11 +156,20 @@ export default function ChatScreen() {
             ))}
           </ScrollView>
 
+          {othersTyping.length > 0 ? (
+            <View style={s.typingRow}>
+              <Text variant="small" color="textTertiary">
+                {othersTyping.length === 1
+                  ? `${othersTyping[0]} está escribiendo...`
+                  : `${othersTyping.join(', ')} están escribiendo...`}
+              </Text>
+            </View>
+          ) : null}
           <View style={s.composer}>
             <TextInput
               placeholder="Escribe un mensaje"
               value={text}
-              onChangeText={setText}
+              onChangeText={(t) => { setText(t); if (t.trim()) sendTyping(); }}
               containerStyle={{ flex: 1 }}
               onSubmitEditing={handleSend}
               returnKeyType="send"
@@ -335,6 +346,11 @@ function makeStyles(c: ColorPalette, bottomInset = 0) {
     timeRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2 },
     timeRight: { justifyContent: 'flex-end' },
     timeLeft: { justifyContent: 'flex-start', marginLeft: spacing.sm },
+    typingRow: {
+      paddingHorizontal: spacing.lg,
+      paddingVertical: spacing.xs,
+      backgroundColor: c.bg,
+    },
     composer: {
       flexDirection: 'row',
       alignItems: 'center',
