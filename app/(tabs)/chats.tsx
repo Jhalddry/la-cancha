@@ -71,22 +71,37 @@ export default function ChatsScreen() {
     isLoading: loadingThreads,
     isError: errorThreads,
     refetch: refetchThreads,
-    isRefetching: refreshingThreads,
   } = useMyThreads();
   const {
     data: privateThreads,
     isLoading: loadingPrivate,
     isError: errorPrivate,
     refetch: refetchPrivate,
-    isRefetching: refreshingPrivate,
   } = useMyPrivateThreads();
   const { mutate: deleteThread } = useDeleteThread();
   const [deleteThreadId, setDeleteThreadId] = useState<string | null>(null);
 
+  // Track pull-to-refresh separately so background invalidateQueries refetches
+  // don't accidentally show the spinner.
+  const [pullRefreshingThreads, setPullRefreshingThreads] = useState(false);
+  const [pullRefreshingPrivate, setPullRefreshingPrivate] = useState(false);
+
+  const handleRefreshThreads = async () => {
+    setPullRefreshingThreads(true);
+    await refetchThreads();
+    setPullRefreshingThreads(false);
+  };
+
+  const handleRefreshPrivate = async () => {
+    setPullRefreshingPrivate(true);
+    await refetchPrivate();
+    setPullRefreshingPrivate(false);
+  };
+
   const isLoading = tab === 'partidas' ? loadingThreads : loadingPrivate;
   const isError = tab === 'partidas' ? errorThreads : errorPrivate;
   const refetch = tab === 'partidas' ? refetchThreads : refetchPrivate;
-  const isRefreshing = tab === 'partidas' ? refreshingThreads : refreshingPrivate;
+  const isRefreshing = tab === 'partidas' ? pullRefreshingThreads : pullRefreshingPrivate;
 
   return (
     <Screen>
@@ -143,8 +158,8 @@ export default function ChatsScreen() {
             contentContainerStyle={{ flex: 1 }}
             refreshControl={
               <RefreshControl
-                refreshing={refreshingThreads}
-                onRefresh={() => void refetchThreads()}
+                refreshing={pullRefreshingThreads}
+                onRefresh={() => void handleRefreshThreads()}
                 tintColor={c.primary}
                 colors={[c.primary]}
               />
@@ -162,8 +177,8 @@ export default function ChatsScreen() {
             showsVerticalScrollIndicator={false}
             refreshControl={
               <RefreshControl
-                refreshing={refreshingThreads}
-                onRefresh={() => void refetchThreads()}
+                refreshing={pullRefreshingThreads}
+                onRefresh={() => void handleRefreshThreads()}
                 tintColor={c.primary}
                 colors={[c.primary]}
               />
@@ -189,8 +204,8 @@ export default function ChatsScreen() {
             contentContainerStyle={{ flex: 1 }}
             refreshControl={
               <RefreshControl
-                refreshing={refreshingPrivate}
-                onRefresh={() => void refetchPrivate()}
+                refreshing={pullRefreshingPrivate}
+                onRefresh={() => void handleRefreshPrivate()}
                 tintColor={c.primary}
                 colors={[c.primary]}
               />
@@ -208,8 +223,8 @@ export default function ChatsScreen() {
             showsVerticalScrollIndicator={false}
             refreshControl={
               <RefreshControl
-                refreshing={refreshingPrivate}
-                onRefresh={() => void refetchPrivate()}
+                refreshing={pullRefreshingPrivate}
+                onRefresh={() => void handleRefreshPrivate()}
                 tintColor={c.primary}
                 colors={[c.primary]}
               />

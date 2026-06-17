@@ -1,6 +1,10 @@
 import { supabase } from '@/lib/supabase';
 import { sendPushToUser } from '@/lib/pushNotifications';
 
+// Local reads cache — written immediately on markThreadRead so a pull-to-refresh
+// that fires before the RPC commits to DB still sees the correct last_read_at.
+const _localReads = new Map<string, string>(); // `${threadType}:${threadId}` → ISO
+
 const MINI_PROFILE = 'id, name, avatar_url';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -151,15 +155,16 @@ export async function sendMessage(
 
       const [participants, { data: author }] = await Promise.all([
         fetchThreadParticipants(resolvedMatchId),
-        supabase.from('profiles').select('name').eq('id', authorId).maybeSingle(),
+        supabase.from('profiles').select('name, avatar_url').eq('id', authorId).maybeSingle(),
       ]);
       const authorName = (author?.name as string | undefined) ?? 'Alguien';
+      const authorAvatar = (author?.avatar_url as string | null | undefined) ?? undefined;
       const preview = body.length > 80 ? `${body.slice(0, 77)}…` : body;
 
       await Promise.all(
         participants
           .filter((p) => p.id !== authorId)
-          .map((p) => sendPushToUser(p.id, `💬 ${authorName}`, preview, `/chat/${resolvedMatchId}`)),
+          .map((p) => sendPushToUser(p.id, `💬 ${authorName}`, preview, `/chat/${resolvedMatchId}`, authorAvatar)),
       );
     } catch {
       // push failures never block sending
@@ -264,34 +269,46 @@ export interface PrivateThreadData {
 export async function markThreadRead(
   threadType: 'match' | 'private',
   threadId: string,
-  _userId: string,
+  userId: string,
 ): Promise<void> {
-  // Uses RPC so last_read_at = server NOW(), avoiding client/server clock skew
-  await supabase.rpc('mark_thread_read', {
+  // Record locally before the async DB write so pull-to-refresh sees this immediately
+  _localReads.set(`${threadType}:${threadId}`, new Date().toISOString());
+
+  // Prefer RPC (server-side NOW() avoids clock skew). Fall back to direct upsert
+  // if the RPC doesn't exist yet (migration pending).
+  const { error: rpcErr } = await supabase.rpc('mark_thread_read', {
     p_thread_type: threadType,
     p_thread_id: threadId,
   });
+  if (rpcErr) {
+    console.warn('[chat] mark_thread_read RPC error:', rpcErr.message, { threadType, threadId });
+    const { error: upsertErr } = await supabase
+      .from('chat_reads')
+      .upsert(
+        { thread_type: threadType, thread_id: threadId, user_id: userId, last_read_at: new Date().toISOString() },
+        { onConflict: 'thread_type,thread_id,user_id' },
+      );
+    if (upsertErr) console.warn('[chat] chat_reads upsert fallback error:', upsertErr.message);
+  }
 }
 
-/** Latest last_read_at among OTHER users in a thread (for read receipts). */
+/** Latest last_read_at among OTHER users in a thread (for read receipts).
+ *  Uses SECURITY DEFINER RPC to bypass RLS — the direct SELECT would be
+ *  filtered to own rows only by the "chat_reads: own write" FOR ALL policy. */
 export async function fetchOthersLastReadAt(
   threadType: 'match' | 'private',
   threadId: string,
-  myId: string,
+  _myId: string,
 ): Promise<string | null> {
-  const { data } = await supabase
-    .from('chat_reads')
-    .select('user_id, last_read_at')
-    .eq('thread_type', threadType)
-    .eq('thread_id', threadId)
-    .neq('user_id', myId);
-
-  let latest: string | null = null;
-  for (const row of data ?? []) {
-    const r = row as { user_id: string; last_read_at: string };
-    if (!latest || new Date(r.last_read_at) > new Date(latest)) latest = r.last_read_at;
+  const { data, error } = await supabase.rpc('get_others_last_read_at', {
+    p_thread_type: threadType,
+    p_thread_id: threadId,
+  });
+  if (error) {
+    console.warn('[chat] get_others_last_read_at error:', error.message, { threadType, threadId });
+    return null;
   }
-  return latest;
+  return (data as string | null) ?? null;
 }
 
 /** Find or create a private thread between two users. Always stores user1_id < user2_id. */
@@ -380,15 +397,16 @@ export async function sendPrivateMessage(
     try {
       const [threadResult, authorResult] = await Promise.all([
         supabase.from('private_threads').select('user1_id, user2_id').eq('id', threadId).maybeSingle(),
-        supabase.from('profiles').select('name').eq('id', authorId).maybeSingle(),
+        supabase.from('profiles').select('name, avatar_url').eq('id', authorId).maybeSingle(),
       ]);
       if (!threadResult.data) return;
       const t = threadResult.data as { user1_id: string; user2_id: string };
       const otherId = t.user1_id === authorId ? t.user2_id : t.user1_id;
       const authorName = (authorResult.data?.name as string | undefined) ?? 'Alguien';
+      const authorAvatar = (authorResult.data?.avatar_url as string | null | undefined) ?? undefined;
       const preview = body.length > 80 ? `${body.slice(0, 77)}…` : body;
 
-      await sendPushToUser(otherId, `💬 ${authorName}`, preview, `/direct/${authorId}`);
+      await sendPushToUser(otherId, `💬 ${authorName}`, preview, `/direct/${authorId}`, authorAvatar);
     } catch {
       // push failures never block sending
     }
@@ -453,9 +471,14 @@ export async function fetchMyPrivateThreads(userId: string): Promise<PrivateThre
     }
   }
 
+  const localPrivateReads = new Map<string, string>();
+  for (const [k, v] of _localReads) {
+    if (k.startsWith('private:')) localPrivateReads.set(k.slice('private:'.length), v);
+  }
   const unreadByThread = buildUnreadMap(
     (allMsgs ?? []) as { thread_id: string; sent_at: string; author_id: string }[],
     readsMap,
+    localPrivateReads,
     currentUserId,
   );
 
@@ -483,13 +506,17 @@ export async function fetchMyPrivateThreads(userId: string): Promise<PrivateThre
 
 function buildUnreadMap(
   msgs: { thread_id: string; sent_at: string; author_id: string }[],
-  readsMap: Map<string, string>,
+  serverReadsMap: Map<string, string>,
+  localReadsMap: Map<string, string>,
   currentUserId: string,
 ): Map<string, number> {
   const unreadByThread = new Map<string, number>();
   for (const m of msgs) {
     if (m.author_id === currentUserId) continue;
-    const readAt = readsMap.get(m.thread_id);
+    const s = serverReadsMap.get(m.thread_id);
+    const l = localReadsMap.get(m.thread_id);
+    // Use whichever timestamp is more recent
+    const readAt = s && l ? (new Date(s) >= new Date(l) ? s : l) : s ?? l;
     if (!readAt || new Date(m.sent_at) > new Date(readAt)) {
       unreadByThread.set(m.thread_id, (unreadByThread.get(m.thread_id) ?? 0) + 1);
     }
@@ -547,9 +574,14 @@ export async function fetchMyThreads(): Promise<ChatThreadData[]> {
     }
   }
 
+  const localMatchReads = new Map<string, string>();
+  for (const [k, v] of _localReads) {
+    if (k.startsWith('match:')) localMatchReads.set(k.slice('match:'.length), v);
+  }
   const unreadByThread = buildUnreadMap(
     (allMsgs ?? []) as { thread_id: string; sent_at: string; author_id: string }[],
     readsMap,
+    localMatchReads,
     currentUserId,
   );
 

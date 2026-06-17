@@ -1,5 +1,5 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { PaperPlaneTilt } from 'phosphor-react-native';
+import { Check, Checks, PaperPlaneTilt } from 'phosphor-react-native';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
@@ -21,11 +21,12 @@ import { TextInput } from '@/components/ui/TextInput';
 import { useMarkThreadRead, usePrivateChat } from '@/hooks/useChat';
 import { useProfile } from '@/hooks/useProfiles';
 import { useColors } from '@/hooks/useColors';
+import { queryClient } from '@/lib/queryClient';
 import { useSession } from '@/store/session';
 import { timeOnly } from '@/lib/time';
 import { radius, spacing } from '@/theme';
 import type { ColorPalette } from '@/theme/palettes';
-import type { ChatMessageData } from '@/lib/chatApi';
+import type { ChatMessageData, PrivateThreadData } from '@/lib/chatApi';
 
 export default function DirectChatScreen() {
   const router = useRouter();
@@ -36,7 +37,7 @@ export default function DirectChatScreen() {
   const s = useMemo(() => makeStyles(c, insets.bottom), [c, insets.bottom]);
 
   const { data: otherUser } = useProfile(otherId);
-  const { messages, loading, error, send, threadId } = usePrivateChat(otherId);
+  const { messages, loading, error, send, threadId, othersReadAt } = usePrivateChat(otherId);
   const markRead = useMarkThreadRead();
   const [text, setText] = useState('');
   const [deleteOpen, setDeleteOpen] = useState(false);
@@ -50,7 +51,19 @@ export default function DirectChatScreen() {
     }
   }, [messages.length]);
 
-  // Mark thread as read on mount and when new messages arrive
+  // Zero the cache immediately on mount and again on unmount (same pattern as chat/[id].tsx)
+  useEffect(() => {
+    if (!otherId || !userId) return;
+    const applyZero = () => {
+      queryClient.setQueryData<PrivateThreadData[]>(['private-threads', userId], (old) =>
+        old?.map((t) => (t.otherUser.id === otherId ? { ...t, unreadCount: 0 } : t)) ?? old,
+      );
+    };
+    applyZero();
+    return applyZero;
+  }, [otherId, userId]);
+
+  // DB write: mark thread read when threadId is known; re-run on new messages
   useEffect(() => {
     if (threadId) markRead('private', threadId);
   }, [threadId, messages.length, markRead]);
@@ -116,7 +129,7 @@ export default function DirectChatScreen() {
                   <View style={s.dayLine} />
                 </View>
                 {items.map((msg) => (
-                  <DirectBubble key={msg.id} message={msg} myId={userId ?? ''} c={c} />
+                  <DirectBubble key={msg.id} message={msg} myId={userId ?? ''} c={c} othersReadAt={othersReadAt} />
                 ))}
               </View>
             ))}
@@ -167,10 +180,12 @@ function DirectBubble({
   message,
   myId,
   c,
+  othersReadAt,
 }: {
   message: ChatMessageData;
   myId: string;
   c: ColorPalette;
+  othersReadAt?: string | null;
 }) {
   const s = useMemo(() => makeStyles(c, 0), [c]);
   const isMe = message.authorId === myId;
@@ -187,13 +202,18 @@ function DirectBubble({
             {message.body}
           </Text>
         </View>
-        <Text
-          variant="caption"
-          color="textTertiary"
-          style={[s.timeText, isMe ? s.timeRight : s.timeLeft]}
-        >
-          {timeOnly(message.sentAt)}
-        </Text>
+        <View style={[s.timeRow, isMe ? s.timeRight : s.timeLeft]}>
+          <Text variant="caption" color="textTertiary">
+            {timeOnly(message.sentAt)}
+          </Text>
+          {isMe && !isOptimistic ? (
+            othersReadAt && new Date(othersReadAt) >= new Date(message.sentAt) ? (
+              <Checks size={14} color={c.primary} weight="bold" />
+            ) : (
+              <Check size={14} color={c.textTertiary} weight="regular" />
+            )
+          ) : null}
+        </View>
       </View>
     </View>
   );
@@ -217,9 +237,9 @@ function makeStyles(c: ColorPalette, bottomInset = 0) {
     bubbleMine: { backgroundColor: c.primary, borderBottomRightRadius: 4 },
     bubbleOther: { backgroundColor: c.surface, borderWidth: 1, borderColor: c.border, borderBottomLeftRadius: 4 },
     bubbleOpt: { opacity: 0.6 },
-    timeText: { marginTop: 2 },
-    timeRight: { textAlign: 'right' },
-    timeLeft: { textAlign: 'left', marginLeft: spacing.sm },
+    timeRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2 },
+    timeRight: { justifyContent: 'flex-end' },
+    timeLeft: { justifyContent: 'flex-start', marginLeft: spacing.sm },
     composer: {
       flexDirection: 'row',
       alignItems: 'center',

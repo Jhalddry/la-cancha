@@ -158,11 +158,15 @@ export function useChat(matchId: string | undefined) {
     };
   }, [threadId, userId]);
 
-  // Read receipts: others' last_read_at + realtime updates on chat_reads
+  // Read receipts: others' last_read_at + realtime updates + 5s poll fallback
   useEffect(() => {
     if (!threadId || !userId) return;
 
-    void fetchOthersLastReadAt('match', threadId, userId).then(setOthersReadAt);
+    const fetchLatest = () => {
+      void fetchOthersLastReadAt('match', threadId, userId).then(setOthersReadAt);
+    };
+    fetchLatest();
+    const poll = setInterval(fetchLatest, 5_000);
 
     const channel = supabase
       .channel(`chat-reads:${threadId}`)
@@ -180,6 +184,7 @@ export function useChat(matchId: string | undefined) {
       .subscribe();
 
     return () => {
+      clearInterval(poll);
       void supabase.removeChannel(channel);
     };
   }, [threadId, userId]);
@@ -207,7 +212,11 @@ export function useChat(matchId: string | undefined) {
 
     try {
       await sendMessage(threadId, userId, trimmed, matchId);
-      void queryClient.invalidateQueries({ queryKey: ['chat-threads'] });
+      // Await so we can re-zero unread after the refetch — the refetch races with markThreadRead
+      await queryClient.invalidateQueries({ queryKey: ['chat-threads'] });
+      queryClient.setQueryData<ChatThreadData[]>(['chat-threads'], (old) =>
+        old?.map((t) => (t.id === threadId ? { ...t, unreadCount: 0 } : t)) ?? old,
+      );
     } catch {
       // Roll back optimistic message
       setMessages((prev) => prev.filter((m) => m.id !== optimisticId));
@@ -249,7 +258,9 @@ export function useMarkThreadRead() {
     (threadType: 'match' | 'private', threadId: string) => {
       if (!userId) return;
 
-      // Optimistic: zero the count immediately so badge clears without waiting for refetch
+      // Optimistic: zero immediately. Do NOT invalidateQueries afterwards — that would
+      // trigger an immediate refetch that races the DB write and restore the old count.
+      // The background refetchInterval (60s) will sync the true state.
       if (threadType === 'match') {
         queryClient.setQueryData<ChatThreadData[]>(['chat-threads'], (old) =>
           old?.map((t) => (t.id === threadId ? { ...t, unreadCount: 0 } : t)) ?? old,
@@ -260,10 +271,7 @@ export function useMarkThreadRead() {
         );
       }
 
-      void markThreadRead(threadType, threadId, userId).then(() => {
-        void queryClient.invalidateQueries({ queryKey: ['chat-threads'] });
-        void queryClient.invalidateQueries({ queryKey: ['private-threads', userId] });
-      });
+      void markThreadRead(threadType, threadId, userId);
     },
     [userId, queryClient],
   );
@@ -276,6 +284,7 @@ export function usePrivateChat(otherId: string | undefined) {
   const [messages, setMessages] = useState<ChatMessageData[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [othersReadAt, setOthersReadAt] = useState<string | null>(null);
 
   useEffect(() => {
     if (!userId || !otherId) return;
@@ -327,6 +336,37 @@ export function usePrivateChat(otherId: string | undefined) {
     return () => { void supabase.removeChannel(channel); };
   }, [threadId, userId, user?.name]);
 
+  // Read receipts: others' last_read_at + realtime + 5s poll
+  useEffect(() => {
+    if (!threadId || !userId) return;
+
+    const fetchLatest = () => {
+      void fetchOthersLastReadAt('private', threadId, userId).then(setOthersReadAt);
+    };
+    fetchLatest();
+    const poll = setInterval(fetchLatest, 5_000);
+
+    const channel = supabase
+      .channel(`pm-reads:${threadId}`)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'chat_reads', filter: `thread_id=eq.${threadId}` },
+        (payload) => {
+          const row = payload.new as { user_id?: string; last_read_at?: string };
+          if (!row?.user_id || row.user_id === userId || !row.last_read_at) return;
+          setOthersReadAt((prev) =>
+            !prev || new Date(row.last_read_at!) > new Date(prev) ? row.last_read_at! : prev,
+          );
+        },
+      )
+      .subscribe();
+
+    return () => {
+      clearInterval(poll);
+      void supabase.removeChannel(channel);
+    };
+  }, [threadId, userId]);
+
   const send = async (body: string) => {
     if (!threadId || !userId || !body.trim()) return;
     const trimmed = body.trim();
@@ -337,13 +377,16 @@ export function usePrivateChat(otherId: string | undefined) {
     }]);
     try {
       await sendPrivateMessage(threadId, userId, trimmed);
-      void queryClient.invalidateQueries({ queryKey: ['private-threads', userId] });
+      await queryClient.invalidateQueries({ queryKey: ['private-threads', userId] });
+      queryClient.setQueryData<PrivateThreadData[]>(['private-threads', userId], (old) =>
+        old?.map((t) => (t.id === threadId ? { ...t, unreadCount: 0 } : t)) ?? old,
+      );
     } catch {
       setMessages((prev) => prev.filter((m) => m.id !== optId));
     }
   };
 
-  return { messages, loading, error, send, threadId };
+  return { messages, loading, error, send, threadId, othersReadAt };
 }
 
 // ─── Delete a single message ──────────────────────────────────────────────────

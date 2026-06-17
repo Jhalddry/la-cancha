@@ -1,5 +1,5 @@
-import { makeRedirectUri } from 'expo-auth-session';
 import { useRouter } from 'expo-router';
+import * as Linking from 'expo-linking';
 import * as WebBrowser from 'expo-web-browser';
 import {
   AppleLogo,
@@ -124,7 +124,7 @@ export default function LoginScreen() {
     setLoading(true);
     setAuthError(null);
     try {
-      const redirectTo = makeRedirectUri({ scheme: 'lacancha', path: 'auth-callback' });
+      const redirectTo = Linking.createURL('auth-callback');
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: { redirectTo, skipBrowserRedirect: true },

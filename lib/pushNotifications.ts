@@ -45,6 +45,7 @@ export async function sendPushToUser(
   title: string,
   body: string,
   navigateTo?: string,
+  imageUrl?: string,
 ): Promise<void> {
   try {
     const { data: profile } = await supabase
@@ -69,6 +70,7 @@ export async function sendPushToUser(
         data: { navigateTo: navigateTo ?? null },
         sound: 'default',
         priority: 'high',
+        ...(imageUrl ? { imageUrl } : {}),
       }),
     });
   } catch (e) {

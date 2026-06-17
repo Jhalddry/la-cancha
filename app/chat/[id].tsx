@@ -22,12 +22,13 @@ import { TextInput } from '@/components/ui/TextInput';
 import { useChat, useDeleteMessage, useMarkThreadRead } from '@/hooks/useChat';
 import { useMatch } from '@/hooks/useMatches';
 import { useColors } from '@/hooks/useColors';
+import { queryClient } from '@/lib/queryClient';
 import { useSession } from '@/store/session';
 import { timeOnly } from '@/lib/time';
 import { labelModality } from '@/lib/format';
 import { radius, spacing } from '@/theme';
 import type { ColorPalette } from '@/theme/palettes';
-import type { ChatMessageData } from '@/lib/chatApi';
+import type { ChatMessageData, ChatThreadData } from '@/lib/chatApi';
 import { useState } from 'react';
 
 export default function ChatScreen() {
@@ -56,7 +57,20 @@ export default function ChatScreen() {
     }
   }, [messages.length]);
 
-  // Mark thread as read on mount and when new messages arrive
+  // Zero the cache immediately on mount (by matchId, no network wait) and again on unmount
+  // (catches any background refetch that fired while the chat was open)
+  useEffect(() => {
+    if (!matchId) return;
+    const applyZero = () => {
+      queryClient.setQueryData<ChatThreadData[]>(['chat-threads'], (old) =>
+        old?.map((t) => (t.matchId === matchId ? { ...t, unreadCount: 0 } : t)) ?? old,
+      );
+    };
+    applyZero();
+    return applyZero;
+  }, [matchId]);
+
+  // DB write: mark thread read when threadId is known; re-run on new messages
   useEffect(() => {
     if (threadId) markRead('match', threadId);
   }, [threadId, messages.length, markRead]);
