@@ -1,4 +1,6 @@
+import { makeRedirectUri } from 'expo-auth-session';
 import { useRouter } from 'expo-router';
+import * as WebBrowser from 'expo-web-browser';
 import {
   AppleLogo,
   Envelope,
@@ -118,6 +120,36 @@ export default function LoginScreen() {
     setForgotSheetVisible(true);
   };
 
+  const handleGoogleSignIn = async () => {
+    setLoading(true);
+    setAuthError(null);
+    try {
+      const redirectTo = makeRedirectUri({ scheme: 'lacancha', path: 'auth-callback' });
+      const { data, error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: { redirectTo, skipBrowserRedirect: true },
+      });
+      if (error || !data.url) throw error ?? new Error('No OAuth URL');
+
+      const result = await WebBrowser.openAuthSessionAsync(data.url, redirectTo);
+      if (result.type === 'success' && result.url) {
+        const fragment = result.url.split('#')[1] ?? result.url.split('?')[1] ?? '';
+        const params = new URLSearchParams(fragment);
+        const access_token = params.get('access_token');
+        const refresh_token = params.get('refresh_token');
+        if (access_token && refresh_token) {
+          const { error: sessionError } = await supabase.auth.setSession({ access_token, refresh_token });
+          if (!sessionError) { router.replace('/(tabs)'); return; }
+        }
+        setAuthError('No se pudo completar el inicio de sesión con Google.');
+      }
+    } catch {
+      setAuthError('No se pudo iniciar sesión con Google. Intenta de nuevo.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <Screen edges={['top']}>
       <ScrollView
@@ -200,20 +232,22 @@ export default function LoginScreen() {
           <Divider />
         </View>
 
-        <View style={[staticStyles.socialRow, staticStyles.socialDisabled]}>
+        <View style={staticStyles.socialRow}>
           <Button
             label="Google"
             variant="secondary"
             leading={<GoogleLogo size={18} color={c.textPrimary} weight="bold" />}
             fullWidth={false}
             style={{ flex: 1 }}
+            onPress={handleGoogleSignIn}
+            disabled={loading}
           />
           <Button
             label="Apple"
             variant="secondary"
             leading={<AppleLogo size={18} color={c.textPrimary} weight="fill" />}
             fullWidth={false}
-            style={{ flex: 1 }}
+            style={{ flex: 1, opacity: 0.4 }}
           />
         </View>
 
@@ -279,7 +313,6 @@ const staticStyles = StyleSheet.create({
   dividerRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   dividerLabel: { letterSpacing: 0.6 },
   socialRow: { flexDirection: 'row', gap: spacing.md },
-  socialDisabled: { opacity: 0.4 },
   regRow: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center' },
   sheetContent: { gap: spacing.lg },
 });

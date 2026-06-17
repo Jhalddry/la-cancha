@@ -1,16 +1,20 @@
+import { makeRedirectUri } from 'expo-auth-session';
 import { useRouter } from 'expo-router';
-import { Check, CheckCircle, Envelope, Eye, EyeSlash, Lock, User, XCircle } from 'phosphor-react-native';
+import * as WebBrowser from 'expo-web-browser';
+import { Check, CheckCircle, Envelope, Eye, EyeSlash, GoogleLogo, Lock, User, XCircle } from 'phosphor-react-native';
 import { useMemo, useState } from 'react';
-import { ActivityIndicator, ScrollView, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Alert, ScrollView, StyleSheet, View } from 'react-native';
 
 import { Crosshair } from '@/components/brand/Crosshair';
 import { BackHeader } from '@/components/ui/BackHeader';
 import { Button } from '@/components/ui/Button';
+import { Divider } from '@/components/ui/Divider';
 import { PressableScale } from '@/components/ui/PressableScale';
 import { Screen } from '@/components/ui/Screen';
 import { Text } from '@/components/ui/Text';
 import { TextInput } from '@/components/ui/TextInput';
 import { useColors } from '@/hooks/useColors';
+import { supabase } from '@/lib/supabase';
 import { useSession } from '@/store/session';
 import { radius, spacing } from '@/theme';
 import type { ColorPalette } from '@/theme/palettes';
@@ -126,6 +130,36 @@ export default function RegisterScreen() {
     router.replace('/(tabs)');
   };
 
+  const handleGoogleSignIn = async () => {
+    setLoading(true);
+    setAuthError(null);
+    try {
+      const redirectTo = makeRedirectUri({ scheme: 'lacancha', path: 'auth-callback' });
+      const { data, error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: { redirectTo, skipBrowserRedirect: true },
+      });
+      if (error || !data.url) throw error ?? new Error('No OAuth URL');
+
+      const result = await WebBrowser.openAuthSessionAsync(data.url, redirectTo);
+      if (result.type === 'success' && result.url) {
+        const fragment = result.url.split('#')[1] ?? result.url.split('?')[1] ?? '';
+        const params = new URLSearchParams(fragment);
+        const access_token = params.get('access_token');
+        const refresh_token = params.get('refresh_token');
+        if (access_token && refresh_token) {
+          const { error: sessionError } = await supabase.auth.setSession({ access_token, refresh_token });
+          if (!sessionError) { router.replace('/(tabs)'); return; }
+        }
+        setAuthError('No se pudo completar el registro con Google.');
+      }
+    } catch {
+      setAuthError('No se pudo continuar con Google. Intenta de nuevo.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <Screen edges={['top']}>
       <BackHeader transparent onBack={() => router.back()} />
@@ -238,6 +272,22 @@ export default function RegisterScreen() {
           <Button label="Crear cuenta" onPress={submit} />
         )}
 
+        <View style={staticStyles.dividerRow}>
+          <Divider />
+          <Text variant="caption" color="textTertiary" style={staticStyles.dividerLabel}>
+            O continuar con
+          </Text>
+          <Divider />
+        </View>
+
+        <Button
+          label="Continuar con Google"
+          variant="secondary"
+          leading={<GoogleLogo size={18} color={c.textPrimary} weight="bold" />}
+          onPress={handleGoogleSignIn}
+          disabled={loading}
+        />
+
         <View style={staticStyles.regRow}>
           <Text variant="small" color="textSecondary">
             ¿Ya tienes cuenta?{' '}
@@ -270,6 +320,8 @@ const staticStyles = StyleSheet.create({
     gap: spacing.md,
     paddingVertical: spacing.sm,
   },
+  dividerRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  dividerLabel: { letterSpacing: 0.6 },
   regRow: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center' },
 });
 

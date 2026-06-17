@@ -20,7 +20,10 @@
       "Bash(del \"C:\\\\Users\\\\User\\\\OneDrive\\\\Documents\\\\la-cancha\\\\lib\\\\sentry.ts\")",
       "Bash(npx eas *)",
       "Bash(cd \"/c/Users/User/OneDrive/Documents/la-cancha\" && grep -rn \"profiles_username_format\" supabase/migrations/)",
-      "Bash(npx supabase *)"
+      "Bash(npx supabase *)",
+      "Bash(Start-Sleep -Seconds 15)",
+      "Read(//c/Users/User/.supabase//**)",
+      "Bash(dir \"C:\\\\Users\\\\User\\\\.supabase\")"
     ]
   }
 }

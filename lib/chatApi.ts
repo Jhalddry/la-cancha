@@ -264,12 +264,13 @@ export interface PrivateThreadData {
 export async function markThreadRead(
   threadType: 'match' | 'private',
   threadId: string,
-  userId: string,
+  _userId: string,
 ): Promise<void> {
-  await supabase.from('chat_reads').upsert(
-    { thread_type: threadType, thread_id: threadId, user_id: userId, last_read_at: new Date().toISOString() },
-    { onConflict: 'thread_type,thread_id,user_id' },
-  );
+  // Uses RPC so last_read_at = server NOW(), avoiding client/server clock skew
+  await supabase.rpc('mark_thread_read', {
+    p_thread_type: threadType,
+    p_thread_id: threadId,
+  });
 }
 
 /** Latest last_read_at among OTHER users in a thread (for read receipts). */

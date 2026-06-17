@@ -554,6 +554,8 @@ export default function MatchDetailScreen() {
             ) : null}
             <MapView
               style={s.map}
+              showsUserLocation
+              showsMyLocationButton
               initialRegion={{
                 latitude: match.location.lat,
                 longitude: match.location.lng,

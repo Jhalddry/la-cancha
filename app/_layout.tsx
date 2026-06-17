@@ -12,6 +12,7 @@ import { QueryClientProvider } from '@tanstack/react-query';
 import * as Notifications from 'expo-notifications';
 import { useRouter, Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
+import * as WebBrowser from 'expo-web-browser';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useRef } from 'react';
 import { StyleSheet, useColorScheme, View } from 'react-native';
@@ -26,6 +27,7 @@ import { useSession } from '@/store/session';
 import { useTheme } from '@/store/theme';
 
 void SplashScreen.preventAutoHideAsync().catch(() => {});
+WebBrowser.maybeCompleteAuthSession();
 
 export default function RootLayout() {
   const initialize = useSession((s) => s.initialize);

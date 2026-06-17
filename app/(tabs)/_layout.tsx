@@ -54,7 +54,7 @@ export default function TabsLayout() {
           }}
         />
         <Label>Chats</Label>
-        <Badge hidden={unreadChats === 0}>{unreadChats > 99 ? '99+' : String(unreadChats)}</Badge>
+        {unreadChats > 0 ? <Badge>{unreadChats > 99 ? '99+' : String(unreadChats)}</Badge> : null}
       </NativeTabs.Trigger>
 
       <NativeTabs.Trigger name="perfil">
