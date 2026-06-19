@@ -23,7 +23,11 @@
       "Bash(npx supabase *)",
       "Bash(Start-Sleep -Seconds 15)",
       "Read(//c/Users/User/.supabase//**)",
-      "Bash(dir \"C:\\\\Users\\\\User\\\\.supabase\")"
+      "Bash(dir \"C:\\\\Users\\\\User\\\\.supabase\")",
+      "mcp__visualize__read_me",
+      "mcp__visualize__show_widget",
+      "Bash(Read \"C:/Users/User/AppData/Local/Temp/claude/C--Users-User-OneDrive-Documents-la-cancha/ee5d9841-2885-4703-9f74-a9d13f6e8607/tasks/bzbj6v6rk.output\")",
+      "PowerShell(Get-ChildItem \"C:\\\\Users\\\\User\\\\OneDrive\\\\Documents\\\\la-cancha\\\\supabase\\\\migrations\\\\\" | Where-Object { $_.Name -match \"photo\" })"
     ]
   }
 }

@@ -9,6 +9,7 @@ import { DynamicColorIOS, Platform } from 'react-native';
 
 import { useUnreadChatCount } from '@/hooks/useChat';
 import { useColors } from '@/hooks/useColors';
+import { useUnreadCount } from '@/hooks/useNotifications';
 import { useSession } from '@/store/session';
 
 export default function TabsLayout() {
@@ -17,6 +18,7 @@ export default function TabsLayout() {
   const user = useSession((s) => s.user);
   const c = useColors();
   const unreadChats = useUnreadChatCount();
+  const { data: unreadNotifs = 0 } = useUnreadCount();
 
   if (!isAuthed) return <Redirect href="/login" />;
   // isAuthed but no profile yet — fetchOrCreateProfile still running or failed.
@@ -34,6 +36,7 @@ export default function TabsLayout() {
       <NativeTabs.Trigger name="index">
         <Icon sf={{ default: 'house', selected: 'house.fill' }} />
         <Label>Inicio</Label>
+        {unreadNotifs > 0 ? <Badge>{unreadNotifs > 99 ? '99+' : String(unreadNotifs)}</Badge> : null}
       </NativeTabs.Trigger>
 
       <NativeTabs.Trigger name="buscar">

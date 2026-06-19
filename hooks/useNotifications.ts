@@ -30,6 +30,19 @@ export function useNotifications() {
 
 export function useUnreadCount() {
   const userId = useSession((s) => s.user?.id);
+  return useQuery({
+    queryKey: notifKeys.unread(userId ?? ''),
+    queryFn: () => countUnreadNotifications(userId!),
+    enabled: !!userId,
+    staleTime: 20_000,
+    refetchInterval: 30_000,
+  });
+}
+
+/** Call once at a high-level mount point (e.g. root layout) to keep the
+ *  notification count live via Realtime without risking duplicate subscriptions. */
+export function useNotificationsSync() {
+  const userId = useSession((s) => s.user?.id);
   const queryClient = useQueryClient();
 
   useEffect(() => {
@@ -47,13 +60,6 @@ export function useUnreadCount() {
       .subscribe();
     return () => { void supabase.removeChannel(channel); };
   }, [userId, queryClient]);
-
-  return useQuery({
-    queryKey: notifKeys.unread(userId ?? ''),
-    queryFn: () => countUnreadNotifications(userId!),
-    enabled: !!userId,
-    staleTime: 20_000,
-  });
 }
 
 export function useMarkAllRead() {
@@ -95,8 +101,14 @@ export function useDeleteAllNotifications() {
     mutationFn: () => deleteAllNotifications(userId!),
     onMutate: () => {
       if (!userId) return;
-      // Optimistically clear list immediately so individually-deleted items don't flicker back
+      const prev = queryClient.getQueryData(notifKeys.list(userId));
       queryClient.setQueryData(notifKeys.list(userId), []);
+      return { prev };
+    },
+    onError: (_err, _vars, ctx) => {
+      if (userId && ctx?.prev !== undefined) {
+        queryClient.setQueryData(notifKeys.list(userId), ctx.prev);
+      }
     },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: notifKeys.all });

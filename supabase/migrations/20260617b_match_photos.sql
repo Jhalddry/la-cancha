@@ -43,3 +43,5 @@ DO $$ BEGIN
       ON public.match_photos FOR DELETE USING (auth.uid() = uploader_id);
   END IF;
 END $$;
+
+GRANT SELECT, INSERT, DELETE ON TABLE public.match_photos TO authenticated;

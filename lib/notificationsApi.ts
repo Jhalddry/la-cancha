@@ -136,7 +136,8 @@ export async function deleteNotification(id: string): Promise<void> {
 }
 
 export async function deleteAllNotifications(userId: string): Promise<void> {
-  await supabase.from('notifications').delete().eq('profile_id', userId);
+  const { error } = await supabase.from('notifications').delete().eq('profile_id', userId);
+  if (error) throw error;
 }
 
 export async function countUnreadNotifications(userId: string): Promise<number> {

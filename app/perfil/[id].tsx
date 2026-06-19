@@ -1,20 +1,25 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import {
+  CalendarCheck,
   ChatCircle,
   Check,
   CheckCircle,
+  Crown,
   DotsThreeVertical,
   Flag,
   MapPin,
   Prohibit,
   SealCheck,
   ShareNetwork,
+  Shield,
+  ShieldStar,
   SoccerBall,
   Star,
+  Trophy,
   UserPlus,
   WarningCircle,
 } from 'phosphor-react-native';
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   ScrollView,
@@ -25,6 +30,14 @@ import {
 } from 'react-native';
 import { captureRef } from 'react-native-view-shot';
 import * as Sharing from 'expo-sharing';
+import { LinearGradient } from 'expo-linear-gradient';
+import Animated, {
+  cancelAnimation,
+  useAnimatedStyle,
+  useSharedValue,
+  withRepeat,
+  withTiming,
+} from 'react-native-reanimated';
 
 import { ConfirmSheet } from '@/components/ui/ConfirmSheet';
 import { Avatar } from '@/components/ui/Avatar';
@@ -51,6 +64,62 @@ import type { ColorPalette } from '@/theme/palettes';
 import type { Sport } from '@/types/domain';
 
 const VERIFIED_BLUE = '#1D9BF0';
+
+const BADGE_META: Record<string, {
+  color: string;
+  icon: (size: number) => React.ReactNode;
+  description: string;
+  requirement: string;
+}> = {
+  'Debut':              {
+    color: '#22C55E',
+    icon: (n) => <SoccerBall size={n} color="#22C55E" weight="fill" />,
+    description: 'Diste el primer paso. Completaste tu primera partida en La Cancha.',
+    requirement: 'Únete y completa 1 partida.',
+  },
+  'Veterano':           {
+    color: '#3B82F6',
+    icon: (n) => <Shield size={n} color="#3B82F6" weight="fill" />,
+    description: 'Jugador experimentado con historial probado en la cancha.',
+    requirement: '10 partidas jugadas.',
+  },
+  'Veterano Elite':     {
+    color: '#8B5CF6',
+    icon: (n) => <ShieldStar size={n} color="#8B5CF6" weight="fill" />,
+    description: 'Uno de los jugadores más activos de la plataforma. Nivel de élite.',
+    requirement: '50 partidas jugadas.',
+  },
+  'Primera caimanera':  {
+    color: '#F97316',
+    icon: (n) => <Flag size={n} color="#F97316" weight="fill" />,
+    description: 'Armaste tu primera caimanera. El barrio ya sabe quién convoca.',
+    requirement: 'Organiza 1 partida.',
+  },
+  'Organizador':        {
+    color: '#F59E0B',
+    icon: (n) => <Crown size={n} color="#F59E0B" weight="fill" />,
+    description: 'Organizador habitual que mantiene el juego vivo en la comunidad.',
+    requirement: '5 partidas organizadas.',
+  },
+  'Organizador Elite':  {
+    color: '#FF6B35',
+    icon: (n) => <Trophy size={n} color="#FF6B35" weight="fill" />,
+    description: 'Organizador de élite. Pilar de la comunidad con decenas de partidas.',
+    requirement: '20 partidas organizadas.',
+  },
+  'Asistente Perfecto': {
+    color: '#14B8A6',
+    icon: (n) => <CalendarCheck size={n} color="#14B8A6" weight="fill" />,
+    description: 'Siempre aparece cuando dice que va a jugar. Totalmente confiable.',
+    requirement: '90% o más de asistencia con al menos 5 partidas jugadas.',
+  },
+  'Estrella':           {
+    color: '#FFD93D',
+    icon: (n) => <Star size={n} color="#FFD93D" weight="fill" />,
+    description: 'Jugador muy bien valorado. La comunidad lo reconoce como referente.',
+    requirement: '4.5+ estrellas de reputación con al menos 10 partidas.',
+  },
+};
 
 const POSITIVE_TAGS = new Set([
   'Puntual', 'Fair Play', 'Buena actitud', 'Organizado', 'Nivel acorde', 'Buen compañero',
@@ -143,6 +212,7 @@ export default function PlayerProfileScreen() {
   const { data: joinedMatches = [], isLoading: joinedLoading } = usePlayerJoinedMatches(id, partidasOpen);
   const { data: organizedMatchesFull = [], isLoading: organizedLoading } = usePlayerOrganizedMatches(id, organizadasOpen);
 
+  const [selectedBadge, setSelectedBadge] = useState<string | null>(null);
   const [inviteOpen, setInviteOpen] = useState(false);
   const [invitedMatchId, setInvitedMatchId] = useState<string | null>(null);
   const [inviteConfirmOpen, setInviteConfirmOpen] = useState<{ matchId: string } | null>(null);
@@ -359,13 +429,8 @@ export default function PlayerProfileScreen() {
               Insignias
             </Text>
             <View style={s.badgesWrap}>
-              {player.badges.map((b) => (
-                <View key={b} style={s.badgeChip}>
-                  <CheckCircle size={13} color={c.primary} weight="fill" />
-                  <Text variant="smallMedium" color="primary">
-                    {b}
-                  </Text>
-                </View>
+              {player.badges.map((b, i) => (
+                <ShimmerBadge key={b} label={b} delay={i * 300} onPress={() => setSelectedBadge(b)} />
               ))}
             </View>
           </View>
@@ -804,12 +869,140 @@ export default function PlayerProfileScreen() {
         }}
       />
 
+      {/* Badge info sheet */}
+      {selectedBadge ? (
+        <Sheet visible={!!selectedBadge} onClose={() => setSelectedBadge(null)} title="Insignia">
+          <View style={{ gap: spacing.lg, paddingBottom: spacing.md, alignItems: 'center' }}>
+            {(() => {
+              const meta = BADGE_META[selectedBadge] ?? {
+                color: '#7BFF00',
+                icon: (n: number) => <Star size={n} color="#7BFF00" weight="fill" />,
+                description: '',
+                requirement: '',
+              };
+              const { color, icon, description, requirement } = meta;
+              return (
+                <>
+                  <View style={{
+                    width: 80, height: 80, borderRadius: 40,
+                    backgroundColor: `${color}18`,
+                    borderWidth: 1.5, borderColor: `${color}70`,
+                    alignItems: 'center', justifyContent: 'center',
+                  }}>
+                    {icon(40)}
+                  </View>
+                  <Text variant="h3" color="textPrimary" style={{ textAlign: 'center' }}>{selectedBadge}</Text>
+                  <Text variant="body" color="textSecondary" style={{ textAlign: 'center', lineHeight: 22 }}>
+                    {description}
+                  </Text>
+                  <View style={{
+                    width: '100%',
+                    backgroundColor: `${color}12`,
+                    borderRadius: 12,
+                    borderWidth: 1,
+                    borderColor: `${color}30`,
+                    padding: spacing.md,
+                    gap: spacing.xs,
+                  }}>
+                    <Text variant="smallMedium" style={{ color }}>¿Cómo obtenerla?</Text>
+                    <Text variant="body" color="textPrimary">{requirement}</Text>
+                  </View>
+                </>
+              );
+            })()}
+          </View>
+        </Sheet>
+      ) : null}
+
       {/* Off-screen share card — rendered for captureRef, never visible to user */}
       <View ref={shareCardRef} style={s.offScreen} pointerEvents="none">
         <PlayerShareCard player={player} width={320} />
       </View>
     </Screen>
   );
+}
+
+function ShimmerBadge({ label, delay = 0, onPress }: { label: string; c?: ColorPalette; delay?: number; onPress?: () => void }) {
+  const meta = BADGE_META[label] ?? {
+    color: '#7BFF00',
+    icon: (n: number) => <Star size={n} color="#7BFF00" weight="fill" />,
+    description: '',
+    requirement: '',
+  };
+  const { color, icon } = meta;
+  const translateX = useSharedValue(-120);
+  useEffect(() => {
+    translateX.value = withRepeat(
+      withTiming(220, { duration: 2400 }),
+      -1,
+      false,
+    );
+    return () => cancelAnimation(translateX);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  const shimmerStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: translateX.value + delay * -0.5 }],
+  }));
+  const s = badgeShimmerStyle;
+  return (
+    <PressableScale onPress={onPress ?? (() => {})} scaleTo={0.93}>
+      <LinearGradient
+        colors={[`${color}22`, `${color}50`, `${color}22`]}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={[s.chip, { borderColor: `${color}80`, overflow: 'hidden' }]}
+      >
+        <Animated.View style={[StyleSheet.absoluteFill, shimmerStyle, { width: 80 }]} pointerEvents="none">
+          <LinearGradient
+            colors={['transparent', `${color}60`, 'transparent']}
+            start={{ x: 0, y: 0.5 }}
+            end={{ x: 1, y: 0.5 }}
+            style={{ flex: 1 }}
+          />
+        </Animated.View>
+        {icon(13)}
+        <Text variant="smallMedium" style={{ color }}>{label}</Text>
+      </LinearGradient>
+    </PressableScale>
+  );
+}
+
+const badgeShimmerStyle = StyleSheet.create({
+  chip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    borderWidth: 1,
+  },
+});
+
+function AnimatedNumber({ value }: { value: string }) {
+  const numericEnd = parseFloat(value.replace('%', ''));
+  const isNum = !isNaN(numericEnd) && value !== '—';
+  const [display, setDisplay] = useState(isNum ? '0' : value);
+
+  useEffect(() => {
+    if (!isNum) return;
+    const duration = 800;
+    const start = Date.now();
+    const id = setInterval(() => {
+      const elapsed = Date.now() - start;
+      const progress = Math.min(elapsed / duration, 1);
+      const eased = 1 - Math.pow(1 - progress, 3);
+      const current = eased * numericEnd;
+      if (value.includes('%')) setDisplay(`${Math.round(current)}%`);
+      else if (value.includes('.')) setDisplay(current.toFixed(1));
+      else setDisplay(String(Math.round(current)));
+      if (progress >= 1) clearInterval(id);
+    }, 16);
+    return () => clearInterval(id);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  return display;
 }
 
 /** Skill level as filled/empty dots — visually distinct from star ratings */
@@ -851,7 +1044,7 @@ function StatBlock({
       activeOpacity={onPress ? 0.6 : 1}
     >
       <Text variant="h2" color={accent ? 'primary' : 'textPrimary'}>
-        {value}
+        <AnimatedNumber value={value} />
       </Text>
       {stars != null ? (
         <Stars level={stars} size={11} />
@@ -900,6 +1093,30 @@ function attrColor(pct: number | null, c: ColorPalette): string {
   return c.alert;                    // red — bad
 }
 
+function AnimatedBar({ pct, color, borderColor, s }: { pct: number | null; color: string; borderColor: string; s: StylesType }) {
+  const fillWidth = useSharedValue(0);
+  const [trackWidth, setTrackWidth] = useState(0);
+
+  useEffect(() => {
+    if (trackWidth > 0 && pct != null) {
+      fillWidth.value = withTiming((pct / 100) * trackWidth, { duration: 600 });
+    }
+  }, [trackWidth, pct, fillWidth]);
+
+  const fillStyle = useAnimatedStyle(() => ({ width: fillWidth.value }));
+
+  return (
+    <View
+      style={[s.summaryTrack, { backgroundColor: borderColor }]}
+      onLayout={(e) => setTrackWidth(e.nativeEvent.layout.width)}
+    >
+      {pct != null ? (
+        <Animated.View style={[s.summaryFill, { backgroundColor: color }, fillStyle]} />
+      ) : null}
+    </View>
+  );
+}
+
 function ReviewSummaryBars({
   ratings, c, s,
 }: { ratings: RatingRow[]; c: ColorPalette; s: StylesType }) {
@@ -912,11 +1129,7 @@ function ReviewSummaryBars({
         return (
           <View key={label} style={s.summaryRow}>
             <Text variant="caption" color="textSecondary" style={s.summaryLabel}>{label}</Text>
-            <View style={[s.summaryTrack, { backgroundColor: c.border }]}>
-              {pct != null ? (
-                <View style={[s.summaryFill, { backgroundColor: color, width: `${pct}%` as unknown as number }]} />
-              ) : null}
-            </View>
+            <AnimatedBar pct={pct} color={color} borderColor={c.border} s={s} />
             <Text
               variant="caption"
               style={[s.summaryPct, { color: pct != null ? color : c.textTertiary }]}

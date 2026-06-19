@@ -8,17 +8,16 @@ import {
   WifiSlash,
   X,
 } from 'phosphor-react-native';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useMemo, useState } from 'react';
 import {
   ActivityIndicator,
-  Animated,
-  type DimensionValue,
   FlatList,
   RefreshControl,
   StyleSheet,
   TextInput as RNTextInput,
   View,
 } from 'react-native';
+import Animated, { FadeInDown } from 'react-native-reanimated';
 
 import { Button } from '@/components/ui/Button';
 import { Chip } from '@/components/ui/Chip';
@@ -27,6 +26,7 @@ import { PressableScale } from '@/components/ui/PressableScale';
 import { Screen } from '@/components/ui/Screen';
 import { Sheet } from '@/components/ui/Sheet';
 import { Stars } from '@/components/ui/Stars';
+import { ShimmerSkeleton } from '@/components/ui/ShimmerSkeleton';
 import { Text } from '@/components/ui/Text';
 import { TextInput } from '@/components/ui/TextInput';
 import { useMatchesInfinite } from '@/hooks/useMatches';
@@ -79,45 +79,6 @@ const FILTER_TITLES: Record<NonNullable<OpenFilter>, string> = {
   position: 'Posición',
 };
 
-function SkeletonPulse({
-  width,
-  height,
-  borderRadius: br,
-  bgColor,
-  borderColor,
-}: {
-  width: DimensionValue;
-  height: number;
-  borderRadius: number;
-  bgColor: string;
-  borderColor: string;
-}) {
-  const opacity = useRef(new Animated.Value(0.3)).current;
-  useEffect(() => {
-    const anim = Animated.loop(
-      Animated.sequence([
-        Animated.timing(opacity, { toValue: 1, duration: 800, useNativeDriver: true }),
-        Animated.timing(opacity, { toValue: 0.3, duration: 800, useNativeDriver: true }),
-      ]),
-    );
-    anim.start();
-    return () => anim.stop();
-  }, [opacity]);
-  return (
-    <View style={{ width, height }}>
-      <Animated.View
-        style={{
-          flex: 1,
-          borderRadius: br,
-          backgroundColor: bgColor,
-          borderWidth: 1,
-          borderColor,
-          opacity,
-        }}
-      />
-    </View>
-  );
-}
 
 function FilterPill({
   icon,
@@ -343,14 +304,7 @@ export default function BuscarScreen() {
       {isLoading && rawMatches.length === 0 ? (
         <View style={s.skeletonWrap}>
           {[0, 1, 2, 3].map((i) => (
-            <SkeletonPulse
-              key={i}
-              width="100%"
-              height={120}
-              borderRadius={radius.lg}
-              bgColor={c.surface}
-              borderColor={c.border}
-            />
+            <ShimmerSkeleton key={i} width="100%" height={120} borderRadius={radius.lg} />
           ))}
         </View>
       ) : isError ? (
@@ -401,11 +355,13 @@ export default function BuscarScreen() {
             </View>
           }
           ItemSeparatorComponent={() => <View style={{ height: spacing.md }} />}
-          renderItem={({ item: m }) => (
-            <MatchCard
-              match={m}
-              onPress={() => router.push(`/match/${m.id}`)}
-            />
+          renderItem={({ item: m, index }) => (
+            <Animated.View entering={FadeInDown.delay(Math.min(index, 8) * 60).duration(380).springify().damping(20)}>
+              <MatchCard
+                match={m}
+                onPress={() => router.push(`/match/${m.id}`)}
+              />
+            </Animated.View>
           )}
           ListEmptyComponent={
             <View style={s.empty}>

@@ -1,8 +1,15 @@
 import * as Haptics from 'expo-haptics';
 import { Image } from 'expo-image';
-import { Camera } from 'phosphor-react-native';
+import { Camera, X } from 'phosphor-react-native';
 import { useState } from 'react';
-import { ActivityIndicator, ScrollView, StyleSheet, View } from 'react-native';
+import {
+  ActivityIndicator,
+  Modal,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  View,
+} from 'react-native';
 
 import { PressableScale } from '@/components/ui/PressableScale';
 import { Text } from '@/components/ui/Text';
@@ -21,6 +28,7 @@ export function MatchPhotos({ matchId, uploaderId, photos, onPhotoAdded }: Props
   const c = useColors();
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [viewer, setViewer] = useState<string | null>(null);
 
   if (photos.length === 0 && !uploaderId) return null;
 
@@ -34,8 +42,10 @@ export function MatchPhotos({ matchId, uploaderId, photos, onPhotoAdded }: Props
         void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         onPhotoAdded(photo);
       }
-    } catch {
-      setError('No se pudo subir la foto');
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error('[MatchPhotos] upload error:', msg);
+      setError(`Error: ${msg}`);
     } finally {
       setUploading(false);
     }
@@ -49,12 +59,18 @@ export function MatchPhotos({ matchId, uploaderId, photos, onPhotoAdded }: Props
         contentContainerStyle={styles.row}
       >
         {photos.map((p) => (
-          <Image
+          <PressableScale
             key={p.id}
-            source={{ uri: p.url }}
-            style={[styles.photo, { borderColor: c.border }]}
-            contentFit="cover"
-          />
+            scaleTo={0.95}
+            onPress={() => setViewer(p.url)}
+          >
+            <Image
+              source={{ uri: p.url }}
+              style={[styles.photo, { borderColor: c.border }]}
+              contentFit="cover"
+              onError={(e) => console.warn('[MatchPhotos] image load error:', p.url, e)}
+            />
+          </PressableScale>
         ))}
         {uploaderId ? (
           <PressableScale
@@ -79,6 +95,21 @@ export function MatchPhotos({ matchId, uploaderId, photos, onPhotoAdded }: Props
           {error}
         </Text>
       ) : null}
+
+      <Modal visible={!!viewer} transparent animationType="fade" onRequestClose={() => setViewer(null)}>
+        <View style={styles.overlay}>
+          <Pressable style={styles.closeBtn} onPress={() => setViewer(null)}>
+            <X size={24} color="#fff" weight="bold" />
+          </Pressable>
+          {viewer ? (
+            <Image
+              source={{ uri: viewer }}
+              style={styles.fullImg}
+              contentFit="contain"
+            />
+          ) : null}
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -105,5 +136,22 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: spacing.xs,
+  },
+  overlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.92)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  closeBtn: {
+    position: 'absolute',
+    top: 56,
+    right: spacing.lg,
+    zIndex: 10,
+    padding: spacing.sm,
+  },
+  fullImg: {
+    width: '100%',
+    height: '80%',
   },
 });

@@ -10,11 +10,13 @@ import {
   StyleSheet,
   View,
 } from 'react-native';
+import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Avatar } from '@/components/ui/Avatar';
 import { BackHeader } from '@/components/ui/BackHeader';
 import { ConfirmSheet } from '@/components/ui/ConfirmSheet';
+import { TypingDots } from '@/components/ui/TypingDots';
 import { PressableScale } from '@/components/ui/PressableScale';
 import { Screen } from '@/components/ui/Screen';
 import { Text } from '@/components/ui/Text';
@@ -141,9 +143,10 @@ export default function DirectChatScreen() {
             <View style={s.typingRow}>
               <Text variant="small" color="textTertiary">
                 {othersTyping.length === 1
-                  ? `${othersTyping[0]} está escribiendo...`
-                  : `${othersTyping.join(', ')} están escribiendo...`}
+                  ? `${othersTyping[0]} está escribiendo`
+                  : `${othersTyping.join(', ')} están escribiendo`}
               </Text>
+              <TypingDots color={c.textTertiary} />
             </View>
           ) : null}
           <View style={s.composer}>
@@ -203,7 +206,10 @@ function DirectBubble({
   const isOptimistic = message.id.startsWith('opt_');
 
   return (
-    <View style={[s.bubbleRow, isMe ? s.alignRight : s.alignLeft]}>
+    <Animated.View
+      entering={FadeInDown.duration(220).springify().damping(22)}
+      style={[s.bubbleRow, isMe ? s.alignRight : s.alignLeft]}
+    >
       {!isMe ? (
         <Avatar name={message.authorName} uri={message.authorAvatarUrl} size={28} />
       ) : null}
@@ -226,7 +232,7 @@ function DirectBubble({
           ) : null}
         </View>
       </View>
-    </View>
+    </Animated.View>
   );
 }
 

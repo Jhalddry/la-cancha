@@ -9,8 +9,16 @@ import {
   Warning,
   X,
 } from 'phosphor-react-native';
-import { useMemo, useState } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 import { ActivityIndicator, ScrollView, StyleSheet, View } from 'react-native';
+import { Gesture, GestureDetector } from 'react-native-gesture-handler';
+import Animated, {
+  runOnJS,
+  useAnimatedStyle,
+  useSharedValue,
+  withSpring,
+  withTiming,
+} from 'react-native-reanimated';
 
 import { BackHeader } from '@/components/ui/BackHeader';
 import { ConfirmSheet } from '@/components/ui/ConfirmSheet';
@@ -24,6 +32,32 @@ import { useNotifications, useMarkAllRead, useMarkRead, useDeleteNotification, u
 import type { NotificationKind } from '@/lib/notificationsApi';
 import type { ColorPalette } from '@/theme/palettes';
 import { radius, spacing } from '@/theme';
+
+function SwipeableRow({ children, onDismiss }: { children: ReactNode; onDismiss: () => void }) {
+  const translateX = useSharedValue(0);
+
+  const pan = Gesture.Pan()
+    .activeOffsetX([-10, 10])
+    .failOffsetY([-15, 15])
+    .onUpdate((e) => { translateX.value = e.translationX; })
+    .onEnd((e) => {
+      if (Math.abs(e.translationX) > 100) {
+        const dir = e.translationX > 0 ? 1 : -1;
+        translateX.value = withTiming(dir * 500, { duration: 200 });
+        runOnJS(onDismiss)();
+      } else {
+        translateX.value = withSpring(0, { damping: 18, stiffness: 200 });
+      }
+    });
+
+  const style = useAnimatedStyle(() => ({ transform: [{ translateX: translateX.value }] }));
+
+  return (
+    <GestureDetector gesture={pan}>
+      <Animated.View style={style}>{children}</Animated.View>
+    </GestureDetector>
+  );
+}
 
 function relativeTime(iso: string): string {
   const diff = Date.now() - new Date(iso).getTime();
@@ -154,31 +188,33 @@ export default function NotificacionesScreen() {
           showsVerticalScrollIndicator={false}
         >
           {displayed.map((notif) => (
-            <View key={notif.id} style={[s.row, notif.read ? s.rowRead : s.rowUnread]}>
-              <PressableScale
-                onPress={() => handlePress(notif.id, notif.navigateTo, notif.read)}
-                scaleTo={0.98}
-                style={s.rowInner}
-              >
-                <NotifIcon kind={notif.kind} read={notif.read} />
-                <View style={staticStyles.textBlock}>
-                  <Text
-                    variant="bodyMedium"
-                    color={notif.read ? 'textSecondary' : 'textPrimary'}
-                    numberOfLines={2}
-                  >
-                    {notif.title}
-                  </Text>
-                  <Text variant="caption" color="textTertiary">
-                    {relativeTime(notif.createdAt)}
-                  </Text>
-                </View>
-                {!notif.read && <View style={s.unreadDot} />}
-              </PressableScale>
-              <PressableScale onPress={() => deleteOne(notif.id)} scaleTo={0.85} style={s.deleteBtn}>
-                <X size={14} color={c.textTertiary} weight="bold" />
-              </PressableScale>
-            </View>
+            <SwipeableRow key={notif.id} onDismiss={() => deleteOne(notif.id)}>
+              <View style={[s.row, notif.read ? s.rowRead : s.rowUnread]}>
+                <PressableScale
+                  onPress={() => handlePress(notif.id, notif.navigateTo, notif.read)}
+                  scaleTo={0.98}
+                  style={s.rowInner}
+                >
+                  <NotifIcon kind={notif.kind} read={notif.read} />
+                  <View style={staticStyles.textBlock}>
+                    <Text
+                      variant="bodyMedium"
+                      color={notif.read ? 'textSecondary' : 'textPrimary'}
+                      numberOfLines={2}
+                    >
+                      {notif.title}
+                    </Text>
+                    <Text variant="caption" color="textTertiary">
+                      {relativeTime(notif.createdAt)}
+                    </Text>
+                  </View>
+                  {!notif.read && <View style={s.unreadDot} />}
+                </PressableScale>
+                <PressableScale onPress={() => deleteOne(notif.id)} scaleTo={0.85} style={s.deleteBtn}>
+                  <X size={14} color={c.textTertiary} weight="bold" />
+                </PressableScale>
+              </View>
+            </SwipeableRow>
           ))}
         </ScrollView>
       )}

@@ -92,6 +92,24 @@ export async function rejectVerification(id: string): Promise<void> {
   if (error) throw new Error(error.message);
 }
 
+function computeBadges(
+  matchesPlayed: number,
+  matchesOrganized: number,
+  attendancePct: number | undefined,
+  reputation: number | undefined,
+): string[] {
+  const b: string[] = [];
+  if (matchesPlayed >= 1)  b.push('Debut');
+  if (matchesPlayed >= 10) b.push('Veterano');
+  if (matchesPlayed >= 50) b.push('Veterano Elite');
+  if (matchesOrganized >= 1)  b.push('Primera caimanera');
+  if (matchesOrganized >= 5)  b.push('Organizador');
+  if (matchesOrganized >= 20) b.push('Organizador Elite');
+  if ((attendancePct ?? 0) >= 90 && matchesPlayed >= 5)  b.push('Asistente Perfecto');
+  if ((reputation ?? 0) >= 4.5 && matchesPlayed >= 10)   b.push('Estrella');
+  return b;
+}
+
 export async function fetchProfile(id: string): Promise<Player | null> {
   const { data, error } = await supabase
     .from('profiles')
@@ -131,10 +149,14 @@ export async function fetchProfile(id: string): Promise<Player | null> {
         ) / 10
       : player.reputation;
 
+  const matchesPlayed = participantRes.count ?? player.matchesPlayed ?? 0;
+  const matchesOrganized = organizedRes.count ?? player.matchesOrganized ?? 0;
+
   return {
     ...player,
-    matchesPlayed: participantRes.count ?? player.matchesPlayed ?? 0,
-    matchesOrganized: organizedRes.count ?? player.matchesOrganized ?? 0,
+    matchesPlayed,
+    matchesOrganized,
     reputation: computedReputation,
+    badges: computeBadges(matchesPlayed, matchesOrganized, player.attendancePct, computedReputation),
   };
 }

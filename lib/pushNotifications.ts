@@ -70,7 +70,8 @@ export async function sendPushToUser(
         data: { navigateTo: navigateTo ?? null },
         sound: 'default',
         priority: 'high',
-        ...(imageUrl ? { imageUrl } : {}),
+        // mutableContent lets iOS NSE download imageUrl before showing the notification
+        ...(imageUrl ? { imageUrl, mutableContent: true } : {}),
       }),
     });
   } catch (e) {

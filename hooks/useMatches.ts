@@ -109,7 +109,7 @@ export function useMatch(id: string | undefined) {
   useEffect(() => {
     if (!id) return;
     const channel = supabase
-      .channel(`match-participants:${id}`)
+      .channel(`match-participants:${id}:${Math.random().toString(36).slice(2)}`)
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'match_participants', filter: `match_id=eq.${id}` },

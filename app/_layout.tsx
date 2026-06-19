@@ -23,11 +23,17 @@ import 'react-native-reanimated';
 import { queryClient } from '@/lib/queryClient';
 import { registerForPushNotifications } from '@/lib/pushNotifications';
 import { useColors } from '@/hooks/useColors';
+import { useNotificationsSync } from '@/hooks/useNotifications';
 import { useSession } from '@/store/session';
 import { useTheme } from '@/store/theme';
 
 void SplashScreen.preventAutoHideAsync().catch(() => {});
 WebBrowser.maybeCompleteAuthSession();
+
+function NotificationsSyncMount() {
+  useNotificationsSync();
+  return null;
+}
 
 export default function RootLayout() {
   const initialize = useSession((s) => s.initialize);
@@ -121,6 +127,7 @@ export default function RootLayout() {
       <SafeAreaProvider>
         <ThemeProvider value={navTheme}>
           <View style={[styles.root, { backgroundColor: c.bg }]}>
+            <NotificationsSyncMount />
             <Stack
               screenOptions={{
                 headerShown: false,

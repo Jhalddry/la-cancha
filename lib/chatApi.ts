@@ -274,22 +274,23 @@ export async function markThreadRead(
   // Record locally before the async DB write so pull-to-refresh sees this immediately
   _localReads.set(`${threadType}:${threadId}`, new Date().toISOString());
 
-  // Prefer RPC (server-side NOW() avoids clock skew). Fall back to direct upsert
-  // if the RPC doesn't exist yet (migration pending).
+  // Try RPC first (server-side NOW() avoids clock skew).
   const { error: rpcErr } = await supabase.rpc('mark_thread_read', {
     p_thread_type: threadType,
     p_thread_id: threadId,
   });
   if (rpcErr) {
     console.warn('[chat] mark_thread_read RPC error:', rpcErr.message, { threadType, threadId });
-    const { error: upsertErr } = await supabase
-      .from('chat_reads')
-      .upsert(
-        { thread_type: threadType, thread_id: threadId, user_id: userId, last_read_at: new Date().toISOString() },
-        { onConflict: 'thread_type,thread_id,user_id' },
-      );
-    if (upsertErr) console.warn('[chat] chat_reads upsert fallback error:', upsertErr.message);
   }
+  // Always upsert as belt-and-suspenders: RPC can silently no-op if the
+  // migration hasn't run, causing badge to restore on refresh or cold start.
+  const { error: upsertErr } = await supabase
+    .from('chat_reads')
+    .upsert(
+      { thread_type: threadType, thread_id: threadId, user_id: userId, last_read_at: new Date().toISOString() },
+      { onConflict: 'thread_type,thread_id,user_id' },
+    );
+  if (upsertErr) console.warn('[chat] chat_reads upsert error:', upsertErr.message);
 }
 
 /** Latest last_read_at among OTHER users in a thread (for read receipts).

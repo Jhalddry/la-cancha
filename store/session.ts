@@ -60,6 +60,7 @@ interface SessionState {
   setCity: (city: string) => Promise<void>;
   signIn: (email: string, password: string) => Promise<string | null>;
   signUp: (name: string, email: string, password: string) => Promise<string | null>;
+  completeOAuthSignIn: (url: string) => Promise<string | null>;
   signOut: () => Promise<void>;
   initialize: () => () => void;
 }
@@ -119,6 +120,29 @@ export const useSession = create<SessionState>((set) => ({
     }
   },
 
+  completeOAuthSignIn: async (url: string) => {
+    try {
+      const { data, error } = await supabase.auth.exchangeCodeForSession(url);
+      if (error) return error.message;
+      const session = data.session;
+      if (!session?.user) return 'No se pudo obtener la sesión.';
+      const fallback =
+        (session.user.user_metadata?.name as string | undefined) ??
+        session.user.email?.split('@')[0] ??
+        'Usuario';
+      const profile = await fetchOrCreateProfile(session.user.id, fallback);
+      set({
+        user: profile,
+        isAuthed: true,
+        isLoading: false,
+        isOnboarded: profile?.onboarded ?? false,
+      });
+      return null;
+    } catch (e: unknown) {
+      return e instanceof Error ? e.message : 'Error de conexión';
+    }
+  },
+
   signOut: async () => {
     await supabase.auth.signOut();
     set({ user: null, isAuthed: false, isOnboarded: false });
@@ -161,8 +185,18 @@ export const useSession = create<SessionState>((set) => ({
         set({ user: null, isAuthed: false, isLoading: false, isOnboarded: false });
         return;
       }
-      // Skip redundant re-fetch on token refresh if we already have the user
-      if (event === "TOKEN_REFRESHED") {
+      // Skip redundant re-fetch when the same user is already loaded.
+      // TOKEN_REFRESHED: background token rotation.
+      // SIGNED_IN: fired by signInWithPassword used to verify current password
+      //   in cuenta/contrasena before calling updateUser.
+      // USER_UPDATED: fired by updateUser (password/email change) — profile row
+      //   is unchanged, no need to re-fetch. Without this guard the fetch can
+      //   transiently return null → signOut() → screen unmounts mid-save.
+      if (
+        event === "TOKEN_REFRESHED" ||
+        event === "SIGNED_IN" ||
+        event === "USER_UPDATED"
+      ) {
         const current = useSession.getState().user;
         if (current?.id === session.user.id) {
           set({ isAuthed: true, isLoading: false });

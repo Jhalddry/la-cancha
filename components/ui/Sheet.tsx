@@ -1,3 +1,4 @@
+import { BlurView } from 'expo-blur';
 import { X } from 'phosphor-react-native';
 import { type ReactNode, useEffect, useMemo, useRef } from 'react';
 import {
@@ -76,9 +77,9 @@ export function Sheet({ visible, onClose, title, children }: Props) {
       onRequestClose={onClose}
       statusBarTranslucent
     >
-      <Animated.View style={[s.container, { paddingBottom: keyboardH }]}>
-        <Pressable style={StyleSheet.absoluteFill} onPress={() => { Keyboard.dismiss(); onClose(); }} />
-
+      <BlurView style={StyleSheet.absoluteFill} intensity={18} tint="dark" />
+      <Pressable style={StyleSheet.absoluteFill} onPress={() => { Keyboard.dismiss(); onClose(); }} />
+      <Animated.View style={[s.container, { paddingBottom: keyboardH }]} pointerEvents="box-none">
         <Animated.View style={[s.sheet, { maxHeight: maxH, paddingBottom: sheetPb }]}>
           <View style={s.grabber} />
 
@@ -102,6 +103,7 @@ export function Sheet({ visible, onClose, title, children }: Props) {
       </Animated.View>
     </Modal>
   );
+
 }
 
 function makeStyles(c: ColorPalette) {

@@ -5,12 +5,21 @@ import {
   PencilSimple,
   Play,
   Plus,
+  ProhibitInset,
   Star,
   WifiSlash,
 } from 'phosphor-react-native';
 import { useFocusEffect } from 'expo-router';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Animated, type DimensionValue, RefreshControl, ScrollView, StyleSheet, Text as RNText, View } from 'react-native';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { type DimensionValue, RefreshControl, ScrollView, StyleSheet, Text as RNText, View } from 'react-native';
+import Animated, {
+  cancelAnimation,
+  useAnimatedStyle,
+  useSharedValue,
+  withRepeat,
+  withSequence,
+  withTiming,
+} from 'react-native-reanimated';
 
 import { Avatar } from '@/components/ui/Avatar';
 import { Button } from '@/components/ui/Button';
@@ -60,23 +69,65 @@ function SkeletonPulse({
   bgColor: string;
   borderColor: string;
 }) {
-  const opacity = useRef(new Animated.Value(0.3)).current;
+  const opacity = useSharedValue(0.3);
   useEffect(() => {
-    const anim = Animated.loop(
-      Animated.sequence([
-        Animated.timing(opacity, { toValue: 1, duration: 800, useNativeDriver: true }),
-        Animated.timing(opacity, { toValue: 0.3, duration: 800, useNativeDriver: true }),
-      ]),
+    opacity.value = withRepeat(
+      withSequence(withTiming(1, { duration: 800 }), withTiming(0.3, { duration: 800 })),
+      -1,
+      false,
     );
-    anim.start();
-    return () => anim.stop();
-  }, [opacity]);
+    return () => cancelAnimation(opacity);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  const aStyle = useAnimatedStyle(() => ({ opacity: opacity.value }));
   return (
     <View style={{ width, height }}>
       <Animated.View
-        style={{ flex: 1, borderRadius: br, backgroundColor: bgColor, borderWidth: 1, borderColor, opacity }}
+        style={[{ flex: 1, borderRadius: br, backgroundColor: bgColor, borderWidth: 1, borderColor }, aStyle]}
       />
     </View>
+  );
+}
+
+function LiveBadge() {
+  const scale = useSharedValue(1);
+  useEffect(() => {
+    scale.value = withRepeat(
+      withSequence(withTiming(1.5, { duration: 700 }), withTiming(1, { duration: 700 })),
+      -1,
+      false,
+    );
+    return () => cancelAnimation(scale);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  const dotStyle = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
+  return (
+    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+      <Animated.View style={[{ width: 7, height: 7, borderRadius: 3.5, backgroundColor: '#ef4444' }, dotStyle]} />
+      <RNText style={{ color: '#ef4444', fontSize: 11, fontWeight: '700', letterSpacing: 0.8 }}>EN VIVO</RNText>
+    </View>
+  );
+}
+
+function formatCountdown(startsAt: string): string {
+  const diff = new Date(startsAt).getTime() - Date.now();
+  if (diff <= 0) return 'En curso';
+  const totalMin = Math.floor(diff / 60_000);
+  const h = Math.floor(totalMin / 60);
+  const min = totalMin % 60;
+  if (h === 0) return `en ${min}min`;
+  if (min === 0) return `en ${h}h`;
+  return `en ${h}h ${min}min`;
+}
+
+function Countdown({ startsAt }: { startsAt: string }) {
+  const [label, setLabel] = useState(() => formatCountdown(startsAt));
+  useEffect(() => {
+    const id = setInterval(() => setLabel(formatCountdown(startsAt)), 60_000);
+    return () => clearInterval(id);
+  }, [startsAt]);
+  return (
+    <Text variant="caption" color="textTertiary">{label}</Text>
   );
 }
 
@@ -133,6 +184,7 @@ export default function MisPartidasScreen() {
   };
 
   const proximasList = myMatches?.upcoming ?? [];
+  const rejectedList = myMatches?.rejected ?? [];
   const activasList = (myMatches?.created ?? []).filter((m) => !m.endedAt);
 
   const emptyTitle = tab === 'calificar' ? 'Sin partidas por calificar' : tab === 'activas' ? 'Sin partidas activas' : 'Sin partidas próximas';
@@ -145,7 +197,7 @@ export default function MisPartidasScreen() {
   const calificarList = endedMatches.filter((m) => toRate(m).length > 0);
 
   const showEmpty =
-    (tab === 'proximas' && proximasList.length === 0) ||
+    (tab === 'proximas' && proximasList.length === 0 && rejectedList.length === 0) ||
     (tab === 'activas' && activasList.length === 0) ||
     (tab === 'calificar' && calificarList.length === 0);
 
@@ -244,24 +296,62 @@ export default function MisPartidasScreen() {
         >
 
           {/* ── Próximas ────────────────────────────────── */}
-          {tab === 'proximas'
-            ? proximasList.map((m) => (
-                <MatchCard
-                  key={m.id}
-                  match={m}
-                  onPress={() => router.push(`/match/${m.id}`)}
-                />
-              ))
-            : null}
+          {tab === 'proximas' ? (
+            <>
+              {proximasList.map((m) => (
+                <View key={m.id} style={{ gap: spacing.xs }}>
+                  <MatchCard
+                    match={m}
+                    onPress={() => router.push(`/match/${m.id}`)}
+                  />
+                  <View style={s.countdownRow}>
+                    <Countdown startsAt={m.startsAt} />
+                  </View>
+                </View>
+              ))}
+              {rejectedList.length > 0 ? (
+                <>
+                  {proximasList.length > 0 ? (
+                    <View style={s.rejectedHeader}>
+                      <ProhibitInset size={14} color={c.textTertiary} weight="fill" />
+                      <Text variant="caption" color="textTertiary">Solicitudes rechazadas</Text>
+                    </View>
+                  ) : null}
+                  {rejectedList.map((m) => (
+                    <View key={m.id} style={{ opacity: 0.45 }}>
+                      <MatchCard
+                        match={m}
+                        onPress={() => router.push(`/match/${m.id}`)}
+                      />
+                      <View style={s.rejectedBadge}>
+                        <ProhibitInset size={12} color={c.alert} weight="fill" />
+                        <Text variant="smallMedium" color="alert">Solicitud no aceptada</Text>
+                      </View>
+                    </View>
+                  ))}
+                </>
+              ) : null}
+            </>
+          ) : null}
 
           {/* ── Activas ─────────────────────────────────── */}
           {tab === 'activas'
             ? activasList.map((m) => (
                 <View key={m.id} style={s.cardWrap}>
+                  {m.startedAt && !m.endedAt ? (
+                    <View style={s.liveBanner}>
+                      <LiveBadge />
+                    </View>
+                  ) : null}
                   <MatchCard
                     match={m}
                     onPress={() => router.push(`/match/${m.id}`)}
-                    cardStyle={{ borderBottomLeftRadius: 0, borderBottomRightRadius: 0, borderBottomWidth: 0 }}
+                    cardStyle={{
+                      borderBottomLeftRadius: 0,
+                      borderBottomRightRadius: 0,
+                      borderBottomWidth: 0,
+                      ...(m.startedAt && !m.endedAt ? { borderTopLeftRadius: 0, borderTopRightRadius: 0 } : {}),
+                    }}
                   />
                   {/* Action row */}
                   <View style={s.actionRow}>
@@ -453,6 +543,37 @@ function makeStyles(c: ColorPalette) {
       paddingHorizontal: spacing.sm,
       backgroundColor: c.seria,
       borderRadius: radius.md,
+    },
+    countdownRow: {
+      paddingHorizontal: spacing.sm,
+      alignItems: 'flex-end',
+      marginTop: -spacing.xs,
+    },
+    liveBanner: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingVertical: spacing.xs + 1,
+      backgroundColor: 'rgba(239, 68, 68, 0.10)',
+      borderWidth: 1,
+      borderColor: 'rgba(239, 68, 68, 0.35)',
+      borderBottomWidth: 0,
+      borderTopLeftRadius: radius.lg,
+      borderTopRightRadius: radius.lg,
+    },
+    rejectedHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.xs,
+      paddingVertical: spacing.xs,
+    },
+    rejectedBadge: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.xs,
+      marginTop: -spacing.sm,
+      paddingHorizontal: spacing.md,
+      paddingBottom: spacing.sm,
     },
     // Calificar tab
     calificarGroup: {

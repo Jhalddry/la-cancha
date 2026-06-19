@@ -10,12 +10,14 @@ import {
   StyleSheet,
   View,
 } from 'react-native';
+import Animated, { FadeIn } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Avatar } from '@/components/ui/Avatar';
 import { BackHeader } from '@/components/ui/BackHeader';
 import { ConfirmSheet } from '@/components/ui/ConfirmSheet';
 import { Sheet } from '@/components/ui/Sheet';
+import { TypingDots } from '@/components/ui/TypingDots';
 import { PressableScale } from '@/components/ui/PressableScale';
 import { Screen } from '@/components/ui/Screen';
 import { Text } from '@/components/ui/Text';
@@ -160,9 +162,10 @@ export default function ChatScreen() {
             <View style={s.typingRow}>
               <Text variant="small" color="textTertiary">
                 {othersTyping.length === 1
-                  ? `${othersTyping[0]} está escribiendo...`
-                  : `${othersTyping.join(', ')} están escribiendo...`}
+                  ? `${othersTyping[0]} está escribiendo`
+                  : `${othersTyping.join(', ')} están escribiendo`}
               </Text>
+              <TypingDots color={c.textTertiary} />
             </View>
           ) : null}
           <View style={s.composer}>
@@ -248,7 +251,10 @@ function Bubble({
   const isMe = message.authorId === myId;
   const isOptimistic = message.id.startsWith('opt_');
   return (
-    <View style={[s.bubbleRow, isMe ? s.alignRight : s.alignLeft]}>
+    <Animated.View
+      entering={FadeIn.duration(180)}
+      style={[s.bubbleRow, isMe ? s.alignRight : s.alignLeft]}
+    >
       {!isMe ? (
         <PressableScale scaleTo={0.9} onPress={() => onAvatarPress?.(message.authorId)}>
           <Avatar name={message.authorName} uri={message.authorAvatarUrl} size={28} />
@@ -285,7 +291,7 @@ function Bubble({
           ) : null}
         </View>
       </View>
-    </View>
+    </Animated.View>
   );
 }
 
@@ -347,6 +353,9 @@ function makeStyles(c: ColorPalette, bottomInset = 0) {
     timeRight: { justifyContent: 'flex-end' },
     timeLeft: { justifyContent: 'flex-start', marginLeft: spacing.sm },
     typingRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.xs,
       paddingHorizontal: spacing.lg,
       paddingVertical: spacing.xs,
       backgroundColor: c.bg,

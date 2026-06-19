@@ -19,6 +19,11 @@ import {
 } from 'phosphor-react-native';
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { ActivityIndicator, Modal, ScrollView, StyleSheet, View } from 'react-native';
+import Animated, {
+  useAnimatedScrollHandler,
+  useAnimatedStyle,
+  useSharedValue,
+} from 'react-native-reanimated';
 import MapView, { Marker } from 'react-native-maps';
 import { captureRef } from 'react-native-view-shot';
 import * as Sharing from 'expo-sharing';
@@ -88,7 +93,7 @@ export default function MatchDetailScreen() {
   // Track who's viewing this match in real time via Supabase Presence
   useEffect(() => {
     if (!id || !userId) return;
-    const ch = supabase.channel(`viewing:${id}`, { config: { presence: { key: userId } } })
+    const ch = supabase.channel(`viewing:${id}:${Math.random().toString(36).slice(2)}`, { config: { presence: { key: userId } } })
       .on('presence', { event: 'sync' }, () => {
         setViewerCount(Object.keys(ch.presenceState()).length);
       })
@@ -111,6 +116,12 @@ export default function MatchDetailScreen() {
   const handlePhotoAdded = (photo: MatchPhoto) => {
     queryClient.setQueryData<MatchPhoto[]>(['match-photos', id], (old) => [...(old ?? []), photo]);
   };
+
+  const scrollY = useSharedValue(0);
+  const scrollHandler = useAnimatedScrollHandler({ onScroll: (e) => { scrollY.value = e.contentOffset.y; } });
+  const heroEmojiStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: scrollY.value * -0.3 }],
+  }));
 
   const isOrganizer = match?.organizer.id === userId;
   const { data: organizerProfile } = useProfile(match?.organizer.id);
@@ -179,14 +190,18 @@ export default function MatchDetailScreen() {
         }
       />
 
-      <ScrollView
+      <Animated.ScrollView
         contentContainerStyle={s.scroll}
         showsVerticalScrollIndicator={false}
+        onScroll={scrollHandler}
+        scrollEventThrottle={16}
       >
         {/* ── Hero ──────────────────────────────────────── */}
         <View style={s.hero}>
           <View style={s.heroLeft}>
-            <Text style={s.heroEmoji}>{SPORT_EMOJI[match.sport]}</Text>
+            <Animated.View style={heroEmojiStyle}>
+              <Text style={s.heroEmoji}>{SPORT_EMOJI[match.sport]}</Text>
+            </Animated.View>
             <View style={{ gap: 2 }}>
               {match.endedAt ? (
                 <Text variant="h1" color="textSecondary">Partida finalizada</Text>
@@ -264,6 +279,34 @@ export default function MatchDetailScreen() {
             }
           />
         </Card>
+
+        {/* ── Mini map ──────────────────────────────────── */}
+        {match.location.lat && match.location.lng ? (
+          <PressableScale scaleTo={0.98} onPress={() => setMapOpen(true)}>
+            <View style={s.miniMap}>
+              <MapView
+                style={StyleSheet.absoluteFill}
+                pointerEvents="none"
+                scrollEnabled={false}
+                zoomEnabled={false}
+                rotateEnabled={false}
+                pitchEnabled={false}
+                initialRegion={{
+                  latitude: match.location.lat,
+                  longitude: match.location.lng,
+                  latitudeDelta: 0.004,
+                  longitudeDelta: 0.004,
+                }}
+              >
+                <Marker coordinate={{ latitude: match.location.lat, longitude: match.location.lng }} />
+              </MapView>
+              <View style={s.miniMapLabel}>
+                <MapPin size={12} color={c.primary} weight="fill" />
+                <Text variant="caption" color="primary" numberOfLines={1}>{match.location.name}</Text>
+              </View>
+            </View>
+          </PressableScale>
+        ) : null}
 
         {/* ── Positions ─────────────────────────────────── */}
         <Section
@@ -495,7 +538,7 @@ export default function MatchDetailScreen() {
             )}
           </Section>
         ) : null}
-      </ScrollView>
+      </Animated.ScrollView>
 
       {/* ── Sticky footer ─────────────────────────────── */}
       {!isOrganizer && !match.endedAt && !isAdmin ? (
@@ -1083,6 +1126,29 @@ function makeStyles(c: ColorPalette) {
       borderRadius: radius.md,
       borderWidth: 1,
       borderColor: c.primary,
+    },
+    // Mini map
+    miniMap: {
+      height: 120,
+      borderRadius: radius.lg,
+      overflow: 'hidden',
+      borderWidth: 1,
+      borderColor: c.border,
+    },
+    miniMapLabel: {
+      position: 'absolute',
+      bottom: spacing.sm,
+      left: spacing.sm,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.xs,
+      backgroundColor: c.surface,
+      borderRadius: radius.full,
+      paddingHorizontal: spacing.sm,
+      paddingVertical: 4,
+      borderWidth: 1,
+      borderColor: c.border,
+      maxWidth: '70%',
     },
     // Map modal
     mapModal: {

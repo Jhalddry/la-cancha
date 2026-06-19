@@ -1,7 +1,9 @@
 import { useRouter } from 'expo-router';
 import * as Linking from 'expo-linking';
 import * as WebBrowser from 'expo-web-browser';
-import { Check, CheckCircle, Envelope, Eye, EyeSlash, GoogleLogo, Lock, User, XCircle } from 'phosphor-react-native';
+import { Check, CheckCircle, Envelope, Eye, EyeSlash, Lock, User, XCircle } from 'phosphor-react-native';
+
+import { GoogleColorIcon } from '@/components/brand/GoogleColorIcon';
 import { useMemo, useState } from 'react';
 import { ActivityIndicator, Alert, ScrollView, StyleSheet, View } from 'react-native';
 
@@ -74,6 +76,7 @@ const pwStyles = StyleSheet.create({
 export default function RegisterScreen() {
   const router = useRouter();
   const signUp = useSession((s) => s.signUp);
+  const completeOAuthSignIn = useSession((s) => s.completeOAuthSignIn);
   const c = useColors();
   const s = useMemo(() => makeStyles(c), [c]);
 
@@ -143,15 +146,12 @@ export default function RegisterScreen() {
 
       const result = await WebBrowser.openAuthSessionAsync(data.url, redirectTo);
       if (result.type === 'success' && result.url) {
-        const fragment = result.url.split('#')[1] ?? result.url.split('?')[1] ?? '';
-        const params = new URLSearchParams(fragment);
-        const access_token = params.get('access_token');
-        const refresh_token = params.get('refresh_token');
-        if (access_token && refresh_token) {
-          const { error: sessionError } = await supabase.auth.setSession({ access_token, refresh_token });
-          if (!sessionError) { router.replace('/(tabs)'); return; }
+        const err = await completeOAuthSignIn(result.url);
+        if (!err) {
+          router.replace('/(tabs)');
+          return;
         }
-        setAuthError('No se pudo completar el registro con Google.');
+        setAuthError(err);
       }
     } catch {
       setAuthError('No se pudo continuar con Google. Intenta de nuevo.');
@@ -283,7 +283,7 @@ export default function RegisterScreen() {
         <Button
           label="Continuar con Google"
           variant="secondary"
-          leading={<GoogleLogo size={18} color={c.textPrimary} weight="bold" />}
+          leading={<GoogleColorIcon size={18} />}
           onPress={handleGoogleSignIn}
           disabled={loading}
         />

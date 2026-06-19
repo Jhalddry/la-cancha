@@ -49,13 +49,35 @@ export async function pickAndUploadMatchPhoto(
   const ext = (asset.uri.split('.').pop() ?? 'jpg').toLowerCase();
   const path = `${matchId}/${uploaderId}_${Date.now()}.${ext}`;
 
-  const response = await fetch(asset.uri);
-  const blob = await response.blob();
+  const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL!;
+  const supabaseKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY!;
+  const { data: { session } } = await supabase.auth.getSession();
 
-  const { error: uploadErr } = await supabase.storage
-    .from('match-photos')
-    .upload(path, blob, { contentType: asset.mimeType ?? 'image/jpeg', upsert: false });
-  if (uploadErr) throw uploadErr;
+  // FormData with { uri, type, name } is the reliable way to upload local files
+  // in React Native — fetch reads the file from the filesystem correctly.
+  const formData = new FormData();
+  formData.append('file', {
+    uri: asset.uri,
+    type: asset.mimeType ?? 'image/jpeg',
+    name: `photo.${ext}`,
+  } as unknown as Blob);
+
+  const uploadRes = await fetch(
+    `${supabaseUrl}/storage/v1/object/match-photos/${path}`,
+    {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${session?.access_token ?? ''}`,
+        apikey: supabaseKey,
+      },
+      body: formData,
+    },
+  );
+  if (!uploadRes.ok) {
+    const body = await uploadRes.text();
+    console.error('[matchPhotos] storage upload error:', uploadRes.status, body);
+    throw new Error(`Upload failed (${uploadRes.status}): ${body}`);
+  }
 
   const { data: { publicUrl } } = supabase.storage.from('match-photos').getPublicUrl(path);
 
@@ -64,7 +86,10 @@ export async function pickAndUploadMatchPhoto(
     .insert({ match_id: matchId, uploader_id: uploaderId, url: publicUrl })
     .select()
     .single();
-  if (error) throw error;
+  if (error) {
+    console.error('[matchPhotos] insert error:', JSON.stringify(error));
+    throw new Error(error.message ?? JSON.stringify(error));
+  }
 
   return rowToPhoto(data as Record<string, unknown>);
 }

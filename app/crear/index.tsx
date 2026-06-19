@@ -9,8 +9,9 @@ import {
   Plus,
   WarningCircle,
 } from 'phosphor-react-native';
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { ActivityIndicator, Alert, InputAccessoryView, Keyboard, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, View } from 'react-native';
+import Animated, { SlideInLeft, SlideInRight } from 'react-native-reanimated';
 
 import {
   DateTimePickerSheet,
@@ -218,6 +219,12 @@ export default function CrearWizard() {
   const s = useMemo(() => makeStyles(c), [c]);
 
   const [triedNext, setTriedNext] = useState(false);
+  const prevStepRef = useRef(step);
+  const stepDirRef = useRef(1);
+  if (step !== prevStepRef.current) {
+    stepDirRef.current = step > prevStepRef.current ? 1 : -1;
+    prevStepRef.current = step;
+  }
   const [keyboardVisible, setKeyboardVisible] = useState(false);
   const [publishing, setPublishing] = useState(false);
 
@@ -306,36 +313,41 @@ export default function CrearWizard() {
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
       >
-        {step === 1 ? (
-          <Step1Sport draft={draft} setKey={setKey} errors={shownErrors} />
-        ) : null}
-        {step === 2 ? (
-          <Step2Modality draft={draft} setKey={setKey} errors={shownErrors} />
-        ) : null}
-        {step === 3 ? (
-          <Step3TypeLevelPositions
-            draft={draft}
-            setKey={setKey}
-            togglePosition={togglePosition}
-            errors={shownErrors}
-          />
-        ) : null}
-        {step === 4 ? (
-          <Step4LocationPrice
-            draft={draft}
-            setKey={setKey}
-            errors={shownErrors}
-          />
-        ) : null}
-        {step === 5 ? (
-          <Step5PaymentsExtras
-            draft={draft}
-            setKey={setKey}
-            togglePayment={togglePayment}
-            toggleRequirement={toggleRequirement}
-            errors={shownErrors}
-          />
-        ) : null}
+        <Animated.View
+          key={step}
+          entering={stepDirRef.current > 0 ? SlideInRight.duration(220) : SlideInLeft.duration(220)}
+        >
+          {step === 1 ? (
+            <Step1Sport draft={draft} setKey={setKey} errors={shownErrors} />
+          ) : null}
+          {step === 2 ? (
+            <Step2Modality draft={draft} setKey={setKey} errors={shownErrors} />
+          ) : null}
+          {step === 3 ? (
+            <Step3TypeLevelPositions
+              draft={draft}
+              setKey={setKey}
+              togglePosition={togglePosition}
+              errors={shownErrors}
+            />
+          ) : null}
+          {step === 4 ? (
+            <Step4LocationPrice
+              draft={draft}
+              setKey={setKey}
+              errors={shownErrors}
+            />
+          ) : null}
+          {step === 5 ? (
+            <Step5PaymentsExtras
+              draft={draft}
+              setKey={setKey}
+              togglePayment={togglePayment}
+              toggleRequirement={toggleRequirement}
+              errors={shownErrors}
+            />
+          ) : null}
+        </Animated.View>
       </ScrollView>
       </KeyboardAvoidingView>
 

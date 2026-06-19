@@ -223,6 +223,7 @@ export async function fetchMyMatches(userId: string): Promise<{
   upcoming: Match[];
   past: Match[];
   created: Match[];
+  rejected: Match[];
 }> {
   const now = new Date().toISOString();
 
@@ -234,6 +235,14 @@ export async function fetchMyMatches(userId: string): Promise<{
     .eq('status', 'joined');
 
   const joinedIds = (joinedRows ?? []).map((r: { match_id: string }) => r.match_id);
+
+  // Rejected matches (upcoming only — past rejected have no value to show)
+  const { data: rejectedRows } = await supabase
+    .from('match_participants')
+    .select('match_id')
+    .eq('profile_id', userId)
+    .eq('status', 'rejected');
+  const rejectedIds = (rejectedRows ?? []).map((r: { match_id: string }) => r.match_id);
 
   // Created matches
   const { data: createdRows, error: createdError } = await supabase
@@ -253,8 +262,22 @@ export async function fetchMyMatches(userId: string): Promise<{
     joinedMatchRows = (data ?? []) as Record<string, unknown>[];
   }
 
+  // Rejected match details (only upcoming, not started)
+  let rejectedMatchRows: Record<string, unknown>[] = [];
+  if (rejectedIds.length > 0) {
+    const { data } = await supabase
+      .from('matches')
+      .select(`${MATCH_BASE_FIELDS}, organizer:profiles!organizer_id(${PROFILE_FIELDS})`)
+      .in('id', rejectedIds)
+      .gt('starts_at', now)
+      .is('ended_at', null)
+      .order('starts_at', { ascending: true });
+    rejectedMatchRows = (data ?? []) as Record<string, unknown>[];
+  }
+
   const allMatchIds = [
     ...joinedIds,
+    ...rejectedIds,
     ...((createdRows ?? []).map((r) => r.id as string)),
   ];
   const playersByMatch = await fetchJoinedPlayersByMatchIds(
@@ -266,6 +289,7 @@ export async function fetchMyMatches(userId: string): Promise<{
 
   const joinedMatches = joinedMatchRows.map(toMatch);
   const createdMatches = createdError ? [] : (createdRows ?? []).map((r) => toMatch(r as Record<string, unknown>));
+  const rejectedMatches = rejectedMatchRows.map(toMatch);
 
   const pastJoined = joinedMatches.filter((m) => m.startsAt <= now || !!m.endedAt);
   const joinedMatchIds = new Set(pastJoined.map((m) => m.id));
@@ -278,6 +302,7 @@ export async function fetchMyMatches(userId: string): Promise<{
     upcoming: joinedMatches.filter((m) => m.startsAt > now && !m.endedAt),
     past: [...pastJoined, ...pastCreatedOnly],
     created: createdMatches,
+    rejected: rejectedMatches,
   };
 }
 

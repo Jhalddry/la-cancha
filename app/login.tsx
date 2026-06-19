@@ -6,9 +6,10 @@ import {
   Envelope,
   Eye,
   EyeSlash,
-  GoogleLogo,
   Lock,
 } from 'phosphor-react-native';
+
+import { GoogleColorIcon } from '@/components/brand/GoogleColorIcon';
 import { useMemo, useState } from 'react';
 import { ActivityIndicator, Alert, ScrollView, StyleSheet, View } from 'react-native';
 
@@ -30,6 +31,7 @@ const EMAIL_NOT_CONFIRMED = 'Email not confirmed';
 export default function LoginScreen() {
   const router = useRouter();
   const signIn = useSession((s) => s.signIn);
+  const completeOAuthSignIn = useSession((s) => s.completeOAuthSignIn);
   const c = useColors();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -125,6 +127,7 @@ export default function LoginScreen() {
     setAuthError(null);
     try {
       const redirectTo = Linking.createURL('auth-callback');
+      console.log('[OAuth redirectTo]', redirectTo);
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: { redirectTo, skipBrowserRedirect: true },
@@ -132,16 +135,14 @@ export default function LoginScreen() {
       if (error || !data.url) throw error ?? new Error('No OAuth URL');
 
       const result = await WebBrowser.openAuthSessionAsync(data.url, redirectTo);
+      console.log('[OAuth result]', result.type, 'url' in result ? result.url?.slice(0, 120) : '(no url)');
       if (result.type === 'success' && result.url) {
-        const fragment = result.url.split('#')[1] ?? result.url.split('?')[1] ?? '';
-        const params = new URLSearchParams(fragment);
-        const access_token = params.get('access_token');
-        const refresh_token = params.get('refresh_token');
-        if (access_token && refresh_token) {
-          const { error: sessionError } = await supabase.auth.setSession({ access_token, refresh_token });
-          if (!sessionError) { router.replace('/(tabs)'); return; }
+        const err = await completeOAuthSignIn(result.url);
+        if (!err) {
+          router.replace('/(tabs)');
+          return;
         }
-        setAuthError('No se pudo completar el inicio de sesión con Google.');
+        setAuthError(err);
       }
     } catch {
       setAuthError('No se pudo iniciar sesión con Google. Intenta de nuevo.');
@@ -236,7 +237,7 @@ export default function LoginScreen() {
           <Button
             label="Google"
             variant="secondary"
-            leading={<GoogleLogo size={18} color={c.textPrimary} weight="bold" />}
+            leading={<GoogleColorIcon size={18} />}
             fullWidth={false}
             style={{ flex: 1 }}
             onPress={handleGoogleSignIn}

@@ -488,7 +488,9 @@ Search bar + filter sheet (chill/seria/torneo/level/distance/sport). All matches
 On submit: `createMatch` → `router.push('/crear/confirmacion?matchId=...')`.
 
 ### Match detail (`match/[id].tsx`)
-Uses `useMatch(id)` (Supabase). Hero: sport emoji, status (active / ended / missing count), price. Info card: date/location/type/level. Positions, payment, requirements, organizer card (→ `/perfil/[id]`). Map modal when lat/lng available.
+Uses `useMatch(id)` (Supabase). Hero: sport emoji, status (active / ended / missing count), price, live viewer count via Supabase Presence (`viewing:${id}` channel — shows "N viendo esto" when >1). Info card: date/location/type/level. Positions, payment, requirements, organizer card (→ `/perfil/[id]`). Map modal when lat/lng available. Share button captures `MatchShareCard` via `react-native-view-shot` → `expo-sharing`.
+
+**Photos section**: visible after `endedAt`. Organizer + joined players can upload via `expo-image-picker` → Supabase Storage bucket `match-photos`. Gallery component: `components/feature/MatchPhotos.tsx`. API: `lib/matchPhotosApi.ts`.
 
 **Organizer view**: pending participants panel with approve/reject (per-participant detail Sheet), joined players list with payment info. Edit button in header → `/editar/[id]`.
 
@@ -527,8 +529,18 @@ Calls `submitRating(matchId, raterId, rateeId, stars, tags, comment)` which also
 ### Player profile (`perfil/[id].tsx`)
 Uses `useProfile(id)`. Stats row, sports grid, positions, bio, badges, recent matches. Footer (hidden when viewing own profile): "Enviar mensaje" (checks `fetchSharedMatchId` — only allowed for shared-match players) + "Invitar a jugar" → Sheet → `ConfirmSheet` → `useInviteToMatch`. Menu (⋮): report + block flows with `ConfirmSheet`.
 
-### Chat (`chat/[id].tsx`)
-`[id]` = match ID (thread). Uses `useChat`. `KeyboardAvoidingView`, day-grouped bubbles, composer. Only available between players who share a match (enforced in `fetchSharedMatchId`).
+### Chat (`chat/[id].tsx` + `direct/[id].tsx`)
+`[id]` = match ID (match chat) or other user ID (private DM). Uses `useChat` / `usePrivateChat`. `KeyboardAvoidingView`, day-grouped bubbles, composer.
+
+**Read receipts**: `✓` (sent) / `✓✓` green (read) per message. `othersReadAt` via `get_others_last_read_at` SECURITY DEFINER RPC (bypasses RLS) + 5s poll + realtime subscription on `chat_reads` table.
+
+**Typing indicator**: Supabase Broadcast channel `typing:${threadId}` / `pm-typing:${threadId}`. `sendTyping()` debounces 3s, auto-clears 4s. "Valentina está escribiendo..." shown above composer.
+
+**Haptics**: `impactLight` on send. `notificationSuccess` on join (unirse) and rating submit.
+
+**Unread cache**: `_localReads` module-level Map in `lib/chatApi.ts` written immediately on mark-read — beats pull-to-refresh race vs DB commit. `applyZero` on mount + unmount in both chat screens.
+
+Match chat: only available between players who share a match (enforced in `fetchSharedMatchId`). Private DMs: `direct/[id].tsx`.
 
 ### Notificaciones
 Uses `useNotifications`. Kinds: `join_request`, `join_approved`, `join_rejected`, `match_started`, `match_ended`, `match_cancelled`, `rating_received`, `match_invitation`. Unread dot indicator. "Marcar todas" button. Tap → deep-link via `notif.navigateTo`.
@@ -540,66 +552,127 @@ Uses `useQuery` + `fetchMyRatings`. Shows overall rating, stars, review count, s
 Avatar (Supabase Storage), bio, sports emojis, level stars, position chips, settings card. Cerrar sesión → `signOut()` + `router.replace('/login')`.
 
 ### Auth screens
-Login + Register: inline validation (email regex, password min 6, terms checkbox). Real Supabase auth calls. Social buttons stubbed (Alert "próximamente").
+Login + Register: inline validation (email regex, password min 6, terms checkbox). Real Supabase auth calls. Google OAuth via `expo-web-browser` + `Linking.createURL('auth-callback')` — wired in both screens.
+
+### Historial (`historial.tsx`)
+Connected to real API: `useMyMatches()` + `useMyGivenRatings()`. Lists all ended matches (from past + created), stats row (total played, ratings given), per-match player list with given star ratings. Not a mock anymore.
+
+### BCV rate
+`lib/exchange.ts` → `fetchBcvRate()` fetches live from `ve.dolarapi.com/v1/dolares/oficial` (free, no API key). Falls back to `BCV_RATE = 90.0` constant on error. `useBcvRate()` hook upgrades static→live on mount. Used in wizard step 4 and `unirse` flow.
+
+### Badges (automatic)
+DB trigger `sync_badges` (migration `20260617a_badges_trigger.sql`) fires BEFORE UPDATE on `matches_played`, `matches_organized`, `attendance_pct`, `reputation` in `profiles`. Awards 8 badge tiers: Primera partida, Veterano, Veterano Elite, Primer torneo, Organizador, Organizador Elite, Asistente Perfecto, Estrella. No code needed — fires automatically.
 
 ### Other screens
-`ajustes` (theme toggle, notification toggles, account links), `historial` (hardcoded mock cards — not yet connected to API), `reputacion`, `terminos`, `privacidad`, `onboarding` (3 slides + ProgressDots), `cuenta/correo`, `cuenta/contrasena`.
+`ajustes` (theme toggle, notification toggles, account links), `reputacion`, `terminos`, `privacidad`, `onboarding` (3 slides + ProgressDots), `cuenta/correo`, `cuenta/contrasena`.
 
 ---
 
 ## 11. Roadmap / Next Steps
 
-### Immediate
-- [ ] `historial.tsx` — connect to real past matches API (currently hardcoded mock list)
-- [x] ~~Supabase realtime — chat messages~~ — done: `useChat` subscribes to `chat_messages` INSERT/DELETE
-- [x] ~~Unread notification badge on bell icon~~ — done: `useUnreadCount` + dot in home header
+### Immediate (pending)
 - [ ] Unread notification badge on **tab bar** — count badge on Chats/Notificaciones tabs
+- [ ] Login resets unread badge — `_localReads` not persisted; investigate RPC silent failures
+- [ ] Google sign-in button: replace phosphor monochrome `GoogleLogo` with colored "G" asset
+- [ ] Account screen loop — `app/ajustes.tsx` → `app/cuenta/` navigation stuck
 
 ### Phase B — Real-time + Notifications
 - [x] ~~Supabase realtime: `messages` channel~~ — done in `hooks/useChat.ts`
+- [x] ~~Typing indicator~~ — done: Supabase Broadcast per thread, 3s debounce
 - [ ] Supabase realtime: `match_participants` + `notifications` channels
 - [ ] `expo-notifications` setup: APNs + FCM credentials, permission request, token registration
 - [ ] Notification deeplinks (tap → `/match/[id]` or `/chat/[id]`)
+- [ ] iOS push notification photo (Notification Service Extension, requires EAS build)
 
 ### Phase C — Location
-- [x] ~~`expo-location` permission + current position~~ — done: `hooks/useUserLocation.ts`
-- [x] ~~Real `distanceKm` (haversine using user coords)~~ — done: `lib/geo.ts` + wired in `buscar.tsx`
-- [ ] Replace `mockCanchas` in `LocationPickerSheet` with geocoded DB or Google Places
+- [x] ~~`expo-location` + haversine distanceKm~~ — done: `hooks/useUserLocation.ts` + `lib/geo.ts`
+- [ ] Replace `mockCanchas` in `LocationPickerSheet` with Supabase `canchas` table
 - [ ] Reverse geocoding on custom pin drop
 
 ### Phase D — Storage & Avatars
-- [x] ~~Avatar upload in `perfil/editar.tsx` → Supabase Storage~~ — done
-- [ ] Cancha photos (organizer can attach photo to match location)
+- [x] ~~Avatar upload → Supabase Storage~~ — done
+- [x] ~~Match photos~~ — done: `match_photos` table + `match-photos` bucket + `MatchPhotos` component. **Bucket must be created manually in Supabase Dashboard (Storage → New bucket → "match-photos", Public).**
+- [ ] Cancha photos (organizer attaches photo to match location)
 
 ### Phase E — Payments
-- [ ] Payment flow is currently honor-system (user selects method, organizer trusts them)
-- [ ] Phase E: escrow via Stripe Connect or local processor
+- [ ] Honor-system currently. Phase E: escrow via local processor
 
-### Phase F — Reputation refinement
-- [ ] Auto-trigger `calificar` prompt after `endedAt` (in-app banner)
-- [x] ~~Aggregate ratings → `profiles.reputation` via DB trigger~~ — done: `sync_reputation` trigger
-- [ ] Display received ratings breakdown (per tag frequency)
+### Phase F — Reputation
+- [x] ~~`sync_reputation` trigger~~ — done
+- [x] ~~`sync_badges` trigger~~ — done: 8 badge tiers, fires on profile stats update
+- [ ] Auto-trigger `calificar` banner after `endedAt`
+- [ ] Ratings breakdown per tag frequency
 
 ### Phase G — Quality
-- [x] ~~UX: pull-to-refresh, loading skeletons, infinite scroll, error states~~ — done on all list screens
+- [x] ~~Pull-to-refresh, skeletons, infinite scroll, error states~~ — done
+- [x] ~~Sentry~~ — done
 - [ ] Test runner: `jest` + `@testing-library/react-native`
-- [ ] Accessibility audit (`accessibilityLabel` on all PressableScale)
-- [ ] i18n (all strings currently Spanish hardcoded)
-- [x] ~~Error monitoring (Sentry)~~ — done: `lib/sentry.ts` + wraps root layout, DSN via `EXPO_PUBLIC_SENTRY_DSN`
+- [ ] Accessibility audit
+- [ ] i18n
 
 ### Phase I — Social Sharing
-- [ ] Share match as image — capture match card with `react-native-view-shot`, share via `expo-sharing` with text "¡Únete a La Cancha! Busca esta partida en la app." — no links, image only
-- [ ] Share player profile as image — same mechanism, captures profile card
-- [ ] Share button on match detail (`app/match/[id].tsx`) → generates card screenshot → native share sheet
-- [ ] Share button on player profile (`app/perfil/[id].tsx`) → generates profile screenshot → native share sheet
-- [ ] Share card design: match card + sport/date/location/type info + La Cancha logo watermark at bottom
+- [x] ~~Share match as image~~ — done: `react-native-view-shot` + `expo-sharing` in `match/[id].tsx`
+- [x] ~~Share player profile as image~~ — done: `PlayerShareCard` + `captureRef` in `perfil/[id].tsx`
+
+### Phase J — Premium UX (Animations / Sounds / 3D) — **zero extra cost**
+
+**Tier 1 — hours each, Reanimated only:**
+- [ ] Staggered card entrance in Home + Buscar (fade+translateY, 50ms delay/index)
+- [ ] Tab icons bounce on tap (`app/(tabs)/_layout.tsx` — scale spring on active icon)
+- [ ] Typing dots bounce animation (3-dot stagger with `withRepeat` + `withDelay`)
+- [ ] Chat bubble entrance animation (scale 0.85→1 + opacity on new message)
+- [ ] Greeting contextual by hour (Buenos días/tardes/noches in home)
+- [ ] "EN VIVO" pulse badge in Activas tab (withRepeat red/green dot)
+- [ ] Bell shake on `useUnreadCount` increase (withSequence in home header)
+- [ ] Countdown timer in Próximas ("en 2h 35min", updates every 60s)
+
+**Tier 2 — 1 day each:**
+- [ ] Premium shimmer skeleton (LinearGradient sweep, already installed)
+- [x] ~~Slide transitions between wizard steps~~ — done: `SlideInRight`/`SlideInLeft` in `crear/index.tsx` + `unirse/[id].tsx`
+- [ ] Stars bounce on tap in calificar + fill animation on profile load
+- [ ] Dark/light theme fade transition (cross-fade on palette swap)
+- [x] ~~Swipe to dismiss notifications~~ — done: `SwipeableRow` + `GestureDetector` in `notificaciones.tsx`
+- [x] ~~Stats animated counters / rolling numbers in profile + historial~~ — done: `AnimatedNumber` in `perfil/[id].tsx`
+- [x] ~~Badges shimmer glow~~ — done: metallic `LinearGradient` + shimmer sweep + tap info sheet in `perfil.tsx` + `perfil/[id].tsx`
+- [ ] Char counter warning pulse at 180/200 chars in calificar
+- [ ] Payment card glow animation on select in unirse
+- [ ] Tab segment indicator animated slide in mis-partidas
+- [x] ~~Avatar ring pulse on own profile~~ — done: `AvatarRing` pulsing border in `(tabs)/perfil.tsx` — **TODO: remove, se ve mal**
+
+**Tier 3 — 2+ days each:**
+- [ ] Global audio system (`SoundManager` singleton with expo-av, 4 sounds: send, receive, success, match_start whistle)
+- [ ] Map view toggle in buscar (list ↔ map, react-native-maps pins with sport emoji)
+- [ ] Bookmark/save match in buscar (AsyncStorage, heart icon on card)
+- [x] ~~Mini-map inline in match detail~~ — done: 120px `MapView` tap-to-expand in `match/[id].tsx`
+- [x] ~~Hero parallax in match detail~~ — done: `useAnimatedScrollHandler` + 0.3× speed on emoji in `match/[id].tsx`
+- [ ] Lottie empty states (lottiefiles.com free assets, replaces emoji+text)
+- [ ] Sport breakdown visual bars in profile (% by sport, animated fill)
+- [x] ~~Checkbox draw animation in unirse~~ — done: scale bounce + `withSequence` on check in `unirse/[id].tsx`
+- [ ] Calendar view in mis-partidas (toggle list ↔ calendar)
+- [x] ~~Glassmorphism bottom sheets~~ — done: `expo-blur` `BlurView` backdrop in `components/ui/Sheet.tsx`
+
+**Tier 4 — High effort / 3D:**
+- [ ] react-three-fiber confetti in `crear/confirmacion.tsx` (expo-gl + @react-three/fiber)
+- [ ] Onboarding redesign: 3D scenes per slide + parallax layers + swipe gesture
+- [ ] Voice messages (expo-av recorder, waveform visualizer, 60s max)
+- [ ] Colored shadows (primary/alert shadow matching button color)
+- [ ] Full-bleed SVG illustrations for onboarding slides
+
+### Phase K — Free Features (backlog)
+- [ ] Leaderboards (Supabase materialized view + pg_cron, nueva pantalla)
+- [ ] Partidas recurrentes (Edge Function + pg_cron)
+- [ ] Swipe to reply in chat (gesture-handler + `reply_to_id` column)
+- [ ] Chat reactions (new table + Supabase Realtime + emoji picker)
+- [ ] Sistema de referidos (profiles.referral_code + referred_by)
+- [ ] Analytics internos (custom_events table, no third-party)
+- [ ] Canchas reales en DB (migrate mockCanchas to Supabase table with seeding)
 
 ### Phase H — Build & Store
 - [ ] EAS Build profiles (development, preview, production)
 - [ ] iOS: Apple Developer enrollment, bundle id `com.lacancha.app`
 - [ ] Android: Play Console + signing key
-- [ ] AltStore distribution for personal device (no store needed)
-- [ ] App icons + splash at all sizes (currently template)
+- [ ] AltStore distribution for personal device
+- [ ] App icons + splash at all sizes
 - [ ] Privacy policy at public URL
 
 ---

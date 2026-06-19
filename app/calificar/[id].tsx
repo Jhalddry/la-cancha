@@ -1,10 +1,11 @@
 import * as Haptics from 'expo-haptics';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Check, House, Star } from 'phosphor-react-native';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  Pressable,
   ScrollView,
   StyleSheet,
   TextInput as RNTextInput,
@@ -14,7 +15,9 @@ import Animated, {
   useAnimatedStyle,
   useSharedValue,
   withDelay,
+  withSequence,
   withSpring,
+  withTiming,
 } from 'react-native-reanimated';
 
 import { Avatar } from '@/components/ui/Avatar';
@@ -204,6 +207,50 @@ export default function CalificarScreen() {
 // Step 1 — Calificación general
 // ---------------------------------------------------------------------------
 
+function StarItem({
+  n,
+  rating,
+  borderColor,
+  onRate,
+}: {
+  n: number;
+  rating: number;
+  borderColor: string;
+  onRate: (r: number) => void;
+}) {
+  const scale = useSharedValue(1);
+  const style = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
+  const active = n <= rating;
+  const prevActive = useRef(active);
+
+  useEffect(() => {
+    if (prevActive.current && !active) {
+      scale.value = withSpring(1, { damping: 20, stiffness: 200 });
+    }
+    prevActive.current = active;
+  }, [active, scale]);
+
+  const handlePress = () => {
+    onRate(n);
+    scale.value = withSequence(
+      withSpring(1.22, { damping: 10, stiffness: 280 }),
+      withSpring(1, { damping: 20, stiffness: 200 }),
+    );
+  };
+
+  return (
+    <Pressable onPress={handlePress}>
+      <Animated.View style={style}>
+        <Star
+          size={48}
+          color={active ? '#FFD93D' : borderColor}
+          weight={active ? 'fill' : 'regular'}
+        />
+      </Animated.View>
+    </Pressable>
+  );
+}
+
 function RatingStep({
   c,
   player,
@@ -237,13 +284,7 @@ function RatingStep({
 
       <View style={s.starsRow}>
         {[1, 2, 3, 4, 5].map((n) => (
-          <PressableScale key={n} onPress={() => onRate(n)} scaleTo={0.85}>
-            <Star
-              size={48}
-              color={n <= rating ? '#FFD93D' : c.border}
-              weight={n <= rating ? 'fill' : 'regular'}
-            />
-          </PressableScale>
+          <StarItem key={n} n={n} rating={rating} borderColor={c.border} onRate={onRate} />
         ))}
       </View>
 
@@ -427,6 +468,21 @@ function CommentStep({
   onChange: (v: string) => void;
 }) {
   const s = useMemo(() => makeStyles(c), [c]);
+  const pulseScale = useSharedValue(1);
+  const prevLen = useRef(0);
+  const pulseStyle = useAnimatedStyle(() => ({ transform: [{ scale: pulseScale.value }] }));
+  const isWarning = comment.length >= 180;
+
+  useEffect(() => {
+    if (comment.length >= 180 && comment.length > prevLen.current) {
+      pulseScale.value = withSequence(
+        withTiming(1.2, { duration: 120 }),
+        withSpring(1, { damping: 8 }),
+      );
+    }
+    prevLen.current = comment.length;
+  }, [comment.length, pulseScale]);
+
   return (
     <View style={s.step}>
       <View style={s.stepHeader}>
@@ -449,9 +505,11 @@ function CommentStep({
           onChangeText={(v) => onChange(v.slice(0, MAX_COMMENT))}
           textAlignVertical="top"
         />
-        <Text variant="caption" color="textTertiary" style={s.charCount}>
-          {comment.length}/{MAX_COMMENT}
-        </Text>
+        <Animated.View style={[s.charCount, pulseStyle]}>
+          <Text variant="caption" style={{ color: isWarning ? c.alert : c.textTertiary }}>
+            {comment.length}/{MAX_COMMENT}
+          </Text>
+        </Animated.View>
       </View>
     </View>
   );
@@ -661,7 +719,7 @@ function makeStyles(c: ColorPalette) {
       fontSize: 15,
       minHeight: 120,
     },
-    charCount: { alignSelf: 'flex-end' },
+    charCount: { alignSelf: 'flex-end' as const },
     footer: {
       position: 'absolute',
       left: 0,

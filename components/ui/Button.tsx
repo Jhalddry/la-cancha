@@ -100,7 +100,14 @@ function makeStyles(c: ColorPalette) {
     full: { alignSelf: 'stretch' as const },
     disabled: { opacity: 0.4 },
     variants: StyleSheet.create({
-      primary: { backgroundColor: c.primaryBg },
+      primary: {
+        backgroundColor: c.primaryBg,
+        shadowColor: c.primary,
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.28,
+        shadowRadius: 8,
+        elevation: 5,
+      },
       secondary: { backgroundColor: c.surfaceElevated, borderWidth: 1, borderColor: c.border },
       ghost: { backgroundColor: 'transparent' },
       outline: { backgroundColor: 'transparent', borderWidth: 1.5, borderColor: c.primary },

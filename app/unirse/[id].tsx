@@ -17,10 +17,14 @@ import {
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { ActivityIndicator, ScrollView, StyleSheet, View } from 'react-native';
 import Animated, {
+  SlideInLeft,
+  SlideInRight,
   useAnimatedStyle,
   useSharedValue,
   withDelay,
+  withSequence,
   withSpring,
+  withTiming,
 } from 'react-native-reanimated';
 
 import { Avatar } from '@/components/ui/Avatar';
@@ -94,6 +98,7 @@ function UnirseContent({ match }: { match: import('@/types/domain').Match }) {
   const s = useMemo(() => makeStyles(c), [c]);
 
   const [step, setStep] = useState(1);
+  const stepDir = useRef(1);
   const [selectedPayment, setSelectedPayment] = useState<PaymentMethod | null>(null);
   const [checkedReqs, setCheckedReqs] = useState<Set<string>>(new Set());
   const [masterChecked, setMasterChecked] = useState(false);
@@ -174,7 +179,7 @@ function UnirseContent({ match }: { match: import('@/types/domain').Match }) {
     <Screen edges={['top']}>
       {/* Header */}
       <View style={s.header}>
-        <PressableScale onPress={() => (step === 1 ? router.back() : setStep(step - 1))} scaleTo={0.9}>
+        <PressableScale onPress={() => { if (step === 1) { router.back(); } else { stepDir.current = -1; setStep(step - 1); } }} scaleTo={0.9}>
           <X size={22} color={c.textPrimary} weight="bold" />
         </PressableScale>
         <Text variant="bodySemibold">
@@ -188,41 +193,46 @@ function UnirseContent({ match }: { match: import('@/types/domain').Match }) {
       </View>
 
       <ScrollView contentContainerStyle={s.scroll} showsVerticalScrollIndicator={false}>
-        {step === 1 ? (
-          <ConfirmStep
-            c={c}
-            match={match}
-            durationHours={durationHours}
-            total={total}
-            router={router}
-          />
-        ) : null}
-        {step === 2 ? (
-          <PaymentStep
-            c={c}
-            methods={match.paymentMethods}
-            selected={selectedPayment}
-            onSelect={setSelectedPayment}
-          />
-        ) : null}
-        {step === 3 ? (
-          <RequirementsStep
-            c={c}
-            requirements={match.requirements}
-            optionalRequirements={match.optionalRequirements ?? []}
-            checked={checkedReqs}
-            onToggle={toggleReq}
-            masterChecked={masterChecked}
-            onMasterToggle={() => {
-              if (masterChecked) {
-                setMasterChecked(false);
-              } else {
-                setCheckedReqs(new Set(match.requirements));
-                setMasterChecked(true);
-              }
-            }}
-          />
-        ) : null}
+        <Animated.View
+          key={step}
+          entering={stepDir.current > 0 ? SlideInRight.duration(220) : SlideInLeft.duration(220)}
+        >
+          {step === 1 ? (
+            <ConfirmStep
+              c={c}
+              match={match}
+              durationHours={durationHours}
+              total={total}
+              router={router}
+            />
+          ) : null}
+          {step === 2 ? (
+            <PaymentStep
+              c={c}
+              methods={match.paymentMethods}
+              selected={selectedPayment}
+              onSelect={setSelectedPayment}
+            />
+          ) : null}
+          {step === 3 ? (
+            <RequirementsStep
+              c={c}
+              requirements={match.requirements}
+              optionalRequirements={match.optionalRequirements ?? []}
+              checked={checkedReqs}
+              onToggle={toggleReq}
+              masterChecked={masterChecked}
+              onMasterToggle={() => {
+                if (masterChecked) {
+                  setMasterChecked(false);
+                } else {
+                  setCheckedReqs(new Set(match.requirements));
+                  setMasterChecked(true);
+                }
+              }}
+            />
+          ) : null}
+        </Animated.View>
       </ScrollView>
 
       <View style={s.footer}>
@@ -242,6 +252,7 @@ function UnirseContent({ match }: { match: import('@/types/domain').Match }) {
                 return;
               }
             }
+            stepDir.current = 1;
             setStep(step + 1);
           }}
         />
@@ -255,6 +266,7 @@ function UnirseContent({ match }: { match: import('@/types/domain').Match }) {
         confirmLabel="Continuar de todas formas"
         onConfirm={() => {
           setOutOfPositionWarning(false);
+          stepDir.current = 1;
           setStep(step + 1);
         }}
       />
@@ -385,6 +397,53 @@ function ConfirmStep({
 // Step 2 — Método de pago
 // ---------------------------------------------------------------------------
 
+function AnimatedPayRow({
+  m,
+  isSelected,
+  s,
+  onSelect,
+}: {
+  m: PaymentMethod;
+  isSelected: boolean;
+  s: ReturnType<typeof makeStyles>;
+  onSelect: (m: PaymentMethod) => void;
+}) {
+  const meta = PAYMENT_ICON[m];
+  const scale = useSharedValue(1);
+  const wasSelected = useRef(false);
+  const rowStyle = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
+
+  useEffect(() => {
+    if (isSelected && !wasSelected.current) {
+      scale.value = withSequence(
+        withSpring(1.025, { damping: 10, stiffness: 500 }),
+        withSpring(1, { damping: 14 }),
+      );
+    }
+    wasSelected.current = isSelected;
+  }, [isSelected, scale]);
+
+  return (
+    <Animated.View style={rowStyle}>
+      <PressableScale
+        style={[s.payRow, isSelected ? s.payRowActive : null]}
+        scaleTo={0.98}
+        onPress={() => onSelect(m)}
+      >
+        <View style={[s.payIcon, { backgroundColor: meta.color }]}>
+          {meta.icon}
+        </View>
+        <Text variant="body" color="textPrimary" style={{ flex: 1 }}>
+          {labelPayment(m)}
+        </Text>
+        <View style={[s.radio, isSelected ? s.radioOn : null]}>
+          {isSelected ? <View style={s.radioDot} /> : null}
+        </View>
+      </PressableScale>
+    </Animated.View>
+  );
+}
+
 function PaymentStep({
   c,
   methods,
@@ -406,30 +465,12 @@ function PaymentStep({
         </Text>
       </View>
       <Card padded={false}>
-        {methods.map((m, i) => {
-          const meta = PAYMENT_ICON[m];
-          const isSelected = selected === m;
-          return (
-            <View key={m}>
-              <PressableScale
-                style={[s.payRow, isSelected ? s.payRowActive : null]}
-                scaleTo={0.98}
-                onPress={() => onSelect(m)}
-              >
-                <View style={[s.payIcon, { backgroundColor: meta.color }]}>
-                  {meta.icon}
-                </View>
-                <Text variant="body" color="textPrimary" style={{ flex: 1 }}>
-                  {labelPayment(m)}
-                </Text>
-                <View style={[s.radio, isSelected ? s.radioOn : null]}>
-                  {isSelected ? <View style={s.radioDot} /> : null}
-                </View>
-              </PressableScale>
-              {i < methods.length - 1 ? <View style={s.rowDivider} /> : null}
-            </View>
-          );
-        })}
+        {methods.map((m, i) => (
+          <View key={m}>
+            <AnimatedPayRow m={m} isSelected={selected === m} s={s} onSelect={onSelect} />
+            {i < methods.length - 1 ? <View style={s.rowDivider} /> : null}
+          </View>
+        ))}
       </Card>
     </View>
   );
@@ -689,10 +730,30 @@ function InfoRow({ icon, label, sub }: { icon: ReactNode; label: string; sub?: s
 
 function CheckBox({ c, checked }: { c: ColorPalette; checked: boolean }) {
   const s = useMemo(() => makeStyles(c), [c]);
+  const boxScale = useSharedValue(1);
+  const checkScale = useSharedValue(checked ? 1 : 0);
+  const prevChecked = useRef(checked);
+
+  useEffect(() => {
+    if (checked && !prevChecked.current) {
+      boxScale.value = withSequence(
+        withSpring(1.2, { damping: 10, stiffness: 400 }),
+        withSpring(1, { damping: 16, stiffness: 200 }),
+      );
+    }
+    checkScale.value = withTiming(checked ? 1 : 0, { duration: 140 });
+    prevChecked.current = checked;
+  }, [checked, boxScale, checkScale]);
+
+  const boxStyle = useAnimatedStyle(() => ({ transform: [{ scale: boxScale.value }] }));
+  const iconStyle = useAnimatedStyle(() => ({ transform: [{ scale: checkScale.value }] }));
+
   return (
-    <View style={[s.checkbox, checked ? s.checkboxOn : null]}>
-      {checked ? <Check size={13} color={c.bg} weight="bold" /> : null}
-    </View>
+    <Animated.View style={[s.checkbox, checked ? s.checkboxOn : null, boxStyle]}>
+      <Animated.View style={iconStyle}>
+        <Check size={13} color={c.bg} weight="bold" />
+      </Animated.View>
+    </Animated.View>
   );
 }
 
