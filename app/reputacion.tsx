@@ -246,7 +246,7 @@ export default function ReputacionScreen() {
                   {/* Tags — subtle gray */}
                   {review.tags.length > 0 ? (
                     <View style={staticStyles.tagsRow}>
-                      {review.tags.map((tag) => {
+                      {[...new Set(review.tags)].map((tag) => {
                         const pos = POSITIVE_TAGS.has(tag);
                         return (
                           <View key={tag} style={[staticStyles.tagChip, { borderColor: c.border, backgroundColor: `${c.textPrimary}06` }]}>

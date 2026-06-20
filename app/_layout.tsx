@@ -22,6 +22,7 @@ import 'react-native-reanimated';
 
 import { queryClient } from '@/lib/queryClient';
 import { registerForPushNotifications } from '@/lib/pushNotifications';
+import { setAnalyticsUser } from '@/lib/analytics';
 import { useColors } from '@/hooks/useColors';
 import { useNotificationsSync } from '@/hooks/useNotifications';
 import { useSession } from '@/store/session';
@@ -88,8 +89,9 @@ export default function RootLayout() {
     return unsubscribe;
   }, [initialize]);
 
-  // Register push token when user logs in
+  // Register push token + analytics user when user logs in
   useEffect(() => {
+    setAnalyticsUser(userId);
     if (userId) void registerForPushNotifications(userId);
   }, [userId]);
 
@@ -201,11 +203,7 @@ export default function RootLayout() {
                 options={{ animation: 'slide_from_right' }}
               />
               <Stack.Screen
-                name="cuenta/correo"
-                options={{ animation: 'slide_from_right' }}
-              />
-              <Stack.Screen
-                name="cuenta/contrasena"
+                name="cuenta"
                 options={{ animation: 'slide_from_right' }}
               />
               <Stack.Screen

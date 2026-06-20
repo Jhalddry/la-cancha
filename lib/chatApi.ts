@@ -17,6 +17,9 @@ export interface ChatMessageData {
   authorAvatarUrl?: string;
   body: string;
   sentAt: string;
+  replyTo?: { id: string; authorName: string; body: string; voiceUrl?: string };
+  voiceUrl?: string;
+  voiceDurationSec?: number;
 }
 
 export interface ChatParticipant {
@@ -97,33 +100,77 @@ export async function fetchThreadParticipants(matchId: string): Promise<ChatPart
 
 // ─── Messages ─────────────────────────────────────────────────────────────────
 
+type MsgRow = { id: string; thread_id: string; author_id: string; body: string; sent_at: string; voice_url?: string | null; voice_duration_sec?: number | null; reply_to_id?: string | null };
+type ProfileRow = { id: string; name: string; avatar_url: string | null };
+type ReplyRow = { id: string; body: string; voice_url: string | null; author_id: string };
+
 export async function fetchMessages(threadId: string): Promise<ChatMessageData[]> {
-  const { data, error } = await supabase
+  // Try extended query (requires voice + reply_to_id migrations). Fall back to basic on error.
+  const { data: extData, error: extErr } = await supabase
     .from('chat_messages')
-    .select(`id, thread_id, author_id, body, sent_at, author:profiles!author_id(name, avatar_url)`)
+    .select('id, thread_id, author_id, body, sent_at, voice_url, voice_duration_sec, reply_to_id')
     .eq('thread_id', threadId)
     .order('sent_at', { ascending: true })
     .limit(300);
 
-  if (error || !data) return [];
+  let rows: MsgRow[];
+  if (!extErr && extData) {
+    rows = extData as unknown as MsgRow[];
+  } else {
+    const { data: simple } = await supabase
+      .from('chat_messages')
+      .select('id, thread_id, author_id, body, sent_at')
+      .eq('thread_id', threadId)
+      .order('sent_at', { ascending: true })
+      .limit(300);
+    rows = (simple ?? []) as unknown as MsgRow[];
+  }
 
-  return data.map((row) => {
-    const r = row as unknown as {
-      id: string;
-      thread_id: string;
-      author_id: string;
-      body: string;
-      sent_at: string;
-      author: { name: string; avatar_url: string | null } | null;
-    };
+  if (rows.length === 0) return [];
+
+  // Batch-fetch all author profiles separately — avoids FK join ambiguity
+  const authorIdSet = new Set(rows.map((r) => r.author_id));
+  const { data: profiles } = await supabase
+    .from('profiles')
+    .select('id, name, avatar_url')
+    .in('id', [...authorIdSet]);
+  const profileMap = new Map<string, ProfileRow>(
+    (profiles ?? []).map((p) => [p.id as string, p as ProfileRow]),
+  );
+
+  // Batch-fetch reply-to messages if any
+  const replyIds = [...new Set(rows.filter((r) => r.reply_to_id).map((r) => r.reply_to_id as string))];
+  const replyMap = new Map<string, ReplyRow>();
+  if (replyIds.length > 0) {
+    const { data: replyRows } = await supabase
+      .from('chat_messages')
+      .select('id, body, voice_url, author_id')
+      .in('id', replyIds);
+    for (const rr of (replyRows ?? []) as unknown as ReplyRow[]) {
+      replyMap.set(rr.id, rr);
+    }
+    // Fetch any missing reply-author profiles
+    const missingIds = [...new Set([...replyMap.values()].map((r) => r.author_id))].filter((id) => !profileMap.has(id));
+    if (missingIds.length > 0) {
+      const { data: mp } = await supabase.from('profiles').select('id, name, avatar_url').in('id', missingIds);
+      for (const p of (mp ?? []) as unknown as ProfileRow[]) profileMap.set(p.id, p);
+    }
+  }
+
+  return rows.map((r) => {
+    const author = profileMap.get(r.author_id);
+    const reply = r.reply_to_id ? replyMap.get(r.reply_to_id) : undefined;
+    const replyAuthor = reply ? profileMap.get(reply.author_id) : undefined;
     return {
-      id: r.id,
-      threadId: r.thread_id,
-      authorId: r.author_id,
-      authorName: r.author?.name ?? 'Usuario',
-      authorAvatarUrl: r.author?.avatar_url ?? undefined,
-      body: r.body,
-      sentAt: r.sent_at,
+      id: r.id, threadId: r.thread_id, authorId: r.author_id,
+      authorName: author?.name ?? 'Usuario',
+      authorAvatarUrl: author?.avatar_url ?? undefined,
+      body: r.body, sentAt: r.sent_at,
+      voiceUrl: r.voice_url ?? undefined,
+      voiceDurationSec: r.voice_duration_sec ?? undefined,
+      replyTo: reply
+        ? { id: reply.id, authorName: replyAuthor?.name ?? 'Usuario', body: reply.body, voiceUrl: reply.voice_url ?? undefined }
+        : undefined,
     };
   });
 }
@@ -133,10 +180,14 @@ export async function sendMessage(
   authorId: string,
   body: string,
   matchId?: string,
+  replyToId?: string,
+  voiceUrl?: string,
+  voiceDurationSec?: number,
 ): Promise<void> {
-  const { error } = await supabase
-    .from('chat_messages')
-    .insert({ thread_id: threadId, author_id: authorId, body });
+  const payload: Record<string, unknown> = { thread_id: threadId, author_id: authorId, body };
+  if (replyToId) payload.reply_to_id = replyToId;
+  if (voiceUrl) { payload.voice_url = voiceUrl; payload.voice_duration_sec = voiceDurationSec ?? null; }
+  const { error } = await supabase.from('chat_messages').insert(payload);
   if (error) throw new Error(error.message);
 
   // Fire-and-forget push to other participants
@@ -159,7 +210,8 @@ export async function sendMessage(
       ]);
       const authorName = (author?.name as string | undefined) ?? 'Alguien';
       const authorAvatar = (author?.avatar_url as string | null | undefined) ?? undefined;
-      const preview = body.length > 80 ? `${body.slice(0, 77)}…` : body;
+      const rawPreview = voiceUrl ? '🎤 Nota de voz' : body;
+      const preview = rawPreview.length > 80 ? `${rawPreview.slice(0, 77)}…` : rawPreview;
 
       await Promise.all(
         participants
@@ -172,9 +224,33 @@ export async function sendMessage(
   })();
 }
 
+export async function uploadVoiceMessage(
+  localUri: string,
+  authorId: string,
+): Promise<string> {
+  const ext = localUri.split('.').pop() ?? 'm4a';
+  const path = `${authorId}/${Date.now()}.${ext}`;
+  const response = await fetch(localUri);
+  const buffer = await response.arrayBuffer();
+  const { error } = await supabase.storage
+    .from('voice-messages')
+    .upload(path, buffer, { contentType: `audio/${ext}`, upsert: false });
+  if (error) throw new Error(error.message);
+  const { data } = supabase.storage.from('voice-messages').getPublicUrl(path);
+  return data.publicUrl;
+}
+
 export async function deleteMessage(messageId: string): Promise<void> {
   const { error } = await supabase
     .from('chat_messages')
+    .delete()
+    .eq('id', messageId);
+  if (error) throw new Error(error.message);
+}
+
+export async function deletePrivateMessage(messageId: string): Promise<void> {
+  const { error } = await supabase
+    .from('private_messages')
     .delete()
     .eq('id', messageId);
   if (error) throw new Error(error.message);
@@ -342,38 +418,66 @@ export async function fetchOrCreatePrivateThread(
 }
 
 export async function fetchPrivateMessages(threadId: string): Promise<ChatMessageData[]> {
+  // Try extended query (requires voice + reply migrations)
   const { data, error } = await supabase
     .from('private_messages')
-    .select('id, thread_id, author_id, body, sent_at')
+    .select(`id, thread_id, author_id, body, sent_at, voice_url, voice_duration_sec, reply_to:private_messages!reply_to_id(id, body, voice_url, author_id)`)
     .eq('thread_id', threadId)
     .order('sent_at', { ascending: true })
     .limit(300);
 
-  if (error || !data) return [];
+  // Determine rows to use — fall back to simple query if extended fails
+  let simpleRows: { id: string; thread_id: string; author_id: string; body: string; sent_at: string }[] | null = null;
+  if (error) {
+    const { data: simple } = await supabase
+      .from('private_messages')
+      .select('id, thread_id, author_id, body, sent_at')
+      .eq('thread_id', threadId)
+      .order('sent_at', { ascending: true })
+      .limit(300);
+    simpleRows = simple as typeof simpleRows;
+  }
 
-  const authorIds = [...new Set((data as { author_id: string }[]).map((r) => r.author_id))];
-  const { data: profiles } = await supabase
-    .from('profiles')
-    .select('id, name, avatar_url')
-    .in('id', authorIds);
+  const baseRows = (error ? simpleRows : data) as { id: string; thread_id: string; author_id: string; body: string; sent_at: string }[] | null;
+  if (!baseRows) return [];
 
+  const allAuthorIds = new Set(baseRows.map((r) => r.author_id));
+  const { data: profiles } = await supabase.from('profiles').select('id, name, avatar_url').in('id', [...allAuthorIds]);
   const profileMap = new Map(
-    (profiles ?? []).map((p) => [
-      p.id as string,
-      p as { id: string; name: string; avatar_url: string | null },
-    ]),
+    (profiles ?? []).map((p) => [p.id as string, p as { id: string; name: string; avatar_url: string | null }]),
   );
 
-  return (data as { id: string; thread_id: string; author_id: string; body: string; sent_at: string }[]).map((row) => {
+  if (error) {
+    return baseRows.map((row) => {
+      const author = profileMap.get(row.author_id);
+      return { id: row.id, threadId: row.thread_id, authorId: row.author_id, authorName: author?.name ?? 'Usuario', authorAvatarUrl: author?.avatar_url ?? undefined, body: row.body, sentAt: row.sent_at };
+    });
+  }
+
+  const rows = (data as unknown as {
+    id: string; thread_id: string; author_id: string; body: string; sent_at: string;
+    voice_url: string | null; voice_duration_sec: number | null;
+    reply_to: { id: string; body: string; voice_url: string | null; author_id: string } | null;
+  }[]);
+
+  for (const r of rows) if (r.reply_to) allAuthorIds.add(r.reply_to.author_id);
+  if (allAuthorIds.size > profileMap.size) {
+    const extra = [...allAuthorIds].filter((id) => !profileMap.has(id));
+    const { data: ep } = await supabase.from('profiles').select('id, name, avatar_url').in('id', extra);
+    for (const p of ep ?? []) profileMap.set(p.id as string, p as { id: string; name: string; avatar_url: string | null });
+  }
+
+  return rows.map((row) => {
     const author = profileMap.get(row.author_id);
+    const replyAuthor = row.reply_to ? profileMap.get(row.reply_to.author_id) : undefined;
     return {
-      id: row.id,
-      threadId: row.thread_id,
-      authorId: row.author_id,
-      authorName: author?.name ?? 'Usuario',
-      authorAvatarUrl: author?.avatar_url ?? undefined,
-      body: row.body,
-      sentAt: row.sent_at,
+      id: row.id, threadId: row.thread_id, authorId: row.author_id,
+      authorName: author?.name ?? 'Usuario', authorAvatarUrl: author?.avatar_url ?? undefined,
+      body: row.body, sentAt: row.sent_at,
+      voiceUrl: row.voice_url ?? undefined, voiceDurationSec: row.voice_duration_sec ?? undefined,
+      replyTo: row.reply_to?.id
+        ? { id: row.reply_to.id, authorName: replyAuthor?.name ?? 'Usuario', body: row.reply_to.body, voiceUrl: row.reply_to.voice_url ?? undefined }
+        : undefined,
     };
   });
 }
@@ -382,10 +486,14 @@ export async function sendPrivateMessage(
   threadId: string,
   authorId: string,
   body: string,
+  replyToId?: string,
+  voiceUrl?: string,
+  voiceDurationSec?: number,
 ): Promise<void> {
-  const { error } = await supabase
-    .from('private_messages')
-    .insert({ thread_id: threadId, author_id: authorId, body });
+  const payload: Record<string, unknown> = { thread_id: threadId, author_id: authorId, body };
+  if (replyToId) payload.reply_to_id = replyToId;
+  if (voiceUrl) { payload.voice_url = voiceUrl; payload.voice_duration_sec = voiceDurationSec ?? null; }
+  const { error } = await supabase.from('private_messages').insert(payload);
   if (error) throw new Error(error.message);
 
   void supabase
@@ -405,7 +513,8 @@ export async function sendPrivateMessage(
       const otherId = t.user1_id === authorId ? t.user2_id : t.user1_id;
       const authorName = (authorResult.data?.name as string | undefined) ?? 'Alguien';
       const authorAvatar = (authorResult.data?.avatar_url as string | null | undefined) ?? undefined;
-      const preview = body.length > 80 ? `${body.slice(0, 77)}…` : body;
+      const rawPreview = voiceUrl ? '🎤 Nota de voz' : body;
+      const preview = rawPreview.length > 80 ? `${rawPreview.slice(0, 77)}…` : rawPreview;
 
       await sendPushToUser(otherId, `💬 ${authorName}`, preview, `/direct/${authorId}`, authorAvatar);
     } catch {

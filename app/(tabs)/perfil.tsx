@@ -303,7 +303,6 @@ export default function PerfilScreen() {
       >
         <View style={s.head}>
           <View style={{ position: 'relative' }}>
-            <AvatarRing />
             <Avatar name={u.name} uri={u.avatarUrl} size={88} />
             {u.verified ? (
               <View style={s.avatarVerifiedBadge}>

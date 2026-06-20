@@ -49,6 +49,7 @@ import {
 import { useDraftMatch, type DraftMatch } from '@/store/draftMatch';
 import { useSession } from '@/store/session';
 import { createMatch } from '@/lib/matchesApi';
+import { track } from '@/lib/analytics';
 import { useColors } from '@/hooks/useColors';
 import { useQueryClient } from '@tanstack/react-query';
 import { matchKeys } from '@/hooks/useMatches';
@@ -280,6 +281,7 @@ export default function CrearWizard() {
     setPublishing(true);
     try {
       const newMatchId = await createMatch(draft, user.id);
+      void track('match_created', { sport: draft.sport, modality: draft.modality, type: draft.type });
       // Invalidate so mis-partidas "Creadas" tab reflects the new match immediately
       void queryClient.invalidateQueries({ queryKey: matchKeys.lists() });
       void queryClient.invalidateQueries({ queryKey: matchKeys.mine(user.id) });

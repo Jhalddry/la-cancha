@@ -227,7 +227,9 @@ export default function MisPartidasScreen() {
         </View>
       ) : matchesError ? (
         <ScrollView
+          key={tab}
           contentContainerStyle={{ flex: 1 }}
+          alwaysBounceVertical={false}
           refreshControl={
             <RefreshControl
               refreshing={matchesRefreshing}
@@ -254,7 +256,9 @@ export default function MisPartidasScreen() {
         </ScrollView>
       ) : showEmpty ? (
         <ScrollView
+          key={tab}
           contentContainerStyle={{ flex: 1 }}
+          alwaysBounceVertical={false}
           refreshControl={
             <RefreshControl
               refreshing={matchesRefreshing}
@@ -283,6 +287,7 @@ export default function MisPartidasScreen() {
         </ScrollView>
       ) : (
         <ScrollView
+          key={tab}
           contentContainerStyle={s.scroll}
           showsVerticalScrollIndicator={false}
           refreshControl={
@@ -337,60 +342,60 @@ export default function MisPartidasScreen() {
           {/* ── Activas ─────────────────────────────────── */}
           {tab === 'activas'
             ? activasList.map((m) => (
-                <View key={m.id} style={s.cardWrap}>
-                  {m.startedAt && !m.endedAt ? (
-                    <View style={s.liveBanner}>
-                      <LiveBadge />
+                <MatchCard
+                  key={m.id}
+                  match={m}
+                  onPress={() => router.push(`/match/${m.id}`)}
+                  cardStyle={{
+                    borderBottomLeftRadius: 0,
+                    borderBottomRightRadius: 0,
+                    borderBottomWidth: 0,
+                    ...(m.startedAt && !m.endedAt ? { borderTopLeftRadius: 0, borderTopRightRadius: 0 } : {}),
+                  }}
+                  header={
+                    m.startedAt && !m.endedAt ? (
+                      <View style={s.liveBanner}><LiveBadge /></View>
+                    ) : undefined
+                  }
+                  footer={
+                    <View style={s.actionRow}>
+                      <PressableScale
+                        style={s.actionBtnSecondary}
+                        scaleTo={0.97}
+                        onPress={() => router.push(`/editar/${m.id}`)}
+                      >
+                        <PencilSimple size={16} color={c.textPrimary} weight="fill" />
+                        <Text variant="bodyMedium" color="textPrimary">Editar partida</Text>
+                      </PressableScale>
+
+                      {!m.startedAt ? (
+                        <PressableScale
+                          style={[s.actionBtnPrimary, isStarting && { opacity: 0.6 }]}
+                          scaleTo={0.97}
+                          onPress={() => !isStarting && setStartConfirmMatchId(m.id)}
+                        >
+                          <Play size={16} color={c.textOnPrimary} weight="fill" />
+                          <Text variant="bodyMedium" style={{ color: c.textOnPrimary }}>
+                            {isStarting ? 'Iniciando…' : 'Iniciar partida'}
+                          </Text>
+                        </PressableScale>
+                      ) : null}
+
+                      {m.startedAt && !m.endedAt ? (
+                        <PressableScale
+                          style={[s.actionBtnSeria, isEnding && { opacity: 0.6 }]}
+                          scaleTo={0.97}
+                          onPress={() => !isEnding && setEndConfirmMatchId(m.id)}
+                        >
+                          <Flag size={16} color="#fff" weight="fill" />
+                          <Text variant="bodyMedium" style={{ color: '#fff' }}>
+                            {isEnding ? 'Finalizando…' : 'Finalizar partida'}
+                          </Text>
+                        </PressableScale>
+                      ) : null}
                     </View>
-                  ) : null}
-                  <MatchCard
-                    match={m}
-                    onPress={() => router.push(`/match/${m.id}`)}
-                    cardStyle={{
-                      borderBottomLeftRadius: 0,
-                      borderBottomRightRadius: 0,
-                      borderBottomWidth: 0,
-                      ...(m.startedAt && !m.endedAt ? { borderTopLeftRadius: 0, borderTopRightRadius: 0 } : {}),
-                    }}
-                  />
-                  {/* Action row */}
-                  <View style={s.actionRow}>
-                    <PressableScale
-                      style={s.actionBtnSecondary}
-                      scaleTo={0.97}
-                      onPress={() => router.push(`/editar/${m.id}`)}
-                    >
-                      <PencilSimple size={16} color={c.textPrimary} weight="fill" />
-                      <Text variant="bodyMedium" color="textPrimary">Editar partida</Text>
-                    </PressableScale>
-
-                    {!m.startedAt ? (
-                      <PressableScale
-                        style={[s.actionBtnPrimary, isStarting && { opacity: 0.6 }]}
-                        scaleTo={0.97}
-                        onPress={() => !isStarting && setStartConfirmMatchId(m.id)}
-                      >
-                        <Play size={16} color={c.textOnPrimary} weight="fill" />
-                        <Text variant="bodyMedium" style={{ color: c.textOnPrimary }}>
-                          {isStarting ? 'Iniciando…' : 'Iniciar partida'}
-                        </Text>
-                      </PressableScale>
-                    ) : null}
-
-                    {m.startedAt && !m.endedAt ? (
-                      <PressableScale
-                        style={[s.actionBtnSeria, isEnding && { opacity: 0.6 }]}
-                        scaleTo={0.97}
-                        onPress={() => !isEnding && setEndConfirmMatchId(m.id)}
-                      >
-                        <Flag size={16} color="#fff" weight="fill" />
-                        <Text variant="bodyMedium" style={{ color: '#fff' }}>
-                          {isEnding ? 'Finalizando…' : 'Finalizar partida'}
-                        </Text>
-                      </PressableScale>
-                    ) : null}
-                  </View>
-                </View>
+                  }
+                />
               ))
             : null}
 

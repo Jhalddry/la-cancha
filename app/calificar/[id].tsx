@@ -279,7 +279,6 @@ function RatingStep({
 
       <View style={s.avatarWrap}>
         <Avatar name={player.name} uri={player.avatarUrl} size={80} />
-        {player.verified ? <View style={s.verifiedDot} /> : null}
       </View>
 
       <View style={s.starsRow}>

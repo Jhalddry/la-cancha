@@ -4,6 +4,7 @@ import { queryClient } from '@/lib/queryClient';
 
 import {
   deleteMessage,
+  deletePrivateMessage,
   deleteThread,
   fetchMessages,
   fetchMyPrivateThreads,
@@ -16,6 +17,7 @@ import {
   markThreadRead,
   sendMessage,
   sendPrivateMessage,
+  uploadVoiceMessage,
   type ChatMessageData,
   type ChatParticipant,
   type ChatThreadData,
@@ -78,11 +80,17 @@ export function useChat(matchId: string | undefined) {
           fetchThreadParticipants(matchId),
         ]);
 
-        setMessages(msgs);
-
         const map = new Map<string, ChatParticipant>();
         for (const p of parts) map.set(p.id, p);
         setParticipants(map);
+
+        // Patch any "Usuario" fallback names with real participant data
+        const patchedMsgs = msgs.map((m) => {
+          if (m.authorName !== 'Usuario') return m;
+          const p = map.get(m.authorId);
+          return p ? { ...m, authorName: p.name, authorAvatarUrl: p.avatarUrl } : m;
+        });
+        setMessages(patchedMsgs);
       } catch {
         setError('Error al cargar el chat.');
       } finally {
@@ -95,8 +103,11 @@ export function useChat(matchId: string | undefined) {
   useEffect(() => {
     if (!threadId) return;
 
+    // Unique suffix prevents "already subscribed" error in React StrictMode
+    // (double-invocation runs cleanup async, second run hits same channel name)
+    const uid = Math.random().toString(36).slice(2);
     const channel = supabase
-      .channel(`chat-messages:${threadId}`)
+      .channel(`chat-messages:${threadId}:${uid}`)
       .on(
         'postgres_changes',
         {
@@ -122,38 +133,47 @@ export function useChat(matchId: string | undefined) {
           const row = payload.new as Record<string, unknown>;
           const authorId = row.author_id as string;
           const authorInfo = participantsRef.current.get(authorId);
-          const newMsg: ChatMessageData = {
-            id: row.id as string,
-            threadId: row.thread_id as string,
-            authorId,
-            authorName: authorInfo?.name ?? 'Usuario',
-            authorAvatarUrl: authorInfo?.avatarUrl,
-            body: row.body as string,
-            sentAt: row.sent_at as string,
+
+          const addMsg = (name: string, avatarUrl?: string) => {
+            const newMsg: ChatMessageData = {
+              id: row.id as string,
+              threadId: row.thread_id as string,
+              authorId,
+              authorName: name,
+              authorAvatarUrl: avatarUrl,
+              body: row.body as string,
+              sentAt: row.sent_at as string,
+              voiceUrl: (row.voice_url as string | null | undefined) ?? undefined,
+              voiceDurationSec: (row.voice_duration_sec as number | null | undefined) ?? undefined,
+            };
+            setMessages((prev) => {
+              if (prev.some((m) => m.id === newMsg.id)) return prev;
+              if (authorId === userId) {
+                let lastOptIdx = -1;
+                for (let i = prev.length - 1; i >= 0; i--) {
+                  if (prev[i].id.startsWith('opt_') && prev[i].body === newMsg.body) { lastOptIdx = i; break; }
+                }
+                if (lastOptIdx !== -1) { const next = [...prev]; next[lastOptIdx] = newMsg; return next; }
+              }
+              return [...prev, newMsg];
+            });
           };
 
-          setMessages((prev) => {
-            // Already present (exact ID match)
-            if (prev.some((m) => m.id === newMsg.id)) return prev;
-
-            // If it's our own message, find and replace the matching optimistic entry
-            if (authorId === userId) {
-              let lastOptIdx = -1;
-              for (let i = prev.length - 1; i >= 0; i--) {
-                if (prev[i].id.startsWith('opt_') && prev[i].body === newMsg.body) {
-                  lastOptIdx = i;
-                  break;
+          if (authorInfo) {
+            addMsg(authorInfo.name, authorInfo.avatarUrl);
+          } else {
+            // Author not in participants cache — fetch profile then add
+            void supabase.from('profiles').select('id, name, avatar_url').eq('id', authorId).maybeSingle()
+              .then(({ data }) => {
+                const name = (data?.name as string | null | undefined) ?? 'Usuario';
+                const avatarUrl = (data?.avatar_url as string | null | undefined) ?? undefined;
+                if (data) {
+                  const p: ChatParticipant = { id: authorId, name, avatarUrl };
+                  setParticipants((prev) => new Map(prev).set(authorId, p));
                 }
-              }
-              if (lastOptIdx !== -1) {
-                const next = [...prev];
-                next[lastOptIdx] = newMsg;
-                return next;
-              }
-            }
-
-            return [...prev, newMsg];
-          });
+                addMsg(name, avatarUrl);
+              });
+          }
         },
       )
       .subscribe();
@@ -173,8 +193,9 @@ export function useChat(matchId: string | undefined) {
     fetchLatest();
     const poll = setInterval(fetchLatest, 5_000);
 
+    const uid2 = Math.random().toString(36).slice(2);
     const channel = supabase
-      .channel(`chat-reads:${threadId}`)
+      .channel(`chat-reads:${threadId}:${uid2}`)
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'chat_reads', filter: `thread_id=eq.${threadId}` },
@@ -233,14 +254,17 @@ export function useChat(matchId: string | undefined) {
     }, 3000);
   }, [userId]);
 
-  const send = async (body: string) => {
-    if (!threadId || !userId || !body.trim()) return;
-
+  const send = async (
+    body: string,
+    opts?: { replyToId?: string; voiceLocalUri?: string; voiceDurationSec?: number },
+  ) => {
+    if (!threadId || !userId) return;
     const trimmed = body.trim();
+    if (!trimmed && !opts?.voiceLocalUri) return;
+
     const optimisticId = `opt_${Date.now()}`;
     const me = participantsRef.current.get(userId);
 
-    // Optimistic add
     setMessages((prev) => [
       ...prev,
       {
@@ -249,25 +273,44 @@ export function useChat(matchId: string | undefined) {
         authorId: userId,
         authorName: me?.name ?? 'Tú',
         authorAvatarUrl: me?.avatarUrl,
-        body: trimmed,
+        body: trimmed || '[Nota de voz]',
+        voiceUrl: opts?.voiceLocalUri,
+        voiceDurationSec: opts?.voiceDurationSec,
         sentAt: new Date().toISOString(),
       },
     ]);
 
+    // Upload failure must not remove the optimistic — fall back to text-only send
+    let uploadedVoiceUrl: string | undefined;
+    if (opts?.voiceLocalUri) {
+      try { uploadedVoiceUrl = await uploadVoiceMessage(opts.voiceLocalUri, userId); } catch (e) { console.warn('[voice] upload failed', e); }
+    }
     try {
-      await sendMessage(threadId, userId, trimmed, matchId);
-      // Await so we can re-zero unread after the refetch — the refetch races with markThreadRead
+      await sendMessage(
+        threadId, userId, trimmed || '[Nota de voz]', matchId,
+        opts?.replyToId, uploadedVoiceUrl, opts?.voiceDurationSec,
+      );
       await queryClient.invalidateQueries({ queryKey: ['chat-threads'] });
       queryClient.setQueryData<ChatThreadData[]>(['chat-threads'], (old) =>
         old?.map((t) => (t.id === threadId ? { ...t, unreadCount: 0 } : t)) ?? old,
       );
     } catch {
-      // Roll back optimistic message
-      setMessages((prev) => prev.filter((m) => m.id !== optimisticId));
+      // If send with voice fields fails (columns not yet migrated), retry as plain text
+      try {
+        await sendMessage(threadId, userId, trimmed || '[Nota de voz]', matchId, opts?.replyToId);
+        await queryClient.invalidateQueries({ queryKey: ['chat-threads'] });
+      } catch {
+        setMessages((prev) => prev.filter((m) => m.id !== optimisticId));
+      }
     }
   };
 
-  return { messages, participants, loading, error, send, threadId, othersReadAt, othersTyping, sendTyping };
+  const removeMessages = (ids: string[]) => {
+    const idSet = new Set(ids);
+    setMessages((prev) => prev.filter((m) => !idSet.has(m.id)));
+  };
+
+  return { messages, participants, loading, error, send, removeMessages, threadId, othersReadAt, othersTyping, sendTyping };
 }
 
 // ─── Private DM hooks ────────────────────────────────────────────────────────
@@ -333,6 +376,16 @@ export function usePrivateChat(otherId: string | undefined) {
 
   const pmTypingChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
   const pmTypingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const otherUserRef = useRef<{ name: string; avatarUrl?: string } | null>(null);
+
+  // Fetch other user's profile so realtime messages can show their name
+  useEffect(() => {
+    if (!otherId) return;
+    void supabase.from('profiles').select('name, avatar_url').eq('id', otherId).maybeSingle()
+      .then(({ data }) => {
+        if (data) otherUserRef.current = { name: data.name as string, avatarUrl: (data.avatar_url as string | null) ?? undefined };
+      });
+  }, [otherId]);
 
   useEffect(() => {
     if (!userId || !otherId) return;
@@ -344,7 +397,16 @@ export function usePrivateChat(otherId: string | undefined) {
         setThreadId(tid);
         void queryClient.invalidateQueries({ queryKey: ['private-threads', userId] });
         const msgs = await fetchPrivateMessages(tid);
-        setMessages(msgs);
+        // Patch "Usuario" names using the other user's profile (may already be in ref)
+        const other = otherUserRef.current;
+        const patchedMsgs = other
+          ? msgs.map((m) =>
+              m.authorName === 'Usuario' && m.authorId === otherId
+                ? { ...m, authorName: other.name, authorAvatarUrl: other.avatarUrl }
+                : m,
+            )
+          : msgs;
+        setMessages(patchedMsgs);
       } catch { setError('Error al cargar el chat.'); }
       finally { setLoading(false); }
     })();
@@ -353,32 +415,50 @@ export function usePrivateChat(otherId: string | undefined) {
   // Realtime for private messages
   useEffect(() => {
     if (!threadId) return;
+    const uid = Math.random().toString(36).slice(2);
     const channel = supabase
-      .channel(`pm:${threadId}`)
+      .channel(`pm:${threadId}:${uid}`)
       .on('postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'private_messages', filter: `thread_id=eq.${threadId}` },
         (payload) => {
           const row = payload.new as Record<string, unknown>;
           const authorId = row.author_id as string;
-          const newMsg: ChatMessageData = {
-            id: row.id as string,
-            threadId: row.thread_id as string,
-            authorId,
-            authorName: authorId === userId ? (user?.name ?? 'Tú') : 'Usuario',
-            body: row.body as string,
-            sentAt: row.sent_at as string,
-          };
-          setMessages((prev) => {
-            if (prev.some((m) => m.id === newMsg.id)) return prev;
-            if (authorId === userId) {
-              let idx = -1;
-              for (let i = prev.length - 1; i >= 0; i--) {
-                if (prev[i].id.startsWith('opt_') && prev[i].body === newMsg.body) { idx = i; break; }
+          const isMe = authorId === userId;
+          const authorName = isMe ? (user?.name ?? 'Tú') : (otherUserRef.current?.name ?? 'Usuario');
+          const authorAvatarUrl = isMe ? undefined : otherUserRef.current?.avatarUrl;
+
+          const addMsg = (name: string, avatar?: string) => {
+            const newMsg: ChatMessageData = {
+              id: row.id as string, threadId: row.thread_id as string, authorId,
+              authorName: name, authorAvatarUrl: avatar, body: row.body as string, sentAt: row.sent_at as string,
+              voiceUrl: (row.voice_url as string | null | undefined) ?? undefined,
+              voiceDurationSec: (row.voice_duration_sec as number | null | undefined) ?? undefined,
+            };
+            setMessages((prev) => {
+              if (prev.some((m) => m.id === newMsg.id)) return prev;
+              if (isMe) {
+                let idx = -1;
+                for (let i = prev.length - 1; i >= 0; i--) {
+                  if (prev[i].id.startsWith('opt_') && prev[i].body === newMsg.body) { idx = i; break; }
+                }
+                if (idx !== -1) { const next = [...prev]; next[idx] = newMsg; return next; }
               }
-              if (idx !== -1) { const next = [...prev]; next[idx] = newMsg; return next; }
-            }
-            return [...prev, newMsg];
-          });
+              return [...prev, newMsg];
+            });
+          };
+
+          if (!isMe && !otherUserRef.current) {
+            // Profile not yet loaded — fetch it then add message
+            void supabase.from('profiles').select('name, avatar_url').eq('id', authorId).maybeSingle()
+              .then(({ data }) => {
+                const name = (data?.name as string | null | undefined) ?? 'Usuario';
+                const avatar = (data?.avatar_url as string | null | undefined) ?? undefined;
+                otherUserRef.current = { name, avatarUrl: avatar };
+                addMsg(name, avatar);
+              });
+          } else {
+            addMsg(authorName, authorAvatarUrl);
+          }
         })
       .subscribe();
     return () => { void supabase.removeChannel(channel); };
@@ -394,8 +474,9 @@ export function usePrivateChat(otherId: string | undefined) {
     fetchLatest();
     const poll = setInterval(fetchLatest, 5_000);
 
+    const uid2 = Math.random().toString(36).slice(2);
     const channel = supabase
-      .channel(`pm-reads:${threadId}`)
+      .channel(`pm-reads:${threadId}:${uid2}`)
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'chat_reads', filter: `thread_id=eq.${threadId}` },
@@ -453,26 +534,48 @@ export function usePrivateChat(otherId: string | undefined) {
     }, 3000);
   }, [userId, user?.name]);
 
-  const send = async (body: string) => {
-    if (!threadId || !userId || !body.trim()) return;
+  const send = async (
+    body: string,
+    opts?: { replyToId?: string; voiceLocalUri?: string; voiceDurationSec?: number },
+  ) => {
+    if (!threadId || !userId) return;
     const trimmed = body.trim();
+    if (!trimmed && !opts?.voiceLocalUri) return;
     const optId = `opt_${Date.now()}`;
     setMessages((prev) => [...prev, {
       id: optId, threadId: threadId!, authorId: userId,
-      authorName: user?.name ?? 'Tú', body: trimmed, sentAt: new Date().toISOString(),
+      authorName: user?.name ?? 'Tú',
+      body: trimmed || '[Nota de voz]',
+      voiceUrl: opts?.voiceLocalUri,
+      voiceDurationSec: opts?.voiceDurationSec,
+      sentAt: new Date().toISOString(),
     }]);
+    let uploadedVoiceUrl: string | undefined;
+    if (opts?.voiceLocalUri) {
+      try { uploadedVoiceUrl = await uploadVoiceMessage(opts.voiceLocalUri, userId); } catch (e) { console.warn('[voice] upload failed', e); }
+    }
     try {
-      await sendPrivateMessage(threadId, userId, trimmed);
+      await sendPrivateMessage(threadId, userId, trimmed || '[Nota de voz]', opts?.replyToId, uploadedVoiceUrl, opts?.voiceDurationSec);
       await queryClient.invalidateQueries({ queryKey: ['private-threads', userId] });
       queryClient.setQueryData<PrivateThreadData[]>(['private-threads', userId], (old) =>
         old?.map((t) => (t.id === threadId ? { ...t, unreadCount: 0 } : t)) ?? old,
       );
     } catch {
-      setMessages((prev) => prev.filter((m) => m.id !== optId));
+      try {
+        await sendPrivateMessage(threadId, userId, trimmed || '[Nota de voz]', opts?.replyToId);
+        await queryClient.invalidateQueries({ queryKey: ['private-threads', userId] });
+      } catch {
+        setMessages((prev) => prev.filter((m) => m.id !== optId));
+      }
     }
   };
 
-  return { messages, loading, error, send, threadId, othersReadAt, othersTyping, sendTyping };
+  const removeMessages = (ids: string[]) => {
+    const idSet = new Set(ids);
+    setMessages((prev) => prev.filter((m) => !idSet.has(m.id)));
+  };
+
+  return { messages, loading, error, send, removeMessages, threadId, othersReadAt, othersTyping, sendTyping };
 }
 
 // ─── Delete a single message ──────────────────────────────────────────────────
@@ -480,6 +583,12 @@ export function usePrivateChat(otherId: string | undefined) {
 export function useDeleteMessage() {
   return useMutation({
     mutationFn: (messageId: string) => deleteMessage(messageId),
+  });
+}
+
+export function useDeletePrivateMessage() {
+  return useMutation({
+    mutationFn: (messageId: string) => deletePrivateMessage(messageId),
   });
 }
 

@@ -304,7 +304,7 @@ function MatchChatRow({
           ) : null}
         </View>
         <Text variant="small" color="textSecondary" numberOfLines={1}>
-          {thread.lastMessage ?? 'Sin mensajes aún'}
+          {thread.lastMessage === '[Nota de voz]' ? '🎤 Nota de voz' : (thread.lastMessage ?? 'Sin mensajes aún')}
         </Text>
       </View>
     </PressableScale>
@@ -344,7 +344,7 @@ function PrivateChatRow({
           ) : null}
         </View>
         <Text variant="small" color="textSecondary" numberOfLines={1}>
-          {thread.lastMessage ?? 'Sin mensajes aún'}
+          {thread.lastMessage === '[Nota de voz]' ? '🎤 Nota de voz' : (thread.lastMessage ?? 'Sin mensajes aún')}
         </Text>
       </View>
     </PressableScale>
