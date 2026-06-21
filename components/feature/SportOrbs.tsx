@@ -1,8 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Text as RNText, View } from 'react-native';
 import Animated, {
   cancelAnimation,
   Easing,
+  runOnJS,
   useAnimatedStyle,
   useDerivedValue,
   useSharedValue,
@@ -17,7 +18,7 @@ const BASE_H = 168;
 const BASE_W = 130;
 const BALL_D = 54;
 const TRAVEL = 92;
-const GROUND = TRAVEL + BALL_D; // 146
+const GROUND = TRAVEL + BALL_D;
 
 const SHADOW_W = 48;
 const SHADOW_H = 11;
@@ -32,19 +33,22 @@ const T_DROP  = 400;
 const T_HOLD  = 60;
 const T_RISE  = 560;
 const T_PAUSE = 180;
-const CYCLE   = T_DROP + T_HOLD + T_RISE + T_PAUSE; // 1200ms
+const CYCLE   = T_DROP + T_HOLD + T_RISE + T_PAUSE;
 
 const T_RING = 420;
-const T_REST = T_HOLD + T_RISE + T_PAUSE - T_RING;  // 380ms
+const T_REST = T_HOLD + T_RISE + T_PAUSE - T_RING;
 
-// ── Sports — emoji IS the actual sport ball ───────────────────────────────────
+const FADE_OUT = 100;
+const FADE_IN  = 150;
+
+// ── Sports ────────────────────────────────────────────────────────────────────
 
 const SPORTS = [
-  { color: '#4ade80', emoji: '⚽' }, // futbol
-  { color: '#fb923c', emoji: '🏀' }, // basket
-  { color: '#38bdf8', emoji: '🎾' }, // tenis
-  { color: '#fbbf24', emoji: '🏖️' }, // beach tennis
-  { color: '#a78bfa', emoji: '🏓' }, // padel
+  { color: '#4ade80', emoji: '⚽' },
+  { color: '#fb923c', emoji: '🏀' },
+  { color: '#38bdf8', emoji: '🎾' },
+  { color: '#fbbf24', emoji: '🏖️' },
+  { color: '#a78bfa', emoji: '🏓' },
 ] as const;
 
 // ── Component ─────────────────────────────────────────────────────────────────
@@ -53,7 +57,6 @@ export function SportOrbs({ size = BASE_H }: { size?: number }) {
   const [sportIdx, setSportIdx] = useState(0);
   const sport = SPORTS[sportIdx];
 
-  // Physics shared values
   const y      = useSharedValue(0);
   const scX    = useSharedValue(1);
   const scY    = useSharedValue(1);
@@ -61,12 +64,24 @@ export function SportOrbs({ size = BASE_H }: { size?: number }) {
   const shOp   = useSharedValue(0.1);
   const rScale = useSharedValue(1);
   const rOp    = useSharedValue(0);
+  const rot    = useSharedValue(0);
+  const ballOp = useSharedValue(1);
 
   const sc      = size / BASE_H;
   const travelY = TRAVEL * sc;
 
-  // ── Trail opacity — visible only during fast downward drop ───────────────
+  // Sport index tracked in ref so the worklet callback can read it
+  const idxRef = useRef(0);
 
+  // Called from UI thread via runOnJS after fade-out completes
+  const onFadedOut = useCallback(() => {
+    idxRef.current = (idxRef.current + 1) % SPORTS.length;
+    setSportIdx(idxRef.current);
+    ballOp.value = withTiming(1, { duration: FADE_IN, easing: Easing.out(Easing.quad) });
+  }, [ballOp]);
+
+
+  // Trail — visible during fast fall
   const trailOp = useDerivedValue(() =>
     Math.max(0, y.value / travelY - 0.15) * 0.22,
   );
@@ -81,19 +96,18 @@ export function SportOrbs({ size = BASE_H }: { size?: number }) {
     transform: [{ translateY: Math.max(0, y.value - 34 * sc) }],
   }));
 
-  // ── Sport cycling synced to bounce cycle ──────────────────────────────────
-
+  // Sport transition: fade out → swap → fade in
   useEffect(() => {
-    let idx = 0;
     const id = setInterval(() => {
-      idx = (idx + 1) % SPORTS.length;
-      setSportIdx(idx);
+      ballOp.value = withTiming(0, { duration: FADE_OUT, easing: Easing.in(Easing.quad) }, (done) => {
+        'worklet';
+        if (done) runOnJS(onFadedOut)();
+      });
     }, CYCLE);
     return () => clearInterval(id);
-  }, []);
+  }, [ballOp, onFadedOut]);
 
-  // ── Reanimated physics ────────────────────────────────────────────────────
-
+  // Physics
   useEffect(() => {
     const scVal = size / BASE_H;
     const tY    = TRAVEL * scVal;
@@ -147,6 +161,13 @@ export function SportOrbs({ size = BASE_H }: { size?: number }) {
       withTiming(0,    { duration: T_REST }),
     ), -1, false);
 
+    rot.value = withRepeat(withSequence(
+      withTiming(10,  { duration: T_DROP,  easing: Easing.in(Easing.quad) }),
+      withTiming(8,   { duration: T_HOLD }),
+      withTiming(-10, { duration: T_RISE,  easing: Easing.out(Easing.quad) }),
+      withTiming(0,   { duration: T_PAUSE, easing: Easing.out(Easing.quad) }),
+    ), -1, false);
+
     return () => {
       cancelAnimation(y);
       cancelAnimation(scX);
@@ -155,17 +176,23 @@ export function SportOrbs({ size = BASE_H }: { size?: number }) {
       cancelAnimation(shOp);
       cancelAnimation(rScale);
       cancelAnimation(rOp);
+      cancelAnimation(rot);
     };
-  }, [y, scX, scY, shScX, shOp, rScale, rOp, size]);
+  }, [y, scX, scY, shScX, shOp, rScale, rOp, rot, size]);
 
   // ── Animated styles ───────────────────────────────────────────────────────
 
   const ballStyle = useAnimatedStyle(() => ({
+    opacity: ballOp.value,
     transform: [
       { translateY: y.value },
       { scaleX: scX.value },
       { scaleY: scY.value },
     ],
+  }));
+
+  const emojiStyle = useAnimatedStyle(() => ({
+    transform: [{ rotate: `${rot.value}deg` }],
   }));
 
   const shadowStyle = useAnimatedStyle(() => ({
@@ -195,13 +222,11 @@ export function SportOrbs({ size = BASE_H }: { size?: number }) {
   const groundY    = GROUND   * sc;
   const containerW = BASE_W   * sc;
 
-  // ── Render ────────────────────────────────────────────────────────────────
-
   return (
     <View style={{ width: containerW, alignItems: 'center' }}>
       <View style={{ width: containerW, height: size }}>
 
-        {/* Trail 2 — furthest back */}
+        {/* Trail 2 */}
         <Animated.View style={[
           {
             position: 'absolute',
@@ -270,7 +295,7 @@ export function SportOrbs({ size = BASE_H }: { size?: number }) {
           shadowStyle,
         ]} />
 
-        {/* Ball — emoji IS the sport ball, squash/stretch applied */}
+        {/* Ball */}
         <Animated.View style={[
           {
             position: 'absolute',
@@ -285,13 +310,14 @@ export function SportOrbs({ size = BASE_H }: { size?: number }) {
           },
           ballStyle,
         ]}>
-          <RNText style={{ fontSize: ballD * 0.88, lineHeight: ballD }}>
-            {sport.emoji}
-          </RNText>
+          <Animated.View style={emojiStyle}>
+            <RNText style={{ fontSize: ballD * 0.88, lineHeight: ballD }}>
+              {sport.emoji}
+            </RNText>
+          </Animated.View>
         </Animated.View>
 
       </View>
-
     </View>
   );
 }
