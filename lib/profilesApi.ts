@@ -3,7 +3,7 @@ import { rowToPlayer } from '@/lib/mappers';
 import type { Player } from '@/types/domain';
 
 const PROFILE_FIELDS =
-  'id, name, username, avatar_url, skill_level, sports, positions, bio, verified, reputation, matches_played, matches_organized, attendance_pct, badges, city, onboarded';
+  'id, name, username, avatar_url, skill_level, sports, positions, bio, verified, reputation, matches_played, matches_organized, attendance_pct, badges, city, onboarded, sport_levels';
 
 export async function setPlayerVerified(id: string, verified: boolean): Promise<void> {
   const { error } = await supabase.from('profiles').update({ verified }).eq('id', id);

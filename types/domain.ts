@@ -53,6 +53,7 @@ export interface Player {
   badges?: string[];
   city?: string;
   onboarded?: boolean;
+  sportLevels?: Partial<Record<Sport, SkillLevel>>;
 }
 
 export interface MatchLocation {

@@ -105,26 +105,38 @@ type ProfileRow = { id: string; name: string; avatar_url: string | null };
 type ReplyRow = { id: string; body: string; voice_url: string | null; author_id: string };
 
 export async function fetchMessages(threadId: string): Promise<ChatMessageData[]> {
-  // Try extended query (requires voice + reply_to_id migrations). Fall back to basic on error.
-  const { data: extData, error: extErr } = await supabase
+  // Level 1: voice + reply (both migrations applied)
+  const { data: ext1, error: err1 } = await supabase
     .from('chat_messages')
     .select('id, thread_id, author_id, body, sent_at, voice_url, voice_duration_sec, reply_to_id')
-    .eq('thread_id', threadId)
-    .order('sent_at', { ascending: true })
-    .limit(300);
+    .eq('thread_id', threadId).order('sent_at', { ascending: true }).limit(300);
 
+  // Level 2: reply only (voice migration missing)
+  let ext2: MsgRow[] | null = null;
+  if (err1) {
+    const { data, error: err2 } = await supabase
+      .from('chat_messages')
+      .select('id, thread_id, author_id, body, sent_at, reply_to_id')
+      .eq('thread_id', threadId).order('sent_at', { ascending: true }).limit(300);
+    if (!err2) ext2 = data as unknown as MsgRow[];
+    else console.error('[fetchMessages] reply-only query failed:', err2.message);
+  }
+
+  // Level 3: basic (no extended columns)
   let rows: MsgRow[];
-  if (!extErr && extData) {
-    rows = extData as unknown as MsgRow[];
+  if (!err1 && ext1) {
+    rows = ext1 as unknown as MsgRow[];
+  } else if (ext2) {
+    rows = ext2;
   } else {
+    console.error('[fetchMessages] falling back to basic (no reply_to_id):', err1?.message);
     const { data: simple } = await supabase
       .from('chat_messages')
       .select('id, thread_id, author_id, body, sent_at')
-      .eq('thread_id', threadId)
-      .order('sent_at', { ascending: true })
-      .limit(300);
+      .eq('thread_id', threadId).order('sent_at', { ascending: true }).limit(300);
     rows = (simple ?? []) as unknown as MsgRow[];
   }
+
 
   if (rows.length === 0) return [];
 
@@ -142,10 +154,12 @@ export async function fetchMessages(threadId: string): Promise<ChatMessageData[]
   const replyIds = [...new Set(rows.filter((r) => r.reply_to_id).map((r) => r.reply_to_id as string))];
   const replyMap = new Map<string, ReplyRow>();
   if (replyIds.length > 0) {
-    const { data: replyRows } = await supabase
+    const { data: replyRows, error: replyErr } = await supabase
       .from('chat_messages')
       .select('id, body, voice_url, author_id')
+      .eq('thread_id', threadId)
       .in('id', replyIds);
+    if (replyErr) console.error('[fetchMessages] reply rows fetch failed:', replyErr.message);
     for (const rr of (replyRows ?? []) as unknown as ReplyRow[]) {
       replyMap.set(rr.id, rr);
     }
@@ -417,66 +431,75 @@ export async function fetchOrCreatePrivateThread(
   return (created as { id: string }).id;
 }
 
-export async function fetchPrivateMessages(threadId: string): Promise<ChatMessageData[]> {
-  // Try extended query (requires voice + reply migrations)
-  const { data, error } = await supabase
-    .from('private_messages')
-    .select(`id, thread_id, author_id, body, sent_at, voice_url, voice_duration_sec, reply_to:private_messages!reply_to_id(id, body, voice_url, author_id)`)
-    .eq('thread_id', threadId)
-    .order('sent_at', { ascending: true })
-    .limit(300);
+type PMRow = { id: string; thread_id: string; author_id: string; body: string; sent_at: string; voice_url?: string | null; voice_duration_sec?: number | null; reply_to_id?: string | null };
 
-  // Determine rows to use — fall back to simple query if extended fails
-  let simpleRows: { id: string; thread_id: string; author_id: string; body: string; sent_at: string }[] | null = null;
-  if (error) {
+export async function fetchPrivateMessages(threadId: string): Promise<ChatMessageData[]> {
+  // Level 1: voice + reply columns
+  const { data: ext1, error: err1 } = await supabase
+    .from('private_messages')
+    .select('id, thread_id, author_id, body, sent_at, voice_url, voice_duration_sec, reply_to_id')
+    .eq('thread_id', threadId).order('sent_at', { ascending: true }).limit(300);
+
+  // Level 2: reply only (voice migration missing)
+  let ext2: PMRow[] | null = null;
+  if (err1) {
+    const { data, error: err2 } = await supabase
+      .from('private_messages')
+      .select('id, thread_id, author_id, body, sent_at, reply_to_id')
+      .eq('thread_id', threadId).order('sent_at', { ascending: true }).limit(300);
+    if (!err2) ext2 = data as unknown as PMRow[];
+  }
+
+  // Level 3: basic
+  let rows: PMRow[];
+  if (!err1 && ext1) {
+    rows = ext1 as unknown as PMRow[];
+  } else if (ext2) {
+    rows = ext2;
+  } else {
     const { data: simple } = await supabase
       .from('private_messages')
       .select('id, thread_id, author_id, body, sent_at')
-      .eq('thread_id', threadId)
-      .order('sent_at', { ascending: true })
-      .limit(300);
-    simpleRows = simple as typeof simpleRows;
+      .eq('thread_id', threadId).order('sent_at', { ascending: true }).limit(300);
+    rows = (simple ?? []) as unknown as PMRow[];
   }
 
-  const baseRows = (error ? simpleRows : data) as { id: string; thread_id: string; author_id: string; body: string; sent_at: string }[] | null;
-  if (!baseRows) return [];
+  if (rows.length === 0) return [];
 
-  const allAuthorIds = new Set(baseRows.map((r) => r.author_id));
-  const { data: profiles } = await supabase.from('profiles').select('id, name, avatar_url').in('id', [...allAuthorIds]);
-  const profileMap = new Map(
+  const authorIdSet = new Set(rows.map((r) => r.author_id));
+  const { data: profiles } = await supabase.from('profiles').select('id, name, avatar_url').in('id', [...authorIdSet]);
+  const profileMap = new Map<string, { id: string; name: string; avatar_url: string | null }>(
     (profiles ?? []).map((p) => [p.id as string, p as { id: string; name: string; avatar_url: string | null }]),
   );
 
-  if (error) {
-    return baseRows.map((row) => {
-      const author = profileMap.get(row.author_id);
-      return { id: row.id, threadId: row.thread_id, authorId: row.author_id, authorName: author?.name ?? 'Usuario', authorAvatarUrl: author?.avatar_url ?? undefined, body: row.body, sentAt: row.sent_at };
-    });
+  // Batch-fetch reply messages
+  const replyIds = [...new Set(rows.filter((r) => r.reply_to_id).map((r) => r.reply_to_id as string))];
+  const replyMap = new Map<string, ReplyRow>();
+  if (replyIds.length > 0) {
+    const { data: replyRows } = await supabase
+      .from('private_messages')
+      .select('id, body, voice_url, author_id')
+      .eq('thread_id', threadId)
+      .in('id', replyIds);
+    for (const rr of (replyRows ?? []) as unknown as ReplyRow[]) replyMap.set(rr.id, rr);
+    const missingIds = [...new Set([...replyMap.values()].map((r) => r.author_id))].filter((id) => !profileMap.has(id));
+    if (missingIds.length > 0) {
+      const { data: mp } = await supabase.from('profiles').select('id, name, avatar_url').in('id', missingIds);
+      for (const p of (mp ?? []) as unknown as { id: string; name: string; avatar_url: string | null }[]) profileMap.set(p.id, p);
+    }
   }
 
-  const rows = (data as unknown as {
-    id: string; thread_id: string; author_id: string; body: string; sent_at: string;
-    voice_url: string | null; voice_duration_sec: number | null;
-    reply_to: { id: string; body: string; voice_url: string | null; author_id: string } | null;
-  }[]);
-
-  for (const r of rows) if (r.reply_to) allAuthorIds.add(r.reply_to.author_id);
-  if (allAuthorIds.size > profileMap.size) {
-    const extra = [...allAuthorIds].filter((id) => !profileMap.has(id));
-    const { data: ep } = await supabase.from('profiles').select('id, name, avatar_url').in('id', extra);
-    for (const p of ep ?? []) profileMap.set(p.id as string, p as { id: string; name: string; avatar_url: string | null });
-  }
-
-  return rows.map((row) => {
-    const author = profileMap.get(row.author_id);
-    const replyAuthor = row.reply_to ? profileMap.get(row.reply_to.author_id) : undefined;
+  return rows.map((r) => {
+    const author = profileMap.get(r.author_id);
+    const reply = r.reply_to_id ? replyMap.get(r.reply_to_id) : undefined;
+    const replyAuthor = reply ? profileMap.get(reply.author_id) : undefined;
     return {
-      id: row.id, threadId: row.thread_id, authorId: row.author_id,
+      id: r.id, threadId: r.thread_id, authorId: r.author_id,
       authorName: author?.name ?? 'Usuario', authorAvatarUrl: author?.avatar_url ?? undefined,
-      body: row.body, sentAt: row.sent_at,
-      voiceUrl: row.voice_url ?? undefined, voiceDurationSec: row.voice_duration_sec ?? undefined,
-      replyTo: row.reply_to?.id
-        ? { id: row.reply_to.id, authorName: replyAuthor?.name ?? 'Usuario', body: row.reply_to.body, voiceUrl: row.reply_to.voice_url ?? undefined }
+      body: r.body, sentAt: r.sent_at,
+      voiceUrl: r.voice_url ?? undefined, voiceDurationSec: r.voice_duration_sec ?? undefined,
+      replyTo: reply
+        ? { id: reply.id, authorName: replyAuthor?.name ?? 'Usuario', body: reply.body, voiceUrl: reply.voice_url ?? undefined }
         : undefined,
     };
   });

@@ -59,12 +59,18 @@ import {
   labelModality,
   labelPayment,
   labelPosition,
-  labelSkill,
 } from '@/lib/format';
-import type { MatchParticipant, Match } from '@/types/domain';
+import type { MatchParticipant, Match, SkillLevel } from '@/types/domain';
 import { radius, spacing } from '@/theme';
 import type { ColorPalette } from '@/theme/palettes';
 import type { Sport } from '@/types/domain';
+
+const LEVEL_COLOR: Record<SkillLevel, string> = {
+  1: '#FF3B30', 2: '#FF6B00', 3: '#FF9500', 4: '#ADDE2F', 5: '#7BFF00',
+};
+const LEVEL_LABEL: Record<SkillLevel, string> = {
+  1: 'Principiante', 2: 'Básico', 3: 'Intermedio', 4: 'Avanzado', 5: 'Elite',
+};
 
 const SPORT_EMOJI: Record<Sport, string> = {
   futbol: '⚽',
@@ -271,9 +277,14 @@ export default function MatchDetailScreen() {
             label="Nivel requerido"
             trailing={
               <View style={s.levelRow}>
-                <Stars level={match.skillLevel} size={13} />
-                <Text variant="small" color="textSecondary">
-                  {labelSkill(match.skillLevel)}
+                <View style={[s.levelDotSmall, {
+                  backgroundColor: LEVEL_COLOR[match.skillLevel],
+                  borderColor: LEVEL_COLOR[match.skillLevel],
+                }]}>
+                  <Text style={{ fontSize: 11, fontWeight: '700', color: '#000' }}>{match.skillLevel}</Text>
+                </View>
+                <Text variant="small" style={{ color: LEVEL_COLOR[match.skillLevel] }}>
+                  {LEVEL_LABEL[match.skillLevel]}
                 </Text>
               </View>
             }
@@ -1078,6 +1089,14 @@ function makeStyles(c: ColorPalette) {
     priceTag: { alignItems: 'flex-end', paddingTop: spacing.xs },
     // Level
     levelRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
+    levelDotSmall: {
+      width: 22,
+      height: 22,
+      borderRadius: 6,
+      borderWidth: 1.5,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
     // Chips
     chips: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
     // Payment

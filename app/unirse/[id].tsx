@@ -5,8 +5,6 @@ import {
   CalendarBlank,
   Check,
   CheckCircle,
-  Coins,
-  CurrencyDollar,
   DeviceMobile,
   Eye,
   House,
@@ -14,6 +12,7 @@ import {
   Money,
   X,
 } from 'phosphor-react-native';
+import Svg, { Path } from 'react-native-svg';
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { ActivityIndicator, ScrollView, StyleSheet, View } from 'react-native';
 import Animated, {
@@ -26,6 +25,7 @@ import Animated, {
   withSpring,
   withTiming,
 } from 'react-native-reanimated';
+
 
 import { Avatar } from '@/components/ui/Avatar';
 import { Button } from '@/components/ui/Button';
@@ -61,12 +61,35 @@ const SPORT_EMOJIS: Record<Sport, string> = {
   basket: '🏀',
 };
 
+// Official Simple Icons paths (MIT) — viewBox 0 0 24 24
+const SI_ZELLE_PATH =
+  'M13.559 24h-2.841a.483.483 0 0 1-.483-.483v-2.765H5.638a.667.667 0 0 1-.666-.666v-2.234a.67.67 0 0 1 .142-.412l8.139-10.382h-7.25a.667.667 0 0 1-.667-.667V3.914c0-.367.299-.666.666-.666h4.23V.483c0-.266.217-.483.483-.483h2.841c.266 0 .483.217.483.483v2.765h4.323c.367 0 .666.299.666.666v2.137a.67.67 0 0 1-.141.41l-8.19 10.481h7.665c.367 0 .666.299.666.666v2.477a.667.667 0 0 1-.666.667h-4.32v2.765a.483.483 0 0 1-.483.483Z';
+
+const SI_BINANCE_PATH =
+  'M16.624 13.9202l2.7175 2.7154-7.353 7.353-7.353-7.352 2.7175-2.7164 4.6355 4.6595 4.6356-4.6595zm4.6366-4.6366L24 12l-2.7154 2.7164L18.5682 12l2.6924-2.7164zm-9.272.001l2.7163 2.6914-2.7164 2.7174v-.001L9.2721 12l2.7164-2.7154zm-9.2722-.001L5.4088 12l-2.6914 2.6924L0 12l2.7164-2.7164zM11.9885.0115l7.353 7.329-2.7174 2.7154-4.6356-4.6356-4.6355 4.6595-2.7174-2.7154 7.353-7.353z';
+
+function ZelleLogo() {
+  return (
+    <Svg width={18} height={18} viewBox="0 0 24 24">
+      <Path d={SI_ZELLE_PATH} fill="white" />
+    </Svg>
+  );
+}
+
+function BinanceLogo() {
+  return (
+    <Svg width={18} height={18} viewBox="0 0 24 24">
+      <Path d={SI_BINANCE_PATH} fill="white" />
+    </Svg>
+  );
+}
+
 const PAYMENT_ICON: Record<PaymentMethod, { icon: ReactNode; color: string }> = {
-  pagoMovil: { icon: <DeviceMobile size={18} color="#fff" weight="fill" />, color: '#3B82F6' },
-  transferencia: { icon: <Bank size={18} color="#fff" weight="fill" />, color: '#22C55E' },
-  zelle: { icon: <CurrencyDollar size={18} color="#fff" weight="fill" />, color: '#7C3AED' },
-  usdt: { icon: <Coins size={18} color="#fff" weight="fill" />, color: '#F59E0B' },
-  efectivo: { icon: <Money size={18} color="#fff" weight="fill" />, color: '#6B7280' },
+  pagoMovil:     { icon: <DeviceMobile size={18} color="#fff" weight="fill" />, color: '#0047AB' },
+  transferencia: { icon: <Bank size={18} color="#fff" weight="fill" />,         color: '#1565C0' },
+  zelle:         { icon: <ZelleLogo />,                                          color: '#6D1ED4' },
+  usdt:          { icon: <BinanceLogo />,                                        color: '#F0B90B' },
+  efectivo:      { icon: <Money size={18} color="#fff" weight="fill" />,        color: '#2E7D32' },
 };
 
 const TOTAL_FLOW_STEPS = 3;
@@ -397,7 +420,7 @@ function ConfirmStep({
 // Step 2 — Método de pago
 // ---------------------------------------------------------------------------
 
-function AnimatedPayRow({
+function PayRow({
   m,
   isSelected,
   s,
@@ -409,38 +432,22 @@ function AnimatedPayRow({
   onSelect: (m: PaymentMethod) => void;
 }) {
   const meta = PAYMENT_ICON[m];
-  const scale = useSharedValue(1);
-  const wasSelected = useRef(false);
-  const rowStyle = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
-
-  useEffect(() => {
-    if (isSelected && !wasSelected.current) {
-      scale.value = withSequence(
-        withSpring(1.025, { damping: 10, stiffness: 500 }),
-        withSpring(1, { damping: 14 }),
-      );
-    }
-    wasSelected.current = isSelected;
-  }, [isSelected, scale]);
-
   return (
-    <Animated.View style={rowStyle}>
-      <PressableScale
-        style={[s.payRow, isSelected ? s.payRowActive : null]}
-        scaleTo={0.98}
-        onPress={() => onSelect(m)}
-      >
-        <View style={[s.payIcon, { backgroundColor: meta.color }]}>
-          {meta.icon}
-        </View>
-        <Text variant="body" color="textPrimary" style={{ flex: 1 }}>
-          {labelPayment(m)}
-        </Text>
-        <View style={[s.radio, isSelected ? s.radioOn : null]}>
-          {isSelected ? <View style={s.radioDot} /> : null}
-        </View>
-      </PressableScale>
-    </Animated.View>
+    <PressableScale
+      style={[s.payRow, isSelected ? s.payRowActive : null]}
+      scaleTo={0.98}
+      onPress={() => onSelect(m)}
+    >
+      <View style={[s.payIcon, { backgroundColor: meta.color }]}>
+        {meta.icon}
+      </View>
+      <Text variant="body" color="textPrimary" style={{ flex: 1 }}>
+        {labelPayment(m)}
+      </Text>
+      <View style={[s.radio, isSelected ? s.radioOn : null]}>
+        {isSelected ? <View style={s.radioDot} /> : null}
+      </View>
+    </PressableScale>
   );
 }
 
@@ -467,7 +474,7 @@ function PaymentStep({
       <Card padded={false}>
         {methods.map((m, i) => (
           <View key={m}>
-            <AnimatedPayRow m={m} isSelected={selected === m} s={s} onSelect={onSelect} />
+            <PayRow m={m} isSelected={selected === m} s={s} onSelect={onSelect} />
             {i < methods.length - 1 ? <View style={s.rowDivider} /> : null}
           </View>
         ))}

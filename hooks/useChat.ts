@@ -135,6 +135,7 @@ export function useChat(matchId: string | undefined) {
           const authorInfo = participantsRef.current.get(authorId);
 
           const addMsg = (name: string, avatarUrl?: string) => {
+            const replyToId = (row.reply_to_id as string | null | undefined) ?? undefined;
             const newMsg: ChatMessageData = {
               id: row.id as string,
               threadId: row.thread_id as string,
@@ -148,14 +149,26 @@ export function useChat(matchId: string | undefined) {
             };
             setMessages((prev) => {
               if (prev.some((m) => m.id === newMsg.id)) return prev;
+              // Resolve replyTo: prefer optimistic's replyTo (sender), else look up in loaded messages
+              const resolveReply = (optReplyTo?: ChatMessageData['replyTo']): ChatMessageData['replyTo'] => {
+                if (optReplyTo) return optReplyTo;
+                if (!replyToId) return undefined;
+                const replied = prev.find((m) => m.id === replyToId);
+                if (!replied) return undefined;
+                return { id: replied.id, authorName: replied.authorName, body: replied.body, voiceUrl: replied.voiceUrl };
+              };
               if (authorId === userId) {
                 let lastOptIdx = -1;
                 for (let i = prev.length - 1; i >= 0; i--) {
                   if (prev[i].id.startsWith('opt_') && prev[i].body === newMsg.body) { lastOptIdx = i; break; }
                 }
-                if (lastOptIdx !== -1) { const next = [...prev]; next[lastOptIdx] = newMsg; return next; }
+                if (lastOptIdx !== -1) {
+                  const next = [...prev];
+                  next[lastOptIdx] = { ...newMsg, replyTo: resolveReply(prev[lastOptIdx].replyTo) };
+                  return next;
+                }
               }
-              return [...prev, newMsg];
+              return [...prev, { ...newMsg, replyTo: resolveReply() }];
             });
           };
 
@@ -265,20 +278,26 @@ export function useChat(matchId: string | undefined) {
     const optimisticId = `opt_${Date.now()}`;
     const me = participantsRef.current.get(userId);
 
-    setMessages((prev) => [
-      ...prev,
-      {
-        id: optimisticId,
-        threadId,
-        authorId: userId,
-        authorName: me?.name ?? 'Tú',
-        authorAvatarUrl: me?.avatarUrl,
-        body: trimmed || '[Nota de voz]',
-        voiceUrl: opts?.voiceLocalUri,
-        voiceDurationSec: opts?.voiceDurationSec,
-        sentAt: new Date().toISOString(),
-      },
-    ]);
+    setMessages((prev) => {
+      const replyMsg = opts?.replyToId ? prev.find((m) => m.id === opts.replyToId) : undefined;
+      return [
+        ...prev,
+        {
+          id: optimisticId,
+          threadId,
+          authorId: userId,
+          authorName: me?.name ?? 'Tú',
+          authorAvatarUrl: me?.avatarUrl,
+          body: trimmed || '[Nota de voz]',
+          voiceUrl: opts?.voiceLocalUri,
+          voiceDurationSec: opts?.voiceDurationSec,
+          sentAt: new Date().toISOString(),
+          replyTo: replyMsg
+            ? { id: replyMsg.id, authorName: replyMsg.authorName, body: replyMsg.body, voiceUrl: replyMsg.voiceUrl }
+            : undefined,
+        },
+      ];
+    });
 
     // Upload failure must not remove the optimistic — fall back to text-only send
     let uploadedVoiceUrl: string | undefined;
@@ -428,6 +447,7 @@ export function usePrivateChat(otherId: string | undefined) {
           const authorAvatarUrl = isMe ? undefined : otherUserRef.current?.avatarUrl;
 
           const addMsg = (name: string, avatar?: string) => {
+            const replyToId = (row.reply_to_id as string | null | undefined) ?? undefined;
             const newMsg: ChatMessageData = {
               id: row.id as string, threadId: row.thread_id as string, authorId,
               authorName: name, authorAvatarUrl: avatar, body: row.body as string, sentAt: row.sent_at as string,
@@ -436,14 +456,21 @@ export function usePrivateChat(otherId: string | undefined) {
             };
             setMessages((prev) => {
               if (prev.some((m) => m.id === newMsg.id)) return prev;
+              const resolveReply = (optReplyTo?: ChatMessageData['replyTo']): ChatMessageData['replyTo'] => {
+                if (optReplyTo) return optReplyTo;
+                if (!replyToId) return undefined;
+                const replied = prev.find((m) => m.id === replyToId);
+                if (!replied) return undefined;
+                return { id: replied.id, authorName: replied.authorName, body: replied.body, voiceUrl: replied.voiceUrl };
+              };
               if (isMe) {
                 let idx = -1;
                 for (let i = prev.length - 1; i >= 0; i--) {
                   if (prev[i].id.startsWith('opt_') && prev[i].body === newMsg.body) { idx = i; break; }
                 }
-                if (idx !== -1) { const next = [...prev]; next[idx] = newMsg; return next; }
+                if (idx !== -1) { const next = [...prev]; next[idx] = { ...newMsg, replyTo: resolveReply(prev[idx].replyTo) }; return next; }
               }
-              return [...prev, newMsg];
+              return [...prev, { ...newMsg, replyTo: resolveReply() }];
             });
           };
 
@@ -542,14 +569,20 @@ export function usePrivateChat(otherId: string | undefined) {
     const trimmed = body.trim();
     if (!trimmed && !opts?.voiceLocalUri) return;
     const optId = `opt_${Date.now()}`;
-    setMessages((prev) => [...prev, {
-      id: optId, threadId: threadId!, authorId: userId,
-      authorName: user?.name ?? 'Tú',
-      body: trimmed || '[Nota de voz]',
-      voiceUrl: opts?.voiceLocalUri,
-      voiceDurationSec: opts?.voiceDurationSec,
-      sentAt: new Date().toISOString(),
-    }]);
+    setMessages((prev) => {
+      const replyMsg = opts?.replyToId ? prev.find((m) => m.id === opts.replyToId) : undefined;
+      return [...prev, {
+        id: optId, threadId: threadId!, authorId: userId,
+        authorName: user?.name ?? 'Tú',
+        body: trimmed || '[Nota de voz]',
+        voiceUrl: opts?.voiceLocalUri,
+        voiceDurationSec: opts?.voiceDurationSec,
+        sentAt: new Date().toISOString(),
+        replyTo: replyMsg
+          ? { id: replyMsg.id, authorName: replyMsg.authorName, body: replyMsg.body, voiceUrl: replyMsg.voiceUrl }
+          : undefined,
+      }];
+    });
     let uploadedVoiceUrl: string | undefined;
     if (opts?.voiceLocalUri) {
       try { uploadedVoiceUrl = await uploadVoiceMessage(opts.voiceLocalUri, userId); } catch (e) { console.warn('[voice] upload failed', e); }

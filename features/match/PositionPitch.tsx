@@ -23,6 +23,7 @@ interface Props {
   modality?: Modality;
   selectedPositions?: Position[];
   onSetPositions?: (positions: Position[]) => void;
+  accentColor?: string;
 }
 
 export function PositionPitch({
@@ -30,9 +31,11 @@ export function PositionPitch({
   modality,
   selectedPositions = [],
   onSetPositions,
+  accentColor,
 }: Props) {
   const c = useColors();
   const s = useMemo(() => makeStyles(c), [c]);
+  const accent = accentColor ?? c.primary;
   if (sport === 'basket') {
     return (
       <BasketCourt
@@ -41,6 +44,7 @@ export function PositionPitch({
         onSetPositions={onSetPositions}
         c={c}
         s={s}
+        accent={accent}
       />
     );
   }
@@ -51,6 +55,7 @@ export function PositionPitch({
       onSetPositions={onSetPositions}
       c={c}
       s={s}
+      accent={accent}
     />
   );
 }
@@ -65,12 +70,14 @@ function FootballField({
   onSetPositions,
   c,
   s,
+  accent,
 }: {
   modality?: Modality;
   selectedPositions: FootballPosition[];
   onSetPositions?: (positions: Position[]) => void;
   c: ColorPalette;
   s: ReturnType<typeof makeStyles>;
+  accent: string;
 }) {
   const spots = FOOTBALL_LAYOUTS[modality ?? 'futbol7'] ?? FOOTBALL_LAYOUTS.futbol7!;
 
@@ -94,6 +101,7 @@ function FootballField({
               isSelected={isSelected}
               c={c}
               s={s}
+              accent={accent}
               onPress={
                 onSetPositions
                   ? () => {
@@ -124,12 +132,14 @@ function BasketCourt({
   onSetPositions,
   c,
   s,
+  accent,
 }: {
   modality?: Modality;
   selectedPositions: BasketPosition[];
   onSetPositions?: (positions: Position[]) => void;
   c: ColorPalette;
   s: ReturnType<typeof makeStyles>;
+  accent: string;
 }) {
   const spots = BASKET_LAYOUTS[modality ?? 'basket5v5'] ?? BASKET_LAYOUTS.basket5v5!;
 
@@ -157,6 +167,7 @@ function BasketCourt({
               isSelected={isSelected}
               c={c}
               s={s}
+              accent={accent}
               onPress={
                 onSetPositions
                   ? () => {
@@ -188,6 +199,7 @@ function Spot({
   onPress,
   c,
   s,
+  accent,
 }: {
   x: number;
   y: number;
@@ -195,14 +207,15 @@ function Spot({
   onPress?: () => void;
   c: ColorPalette;
   s: ReturnType<typeof makeStyles>;
+  accent: string;
 }) {
   const dotStyle = [
     s.spot,
     {
       left: `${x}%` as const,
       top: `${y}%` as const,
-      backgroundColor: isSelected ? c.primary : `${c.primary}22`,
-      borderColor: isSelected ? c.primary : c.textSecondary,
+      backgroundColor: isSelected ? accent : `${accent}22`,
+      borderColor: isSelected ? accent : c.textSecondary,
     },
   ];
   if (onPress) {

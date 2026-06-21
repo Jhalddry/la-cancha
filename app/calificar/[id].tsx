@@ -45,6 +45,14 @@ const RATING_LABEL: Record<number, string> = {
   5: '¡Excelente!',
 };
 
+const RATING_COLOR: Record<number, string> = {
+  1: '#FF3B30',
+  2: '#FF6B00',
+  3: '#FF9500',
+  4: '#ADDE2F',
+  5: '#7BFF00',
+};
+
 const POSITIVE_TAGS = ['Puntual', 'Fair Play', 'Buena actitud', 'Organizado', 'Nivel acorde', 'Buen compañero'];
 const NEGATIVE_TAGS = ['Tóxico', 'Abandonó', 'Impuntual', 'Nivel no acorde'];
 
@@ -218,35 +226,14 @@ function StarItem({
   borderColor: string;
   onRate: (r: number) => void;
 }) {
-  const scale = useSharedValue(1);
-  const style = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
   const active = n <= rating;
-  const prevActive = useRef(active);
-
-  useEffect(() => {
-    if (prevActive.current && !active) {
-      scale.value = withSpring(1, { damping: 20, stiffness: 200 });
-    }
-    prevActive.current = active;
-  }, [active, scale]);
-
-  const handlePress = () => {
-    onRate(n);
-    scale.value = withSequence(
-      withSpring(1.22, { damping: 10, stiffness: 280 }),
-      withSpring(1, { damping: 20, stiffness: 200 }),
-    );
-  };
-
   return (
-    <Pressable onPress={handlePress}>
-      <Animated.View style={style}>
-        <Star
-          size={48}
-          color={active ? '#FFD93D' : borderColor}
-          weight={active ? 'fill' : 'regular'}
-        />
-      </Animated.View>
+    <Pressable onPress={() => onRate(n)}>
+      <Star
+        size={48}
+        color={active ? RATING_COLOR[rating] : borderColor}
+        weight={active ? 'fill' : 'regular'}
+      />
     </Pressable>
   );
 }
@@ -288,7 +275,7 @@ function RatingStep({
       </View>
 
       {rating > 0 ? (
-        <Text variant="h3" color="primary" style={{ textAlign: 'center' }}>
+        <Text variant="h3" style={{ textAlign: 'center', color: RATING_COLOR[rating] }}>
           {RATING_LABEL[rating]}
         </Text>
       ) : (

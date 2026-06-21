@@ -1,5 +1,7 @@
 import type { Player, Position, SkillLevel, Sport } from '@/types/domain';
 
+type SportLevelsRaw = Partial<Record<string, number>>;
+
 export function rowToPlayer(row: Record<string, unknown>): Player {
   return {
     id: row.id as string,
@@ -20,5 +22,10 @@ export function rowToPlayer(row: Record<string, unknown>): Player {
     badges: (row.badges as string[]) ?? [],
     city: (row.city as string | null) ?? undefined,
     onboarded: (row.onboarded as boolean) ?? false,
+    sportLevels: row.sport_levels
+      ? Object.fromEntries(
+          Object.entries(row.sport_levels as SportLevelsRaw).map(([k, v]) => [k as Sport, v as SkillLevel]),
+        ) as Partial<Record<Sport, SkillLevel>>
+      : undefined,
   };
 }

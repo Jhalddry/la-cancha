@@ -248,6 +248,17 @@ export default function ConfirmacionScreen() {
   const s = useMemo(() => makeStyles(c), [c]);
   const { width: screenWidth } = useWindowDimensions();
 
+  // 3D flip reveal when match data arrives
+  const cardFlip = useSharedValue(90);
+  useEffect(() => {
+    if (match) {
+      cardFlip.value = withSpring(0, { damping: 14, stiffness: 120, mass: 0.9 });
+    }
+  }, [match]);
+  const cardFlipStyle = useAnimatedStyle(() => ({
+    transform: [{ perspective: 900 }, { rotateY: `${cardFlip.value}deg` }],
+  }));
+
   return (
     <Screen>
       {/* 3D Confetti overlay */}
@@ -270,24 +281,26 @@ export default function ConfirmacionScreen() {
         {isLoading ? (
           <ActivityIndicator color={c.primary} style={{ marginTop: spacing.xl }} />
         ) : match ? (
-          <Card style={s.summary}>
-            <View style={s.row}>
-              <Text style={s.emoji}>{SPORT_EMOJI[match.sport]}</Text>
-              <Text variant="bodySemibold">
-                {labelSport(match.sport)} · {labelModality(match.modality)}
+          <Animated.View style={[{ width: '100%' }, cardFlipStyle]}>
+            <Card style={s.summary}>
+              <View style={s.row}>
+                <Text style={s.emoji}>{SPORT_EMOJI[match.sport]}</Text>
+                <Text variant="bodySemibold">
+                  {labelSport(match.sport)} · {labelModality(match.modality)}
+                </Text>
+                <Text variant="small" color="textSecondary" style={{ textTransform: 'capitalize' }}>
+                  {match.type}
+                </Text>
+              </View>
+              <View style={s.divider} />
+              <Text variant="small" color="textSecondary">
+                {match.location.name} · {formatMatchTime(match.startsAt)}
               </Text>
-              <Text variant="small" color="textSecondary" style={{ textTransform: 'capitalize' }}>
-                {match.type}
+              <Text variant="bodySemibold" color="primary">
+                {formatPrice(match.pricePerHour, match.currency)} · {match.durationMin} min
               </Text>
-            </View>
-            <View style={s.divider} />
-            <Text variant="small" color="textSecondary">
-              {match.location.name} · {formatMatchTime(match.startsAt)}
-            </Text>
-            <Text variant="bodySemibold" color="primary">
-              {formatPrice(match.pricePerHour, match.currency)} · {match.durationMin} min
-            </Text>
-          </Card>
+            </Card>
+          </Animated.View>
         ) : null}
       </View>
 

@@ -30,6 +30,7 @@ import { PressableScale } from '@/components/ui/PressableScale';
 import { Screen } from '@/components/ui/Screen';
 import { SegmentedTabs } from '@/components/ui/SegmentedTabs';
 import { Text } from '@/components/ui/Text';
+import { SportOrbs } from '@/components/feature/SportOrbs';
 import { MatchCard } from '@/features/match/MatchCard';
 import { useColors } from '@/hooks/useColors';
 import { useMyMatches, useStartMatch, useEndMatch } from '@/hooks/useMatches';
@@ -257,7 +258,7 @@ export default function MisPartidasScreen() {
       ) : showEmpty ? (
         <ScrollView
           key={tab}
-          contentContainerStyle={{ flex: 1 }}
+          contentContainerStyle={s.emptyScroll}
           alwaysBounceVertical={false}
           refreshControl={
             <RefreshControl
@@ -268,22 +269,21 @@ export default function MisPartidasScreen() {
             />
           }
         >
-          <EmptyState
-            icon={<RNText style={{ fontSize: 36, lineHeight: 40, includeFontPadding: false } as object}>⚽</RNText>}
-            title={emptyTitle}
-            description={emptyDesc}
-            action={
-              tab === 'activas' ? (
-                <Button
-                  label="Crear partida"
-                  onPress={() => router.push('/crear')}
-                  fullWidth={false}
-                  leading={<Plus size={18} color={c.bg} weight="bold" />}
-                  style={{ marginTop: spacing.md }}
-                />
-              ) : undefined
-            }
-          />
+          <View style={s.emptyWrap}>
+            <SportOrbs size={240} />
+            <View style={s.emptyText}>
+              <Text variant="h3" color="textPrimary" style={{ textAlign: 'center' }}>{emptyTitle}</Text>
+              <Text variant="body" color="textSecondary" style={{ textAlign: 'center' }}>{emptyDesc}</Text>
+            </View>
+            {tab === 'activas' ? (
+              <Button
+                label="Crear partida"
+                onPress={() => router.push('/crear')}
+                fullWidth={false}
+                leading={<Plus size={18} color={c.bg} weight="bold" />}
+              />
+            ) : null}
+          </View>
         </ScrollView>
       ) : (
         <ScrollView
@@ -491,6 +491,9 @@ export default function MisPartidasScreen() {
 
 function makeStyles(c: ColorPalette) {
   return StyleSheet.create({
+    emptyScroll: { flex: 1 },
+    emptyWrap: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: spacing.lg, paddingHorizontal: spacing.xxl, paddingVertical: spacing.xxxl },
+    emptyText: { alignItems: 'center', gap: spacing.xs },
     head: { paddingHorizontal: spacing.lg, paddingTop: spacing.md, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
     historialBtn: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, opacity: 0.7 },
     tabsWrap: { paddingHorizontal: spacing.lg, paddingVertical: spacing.md },

@@ -10,7 +10,7 @@ import {
   WarningCircle,
 } from 'phosphor-react-native';
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { ActivityIndicator, Alert, InputAccessoryView, Keyboard, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Alert, InputAccessoryView, Keyboard, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text as RNText, View } from 'react-native';
 import Animated, { SlideInLeft, SlideInRight } from 'react-native-reanimated';
 
 import {
@@ -25,7 +25,6 @@ import { Card } from '@/components/ui/Card';
 import { Chip } from '@/components/ui/Chip';
 import { PressableScale } from '@/components/ui/PressableScale';
 import { Screen } from '@/components/ui/Screen';
-import { Stars } from '@/components/ui/Stars';
 import { StepperBar } from '@/components/ui/StepperBar';
 import { Text } from '@/components/ui/Text';
 import { TextInput } from '@/components/ui/TextInput';
@@ -66,12 +65,12 @@ import type {
 
 const TOTAL_STEPS = 5;
 
-const SPORTS: { value: Sport; emoji: string }[] = [
-  { value: 'futbol', emoji: '⚽' },
-  { value: 'tenis', emoji: '🎾' },
-  { value: 'padel', emoji: '🏓' },
-  { value: 'beachTennis', emoji: '🏖️' },
-  { value: 'basket', emoji: '🏀' },
+const SPORTS: { value: Sport; emoji: string; color: string }[] = [
+  { value: 'futbol',      emoji: '⚽', color: '#4ade80' },
+  { value: 'tenis',       emoji: '🎾', color: '#38bdf8' },
+  { value: 'padel',       emoji: '🏓', color: '#a78bfa' },
+  { value: 'beachTennis', emoji: '🏖️', color: '#fbbf24' },
+  { value: 'basket',      emoji: '🏀', color: '#fb923c' },
 ];
 
 const PAYMENT_METHODS: PaymentMethod[] = [
@@ -202,6 +201,13 @@ function formatTimeLabel(d: Date): string {
 // ---------------------------------------------------------------------------
 // Main wizard
 // ---------------------------------------------------------------------------
+
+const LEVEL_COLOR: Record<number, string> = {
+  1: '#FF3B30', 2: '#FF6B00', 3: '#FF9500', 4: '#ADDE2F', 5: '#7BFF00',
+};
+const LEVEL_LABEL: Record<number, string> = {
+  1: 'Principiante', 2: 'Básico', 3: 'Intermedio', 4: 'Avanzado', 5: 'Elite',
+};
 
 export default function CrearWizard() {
   const router = useRouter();
@@ -430,8 +436,8 @@ function Step1Sport({ draft, setKey, errors }: StepProps) {
             ]}
             scaleTo={0.98}
           >
-            <View style={s.sportEmojiWrap}>
-              <Text style={staticStyles.sportEmoji}>{sport.emoji}</Text>
+            <View style={[s.sportEmojiWrap, { backgroundColor: sport.color + '28', borderColor: sport.color + '80' }]}>
+              <RNText style={{ fontSize: 22, lineHeight: 26, textAlign: 'center', includeFontPadding: false }}>{sport.emoji}</RNText>
             </View>
             <View style={{ flex: 1 }}>
               <Text variant="bodySemibold" color="textPrimary">
@@ -625,25 +631,31 @@ function Step3TypeLevelPositions({
         <View style={staticStyles.levelStars}>
           {levels.map((lvl) => {
             const active = draft.skillLevel === lvl;
+            const color = LEVEL_COLOR[lvl];
             return (
               <PressableScale
                 key={lvl}
                 onPress={() => setKey('skillLevel', lvl)}
+                scaleTo={0.88}
                 style={[
-                  s.levelBtn,
-                  active ? s.levelBtnActive : null,
+                  s.levelDot,
+                  {
+                    backgroundColor: active ? color : `${color}20`,
+                    borderColor: active ? color : `${color}50`,
+                  },
                 ]}
-                scaleTo={0.94}
               >
-                <Stars level={lvl} size={10} />
+                <Text style={{ fontSize: 15, fontWeight: '600', color: active ? '#000' : color }}>
+                  {lvl}
+                </Text>
               </PressableScale>
             );
           })}
         </View>
         {draft.skillLevel ? (
           <View style={staticStyles.levelLabel}>
-            <Text variant="bodySemibold" color="primary">
-              {labelSkill(draft.skillLevel)}
+            <Text style={{ fontWeight: '600', color: LEVEL_COLOR[draft.skillLevel], textAlign: 'center' }}>
+              {LEVEL_LABEL[draft.skillLevel]}
             </Text>
           </View>
         ) : null}
@@ -1283,20 +1295,13 @@ function makeStyles(c: ColorPalette) {
       alignItems: 'center',
       justifyContent: 'center',
     },
-    levelBtn: {
+    levelDot: {
       flex: 1,
-      paddingVertical: spacing.md,
-      backgroundColor: c.surface,
-      borderRadius: radius.md,
-      borderWidth: 1,
-      borderColor: c.border,
+      aspectRatio: 1,
+      borderRadius: radius.lg,
+      borderWidth: 1.5,
       alignItems: 'center',
-      minHeight: 44,
       justifyContent: 'center',
-    },
-    levelBtnActive: {
-      backgroundColor: c.primarySoft,
-      borderColor: c.primary,
     },
     counterRow: {
       flexDirection: 'row',

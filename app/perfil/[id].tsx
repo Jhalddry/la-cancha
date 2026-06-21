@@ -44,6 +44,7 @@ import { Avatar } from '@/components/ui/Avatar';
 import { BackHeader } from '@/components/ui/BackHeader';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
+import { Divider } from '@/components/ui/Divider';
 import { Chip } from '@/components/ui/Chip';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { PressableScale } from '@/components/ui/PressableScale';
@@ -55,6 +56,7 @@ import { MatchTypeBadge } from '@/features/match/MatchTypeBadge';
 import { PlayerShareCard } from '@/features/match/PlayerShareCard';
 import { PlayerPositions } from '@/components/feature/PlayerPositions';
 import { useColors } from '@/hooks/useColors';
+import { darkPalette } from '@/theme/palettes';
 import { useInviteToMatch, useMatches, useMyMatches, usePlayerJoinedMatches, usePlayerOrganizedMatches } from '@/hooks/useMatches';
 import { useProfile, usePlayerRatings, useVerifyPlayer } from '@/hooks/useProfiles';
 import { formatMatchTime, labelModality, labelPosition, labelSport } from '@/lib/format';
@@ -133,12 +135,24 @@ const SPORT_EMOJIS: Record<Sport, string> = {
   basket: '🏀',
 };
 
+const SPORT_CONFIG: Record<Sport, { color: string; lightColor: string; emoji: string; label: string }> = {
+  futbol:      { color: '#4ade80', lightColor: '#15803d', emoji: '⚽', label: 'Fútbol' },
+  basket:      { color: '#fb923c', lightColor: '#c2410c', emoji: '🏀', label: 'Basket' },
+  tenis:       { color: '#38bdf8', lightColor: '#0369a1', emoji: '🎾', label: 'Tenis' },
+  padel:       { color: '#a78bfa', lightColor: '#6d28d9', emoji: '🏓', label: 'Pádel' },
+  beachTennis: { color: '#fbbf24', lightColor: '#b45309', emoji: '🏖️', label: 'Beach Tennis' },
+};
+
 const SKILL_LABEL: Record<number, string> = {
   1: 'Principiante',
   2: 'Básico',
   3: 'Intermedio',
   4: 'Avanzado',
-  5: 'Competitivo',
+  5: 'Elite',
+};
+
+const LEVEL_COLOR: Record<number, string> = {
+  1: '#FF3B30', 2: '#FF6B00', 3: '#FF9500', 4: '#ADDE2F', 5: '#7BFF00',
 };
 
 const REPORT_REASONS = [
@@ -156,6 +170,7 @@ export default function PlayerProfileScreen() {
   const userId = useSession((st) => st.user?.id);
   const currentUser = useSession((st) => st.user);
   const c = useColors();
+  const isDark = c.bg === darkPalette.bg;
   const s = useMemo(() => makeStyles(c), [c]);
   const { mutate: inviteToMatchMutate } = useInviteToMatch();
   const { mutate: verifyPlayer } = useVerifyPlayer();
@@ -216,23 +231,11 @@ export default function PlayerProfileScreen() {
   const [inviteOpen, setInviteOpen] = useState(false);
   const [invitedMatchId, setInvitedMatchId] = useState<string | null>(null);
   const [inviteConfirmOpen, setInviteConfirmOpen] = useState<{ matchId: string } | null>(null);
-  const [messageLoading, setMessageLoading] = useState(false);
-  const [noSharedMatch, setNoSharedMatch] = useState(false);
+  const [verifiedTooltipOpen, setVerifiedTooltipOpen] = useState(false);
 
-  const handleSendMessage = async () => {
-    if (!id || !userId) return;
-    setMessageLoading(true);
-    try {
-      const { fetchSharedMatchId } = await import('@/lib/chatApi');
-      const matchId = await fetchSharedMatchId(userId, id);
-      if (!matchId) {
-        setNoSharedMatch(true);
-      } else {
-        router.push(`/chat/${matchId}`);
-      }
-    } finally {
-      setMessageLoading(false);
-    }
+  const handleSendMessage = () => {
+    if (!id) return;
+    router.push(`/direct/${id}`);
   };
   const shareCardRef = useRef<View>(null);
 
@@ -263,6 +266,19 @@ export default function PlayerProfileScreen() {
   };
 
   const submitReport = () => {
+    if (!reportReason) return;
+    void (async () => {
+      const { submitReport: sendReport } = await import('@/lib/reportsApi');
+      await sendReport({
+        reporterId: userId!,
+        reporterName: currentUser?.name,
+        reportedId: id,
+        kind: 'player',
+        reason: reportReason,
+        detail: reportDetail,
+        contextId: undefined,
+      });
+    })();
     closeReport();
     setTimeout(() => setReportDoneOpen(true), 250);
   };
@@ -312,9 +328,9 @@ export default function PlayerProfileScreen() {
           <View style={{ position: 'relative' }}>
             <Avatar name={player.name} uri={player.avatarUrl} size={96} />
             {player.verified ? (
-              <View style={s.avatarVerifiedBadge}>
+              <PressableScale style={s.avatarVerifiedBadge} scaleTo={0.85} onPress={() => setVerifiedTooltipOpen(true)}>
                 <SealCheck size={22} color={VERIFIED_BLUE} weight="fill" />
-              </View>
+              </PressableScale>
             ) : null}
           </View>
 
@@ -329,15 +345,6 @@ export default function PlayerProfileScreen() {
             ) : null}
           </View>
 
-          {/* Badges row: skill (dots, not stars) + verified */}
-          <View style={s.heroMeta}>
-            <View style={s.skillBadge}>
-              <SkillDots level={player.skillLevel} c={c} />
-              <Text variant="caption" color="textSecondary">
-                Nivel · {SKILL_LABEL[player.skillLevel]}
-              </Text>
-            </View>
-          </View>
 
           {player.city ? (
             <View style={s.locationRow}>
@@ -365,7 +372,13 @@ export default function PlayerProfileScreen() {
           <View style={s.statDivider} />
           <StatBlock
             label="Asistencia"
-            value={computedAttendance != null ? `${computedAttendance}%` : '—'}
+            value={
+              computedAttendance != null
+                ? `${computedAttendance}%`
+                : player.attendancePct != null
+                  ? `${player.attendancePct}%`
+                  : '—'
+            }
           />
           <View style={s.statDivider} />
           <StatBlock
@@ -377,23 +390,46 @@ export default function PlayerProfileScreen() {
           />
         </View>
 
-        {/* Sports */}
+        {/* Sports + levels */}
         {player.sports.length > 0 ? (
           <View style={s.section}>
             <Text variant="caption" color="textSecondary" style={s.sectionLabel}>
-              Deportes favoritos
+              Deportes
             </Text>
-            <View style={s.sportsRow}>
-              {player.sports.map((sp) => (
-                <View key={sp} style={s.sportItem}>
-                  <View style={s.sportCircle}>
-                    <Text style={s.sportEmoji}>{SPORT_EMOJIS[sp]}</Text>
-                  </View>
-                  <Text variant="caption" color="textSecondary">
-                    {labelSport(sp)}
-                  </Text>
-                </View>
-              ))}
+            <View style={{ gap: spacing.sm }}>
+              {player.sports.map((sp) => {
+                const cfg = SPORT_CONFIG[sp];
+                const lvl = player.sportLevels?.[sp];
+                return (
+                  <LinearGradient
+                    key={sp}
+                    colors={isDark ? [`${cfg.color}22`, `${cfg.color}08`] : [`${cfg.color}44`, `${cfg.color}18`]}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 0 }}
+                    style={[s.sportCard, { borderColor: isDark ? c.border : `${cfg.color}66`, shadowColor: cfg.color }]}
+                  >
+                    <Text style={s.sportCardEmoji}>{cfg.emoji}</Text>
+                    <Text variant="bodyMedium" style={{ color: isDark ? cfg.color : cfg.lightColor, flex: 1 }}>{cfg.label}</Text>
+                    {lvl ? (
+                      <View style={{ alignItems: 'flex-end', gap: 4 }}>
+                        <View style={{ flexDirection: 'row', gap: 5 }}>
+                          {([1, 2, 3, 4, 5] as const).map((n) => (
+                            <View key={n} style={{
+                              width: 9, height: 9, borderRadius: 4.5,
+                              backgroundColor: n <= lvl
+                                ? LEVEL_COLOR[lvl]
+                                : `${LEVEL_COLOR[lvl]}${isDark ? '28' : '50'}`,
+                            }} />
+                          ))}
+                        </View>
+                        <Text style={{ fontSize: 11, fontWeight: '600', color: LEVEL_COLOR[lvl] }}>
+                          {SKILL_LABEL[lvl]}
+                        </Text>
+                      </View>
+                    ) : null}
+                  </LinearGradient>
+                );
+              })}
             </View>
           </View>
         ) : null}
@@ -529,10 +565,9 @@ export default function PlayerProfileScreen() {
       {id !== userId ? (
         <View style={s.footer}>
           <Button
-            label={messageLoading ? 'Buscando…' : 'Enviar mensaje'}
+            label="Enviar mensaje"
             variant="secondary"
             onPress={handleSendMessage}
-            disabled={messageLoading}
             leading={<ChatCircle size={18} color={c.textPrimary} weight="fill" />}
           />
           <Button
@@ -545,16 +580,16 @@ export default function PlayerProfileScreen() {
 
       {/* ── Sheets ── */}
 
-      <Sheet visible={noSharedMatch} onClose={() => setNoSharedMatch(false)}>
+      <Sheet visible={verifiedTooltipOpen} onClose={() => setVerifiedTooltipOpen(false)}>
         <View style={s.doneBody}>
-          <View style={[s.doneIcon, { backgroundColor: c.surface }]}>
-            <ChatCircle size={36} color={c.textTertiary} weight="regular" />
+          <View style={[s.doneIcon, { backgroundColor: `${VERIFIED_BLUE}18` }]}>
+            <SealCheck size={36} color={VERIFIED_BLUE} weight="fill" />
           </View>
-          <Text variant="h3" color="textPrimary">Sin partida compartida</Text>
+          <Text variant="h3" color="textPrimary">Jugador verificado</Text>
           <Text variant="body" color="textSecondary" style={{ textAlign: 'center' }}>
-            Solo puedes chatear con jugadores con quienes hayas compartido una partida.
+            Este jugador ha sido verificado por el equipo de La Cancha. Su identidad y comportamiento cumplen con los estándares de la comunidad.
           </Text>
-          <Button label="Entendido" onPress={() => setNoSharedMatch(false)} />
+          <Button label="Entendido" onPress={() => setVerifiedTooltipOpen(false)} />
         </View>
       </Sheet>
 
@@ -923,6 +958,8 @@ export default function PlayerProfileScreen() {
 }
 
 function ShimmerBadge({ label, delay = 0, onPress }: { label: string; c?: ColorPalette; delay?: number; onPress?: () => void }) {
+  const palette = useColors();
+  const isDark = palette.bg === darkPalette.bg;
   const meta = BADGE_META[label] ?? {
     color: '#7BFF00',
     icon: (n: number) => <Star size={n} color="#7BFF00" weight="fill" />,
@@ -947,14 +984,14 @@ function ShimmerBadge({ label, delay = 0, onPress }: { label: string; c?: ColorP
   return (
     <PressableScale onPress={onPress ?? (() => {})} scaleTo={0.93}>
       <LinearGradient
-        colors={[`${color}22`, `${color}50`, `${color}22`]}
+        colors={isDark ? [`${color}22`, `${color}50`, `${color}22`] : [`${color}44`, `${color}99`, `${color}44`]}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
-        style={[s.chip, { borderColor: `${color}80`, overflow: 'hidden' }]}
+        style={[s.chip, { borderColor: isDark ? `${color}80` : `${color}CC`, overflow: 'hidden' }]}
       >
         <Animated.View style={[StyleSheet.absoluteFill, shimmerStyle, { width: 80 }]} pointerEvents="none">
           <LinearGradient
-            colors={['transparent', `${color}60`, 'transparent']}
+            colors={['transparent', isDark ? `${color}60` : `${color}90`, 'transparent']}
             start={{ x: 0, y: 0.5 }}
             end={{ x: 1, y: 0.5 }}
             style={{ flex: 1 }}
@@ -1005,21 +1042,23 @@ function AnimatedNumber({ value }: { value: string }) {
   return display;
 }
 
-/** Skill level as filled/empty dots — visually distinct from star ratings */
-function SkillDots({ level, c }: { level: number; c: ColorPalette }) {
+function SkillDots({ level }: { level: number; c?: ColorPalette }) {
   return (
     <View style={{ flexDirection: 'row', gap: 4, alignItems: 'center' }}>
-      {[1, 2, 3, 4, 5].map((n) => (
-        <View
-          key={n}
-          style={{
-            width: 7,
-            height: 7,
-            borderRadius: 3.5,
-            backgroundColor: n <= level ? c.primary : c.border,
-          }}
-        />
-      ))}
+      {[1, 2, 3, 4, 5].map((n) => {
+        const color = LEVEL_COLOR[n] ?? '#7BFF00';
+        const active = n <= level;
+        return (
+          <View key={n} style={{
+            width: 20, height: 20, borderRadius: 5, borderWidth: 1.5,
+            backgroundColor: active ? color : `${color}20`,
+            borderColor: active ? color : `${color}50`,
+            alignItems: 'center', justifyContent: 'center',
+          }}>
+            <Text style={{ fontSize: 10, fontWeight: '700', color: active ? '#000' : color }}>{n}</Text>
+          </View>
+        );
+      })}
     </View>
   );
 }
@@ -1255,19 +1294,21 @@ function makeStyles(c: ColorPalette) {
       justifyContent: 'space-between',
       alignItems: 'center',
     },
-    sportsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.lg },
-    sportItem: { alignItems: 'center', gap: spacing.xs, width: 56 },
-    sportCircle: {
-      width: 52,
-      height: 52,
-      borderRadius: radius.full,
-      backgroundColor: c.surface,
-      borderWidth: 1,
-      borderColor: c.border,
+    sportCard: {
+      flexDirection: 'row',
       alignItems: 'center',
-      justifyContent: 'center',
+      borderRadius: radius.lg,
+      borderWidth: 1,
+      overflow: 'hidden',
+      paddingVertical: spacing.md,
+      paddingHorizontal: spacing.lg,
+      gap: spacing.md,
+      shadowOffset: { width: 0, height: 3 },
+      shadowOpacity: 0.2,
+      shadowRadius: 10,
+      elevation: 4,
     },
-    sportEmoji: { fontSize: 22, lineHeight: 28 },
+    sportCardEmoji: { fontSize: 22, lineHeight: 28 },
     chipsWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
     bioText: { lineHeight: 22 },
     badgesWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },

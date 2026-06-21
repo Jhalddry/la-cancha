@@ -1,7 +1,7 @@
 import * as Haptics from 'expo-haptics';
 import { Audio } from 'expo-av';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { ArrowBendUpLeft, Check, Checks, Microphone, PaperPlaneTilt, Pause, Play, Trash, X } from 'phosphor-react-native';
+import { ArrowBendUpLeft, Check, Checks, DotsThreeVertical, Flag, Microphone, PaperPlaneTilt, Pause, Play, Trash, X } from 'phosphor-react-native';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
@@ -9,6 +9,7 @@ import {
   Platform,
   ScrollView,
   StyleSheet,
+  TextInput as RNTextInput,
   View,
 } from 'react-native';
 import Animated, {
@@ -23,7 +24,9 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Avatar } from '@/components/ui/Avatar';
 import { BackHeader } from '@/components/ui/BackHeader';
+import { Button } from '@/components/ui/Button';
 import { ConfirmSheet } from '@/components/ui/ConfirmSheet';
+import { Sheet } from '@/components/ui/Sheet';
 import { TypingDots } from '@/components/ui/TypingDots';
 import { PressableScale } from '@/components/ui/PressableScale';
 import { Screen } from '@/components/ui/Screen';
@@ -35,7 +38,7 @@ import { useColors } from '@/hooks/useColors';
 import { queryClient } from '@/lib/queryClient';
 import { useSession } from '@/store/session';
 import { timeOnly } from '@/lib/time';
-import { radius, spacing } from '@/theme';
+import { fonts, radius, spacing } from '@/theme';
 import type { ColorPalette } from '@/theme/palettes';
 import type { ChatMessageData, PrivateThreadData } from '@/lib/chatApi';
 
@@ -124,11 +127,22 @@ function VoiceBubble({ url, durationSec, messageId, isMe, c }: { url: string; du
 
 function ReplyQuote({ replyTo, isMe, c }: { replyTo: ChatMessageData['replyTo']; isMe: boolean; c: ColorPalette }) {
   if (!replyTo?.id) return null;
-  const textColor = isMe ? c.bg : c.textPrimary;
+  const barColor = isMe ? 'rgba(0,0,0,0.6)' : c.primary;
+  const bgColor = isMe ? 'rgba(0,0,0,0.25)' : c.primarySoft;
+  const nameColor = isMe ? c.textOnPrimary : c.primary;
+  const bodyColor = isMe ? `${c.textOnPrimary}CC` : c.textSecondary;
   return (
-    <Text variant="caption" style={{ color: textColor, opacity: 0.6, marginBottom: spacing.xs }} numberOfLines={1}>
-      {replyTo.voiceUrl ? '🎤 Nota de voz' : replyTo.body}
-    </Text>
+    <View style={{ flexDirection: 'row', borderRadius: 8, overflow: 'hidden', marginBottom: spacing.xs, backgroundColor: bgColor, minWidth: 160 }}>
+      <View style={{ width: 3, backgroundColor: barColor }} />
+      <View style={{ flex: 1, paddingHorizontal: spacing.sm, paddingVertical: 6, gap: 2 }}>
+        <Text style={{ fontSize: 12, fontWeight: '700', color: nameColor, lineHeight: 16 }} numberOfLines={1}>
+          {replyTo.authorName}
+        </Text>
+        <Text style={{ fontSize: 12, color: bodyColor, lineHeight: 16 }} numberOfLines={1}>
+          {replyTo.voiceUrl ? '🎤 Nota de voz' : replyTo.body}
+        </Text>
+      </View>
+    </View>
   );
 }
 
@@ -234,11 +248,13 @@ function DirectBubble({
           ]}>
             <ReplyQuote replyTo={message.replyTo} isMe={isMe} c={c} />
             {message.voiceUrl ? (
-              <VoiceBubble url={message.voiceUrl} durationSec={message.voiceDurationSec} messageId={message.id} isMe={isMe} c={c} />
+              <View style={{ paddingRight: 64 }}>
+                <VoiceBubble url={message.voiceUrl} durationSec={message.voiceDurationSec} messageId={message.id} isMe={isMe} c={c} />
+              </View>
             ) : (
-              <Text variant="body" color={isMe ? 'surface' : 'textPrimary'}>{message.body}</Text>
+              <Text variant="body" color={isMe ? 'surface' : 'textPrimary'} style={{ paddingRight: 64 }}>{message.body}</Text>
             )}
-            <View style={[s.timeRow, isMe ? s.timeRight : s.timeLeft]}>
+            <View style={s.timeAbs}>
               <Text variant="caption" style={{ color: isMe ? c.bg : c.textTertiary, opacity: 0.65 }}>{timeOnly(message.sentAt)}</Text>
               {isMe && !isOptimistic ? (
                 othersReadAt && new Date(othersReadAt) >= new Date(message.sentAt)
@@ -279,6 +295,11 @@ export default function DirectChatScreen() {
   const [selectMode, setSelectMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [deleteConfirm, setDeleteConfirm] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [reportOpen, setReportOpen] = useState(false);
+  const [reportReason, setReportReason] = useState<string | null>(null);
+  const [reportDetail, setReportDetail] = useState('');
+  const [reportDoneOpen, setReportDoneOpen] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [recElapsed, setRecElapsed] = useState(0);
   const recRef = useRef<Audio.Recording | null>(null);
@@ -379,6 +400,32 @@ export default function DirectChatScreen() {
     try { if (rec) await rec.stopAndUnloadAsync(); } catch {}
   };
 
+  const closeReport = () => { setReportOpen(false); setReportReason(null); setReportDetail(''); };
+  const submitReport = () => {
+    if (!reportReason) return;
+    void (async () => {
+      const { submitReport: sendReport } = await import('@/lib/reportsApi');
+      await sendReport({
+        reporterId: userId!,
+        reportedId: otherId,
+        kind: 'chat',
+        reason: reportReason,
+        detail: reportDetail,
+        contextId: threadId ?? undefined,
+      });
+    })();
+    closeReport();
+    setTimeout(() => setReportDoneOpen(true), 250);
+  };
+
+  const REPORT_REASONS = [
+    'Comportamiento tóxico',
+    'Acoso o spam',
+    'Lenguaje inapropiado',
+    'Suplantación de identidad',
+    'Otro',
+  ];
+
   const title = otherUser?.name ?? 'Chat privado';
 
   return (
@@ -397,7 +444,11 @@ export default function DirectChatScreen() {
           <PressableScale scaleTo={0.9} onPress={() => selectedIds.size > 0 ? setDeleteConfirm(true) : cancelSelect()}>
             <Trash size={22} color={selectedIds.size > 0 ? c.alert : c.textTertiary} weight="bold" />
           </PressableScale>
-        ) : undefined}
+        ) : (
+          <PressableScale scaleTo={0.9} onPress={() => setMenuOpen(true)} style={s.menuBtn}>
+            <DotsThreeVertical size={22} color={c.textPrimary} weight="bold" />
+          </PressableScale>
+        )}
       />
 
       {loading ? (
@@ -425,14 +476,20 @@ export default function DirectChatScreen() {
                   <Text variant="caption" color="textTertiary">{day}</Text>
                   <View style={s.dayLine} />
                 </View>
-                {items.map((msg) => (
-                  <DirectBubble
-                    key={msg.id} message={msg} myId={userId ?? ''} c={c} othersReadAt={othersReadAt}
-                    onReply={(m) => setReplyTo(m)}
-                    selectMode={selectMode} selected={selectedIds.has(msg.id)}
-                    onEnterSelect={enterSelect} onToggleSelect={toggleSelect}
-                  />
-                ))}
+                {items.map((msg, i) => {
+                  const prev = i > 0 ? items[i - 1] : null;
+                  const senderChanged = prev && prev.authorId !== msg.authorId;
+                  return (
+                    <View key={msg.id} style={senderChanged ? { marginTop: spacing.md } : undefined}>
+                      <DirectBubble
+                        message={msg} myId={userId ?? ''} c={c} othersReadAt={othersReadAt}
+                        onReply={(m) => setReplyTo(m)}
+                        selectMode={selectMode} selected={selectedIds.has(msg.id)}
+                        onEnterSelect={enterSelect} onToggleSelect={toggleSelect}
+                      />
+                    </View>
+                  );
+                })}
               </View>
             ))}
           </ScrollView>
@@ -450,8 +507,8 @@ export default function DirectChatScreen() {
             <View style={s.replyBar}>
               <View style={s.replyLine} />
               <View style={{ flex: 1 }}>
-                <Text variant="caption" color="primary">{replyTo.authorName}</Text>
-                <Text variant="caption" color="textSecondary" numberOfLines={1}>
+                <Text variant="smallMedium" color="primary">{replyTo.authorName}</Text>
+                <Text variant="small" color="textSecondary" numberOfLines={1}>
                   {replyTo.voiceUrl ? '🎤 Nota de voz' : replyTo.body}
                 </Text>
               </View>
@@ -530,6 +587,81 @@ export default function DirectChatScreen() {
         confirmColor={c.alert}
         onConfirm={confirmDeleteSelected}
       />
+
+      <Sheet visible={menuOpen} onClose={() => setMenuOpen(false)} title="Opciones">
+        <View style={{ gap: spacing.sm, paddingBottom: spacing.md }}>
+          <PressableScale
+            scaleTo={0.98}
+            onPress={() => { setMenuOpen(false); setTimeout(() => setReportOpen(true), 250); }}
+            style={[s.menuRow, { backgroundColor: `${c.alert}14`, borderColor: `${c.alert}44` }]}
+          >
+            <View style={[s.menuIcon, { backgroundColor: `${c.alert}22` }]}>
+              <Flag size={18} color={c.alert} weight="fill" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text variant="bodyMedium" color="alert">Reportar conversación</Text>
+              <Text variant="small" color="textSecondary">Avísanos si hay comportamiento indebido</Text>
+            </View>
+          </PressableScale>
+        </View>
+      </Sheet>
+
+      <Sheet visible={reportOpen} onClose={closeReport} title={`Reportar a ${otherUser?.name ?? 'este usuario'}`}>
+        <View style={{ gap: spacing.sm, paddingBottom: spacing.md }}>
+          <Text variant="caption" color="textSecondary">Motivo del reporte</Text>
+          <View style={{ gap: spacing.xs }}>
+            {REPORT_REASONS.map((r) => {
+              const sel = reportReason === r;
+              return (
+                <PressableScale
+                  key={r} scaleTo={0.98}
+                  onPress={() => setReportReason(r)}
+                  style={[s.reasonRow, sel ? s.reasonRowActive : null]}
+                >
+                  <View style={[s.radio, sel ? s.radioOn : null]}>
+                    {sel ? <View style={s.radioDot} /> : null}
+                  </View>
+                  <Text variant="bodyMedium" color={sel ? 'alert' : 'textPrimary'} style={{ flex: 1 }}>{r}</Text>
+                </PressableScale>
+              );
+            })}
+          </View>
+          <Text variant="caption" color="textSecondary" style={{ marginTop: spacing.xs }}>
+            Detalles adicionales (opcional)
+          </Text>
+          <View style={s.textareaWrap}>
+            <RNTextInput
+              style={s.textarea}
+              placeholder="Describe lo que ocurrió..."
+              placeholderTextColor={c.textTertiary}
+              multiline numberOfLines={3}
+              value={reportDetail}
+              onChangeText={(v) => setReportDetail(v.slice(0, 240))}
+              textAlignVertical="top"
+            />
+            <Text variant="caption" color="textTertiary" style={{ alignSelf: 'flex-end' }}>
+              {reportDetail.length}/240
+            </Text>
+          </View>
+          <View style={{ flexDirection: 'row', gap: spacing.sm, marginTop: spacing.xs }}>
+            <Button label="Cancelar" variant="secondary" onPress={closeReport} style={{ flex: 1 }} />
+            <Button label="Enviar reporte" disabled={!reportReason} onPress={submitReport} style={{ flex: 1 }} />
+          </View>
+        </View>
+      </Sheet>
+
+      <Sheet visible={reportDoneOpen} onClose={() => setReportDoneOpen(false)}>
+        <View style={{ alignItems: 'center', gap: spacing.md, paddingBottom: spacing.md }}>
+          <View style={{ width: 72, height: 72, borderRadius: 36, backgroundColor: c.primarySoft, alignItems: 'center', justifyContent: 'center' }}>
+            <Check size={36} color={c.primary} weight="bold" />
+          </View>
+          <Text variant="h3" color="textPrimary">Reporte enviado</Text>
+          <Text variant="body" color="textSecondary" style={{ textAlign: 'center' }}>
+            Revisaremos la conversación en las próximas 24h.
+          </Text>
+          <Button label="Entendido" onPress={() => setReportDoneOpen(false)} />
+        </View>
+      </Sheet>
     </Screen>
   );
 }
@@ -566,15 +698,13 @@ function makeStyles(c: ColorPalette, bottomInset = 0) {
     alignLeft: { justifyContent: 'flex-start' },
     bubbleCol: { maxWidth: '78%', flexShrink: 1 },
     bubble: { paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderRadius: radius.lg },
-    bubbleMine: { backgroundColor: c.primary, borderBottomRightRadius: 4 },
+    bubbleMine: { backgroundColor: c.primary, borderBottomRightRadius: 4, borderWidth: 2, borderColor: 'transparent' },
     bubbleOther: { backgroundColor: c.surface, borderWidth: 1, borderColor: c.border, borderBottomLeftRadius: 4 },
     bubbleOpt: { opacity: 0.6 },
-    bubbleSelected: { borderWidth: 2, borderColor: c.primary },
+    bubbleSelected: { borderColor: c.bg },
     bubbleDimmed: { opacity: 0.4 },
     checkBadge: { position: 'absolute', top: -8, right: -8, width: 20, height: 20, borderRadius: 10, backgroundColor: c.primary, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: c.bg },
-    timeRow: { flexDirection: 'row', alignItems: 'center', gap: 3, marginTop: 3 },
-    timeRight: { justifyContent: 'flex-end' },
-    timeLeft: { justifyContent: 'flex-start' },
+    timeAbs: { position: 'absolute', bottom: 4, right: spacing.sm, flexDirection: 'row', alignItems: 'center', gap: 3 },
     typingRow: {
       flexDirection: 'row', alignItems: 'center', gap: spacing.xs,
       paddingHorizontal: spacing.lg, paddingVertical: spacing.xs, backgroundColor: c.bg,
@@ -593,6 +723,43 @@ function makeStyles(c: ColorPalette, bottomInset = 0) {
     sendBtn: {
       width: 48, height: 48, borderRadius: radius.full,
       backgroundColor: c.primary, alignItems: 'center', justifyContent: 'center',
+    },
+    menuBtn: {
+      width: 38, height: 38, borderRadius: radius.full,
+      backgroundColor: c.surface, borderWidth: 1, borderColor: c.border,
+      alignItems: 'center', justifyContent: 'center',
+    },
+    menuRow: {
+      flexDirection: 'row', alignItems: 'center', gap: spacing.md,
+      paddingHorizontal: spacing.md, paddingVertical: spacing.md,
+      borderRadius: radius.lg, borderWidth: 1, borderColor: c.border,
+      backgroundColor: c.bg,
+    },
+    menuIcon: {
+      width: 40, height: 40, borderRadius: radius.full,
+      alignItems: 'center', justifyContent: 'center',
+    },
+    reasonRow: {
+      flexDirection: 'row', alignItems: 'center', gap: spacing.md,
+      paddingHorizontal: spacing.md, paddingVertical: spacing.md,
+      backgroundColor: c.bg, borderRadius: radius.md,
+      borderWidth: 1, borderColor: c.border,
+    },
+    reasonRowActive: { borderColor: c.alert, backgroundColor: `${c.alert}14` },
+    radio: {
+      width: 20, height: 20, borderRadius: 10, borderWidth: 2,
+      borderColor: c.border, alignItems: 'center', justifyContent: 'center',
+    },
+    radioOn: { borderColor: c.alert },
+    radioDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: c.alert },
+    textareaWrap: {
+      backgroundColor: c.bg, borderRadius: radius.md,
+      borderWidth: 1, borderColor: c.border,
+      padding: spacing.md, gap: spacing.xs,
+    },
+    textarea: {
+      color: c.textPrimary, fontFamily: fonts.regular,
+      fontSize: 15, minHeight: 72, maxHeight: 72,
     },
   });
 }

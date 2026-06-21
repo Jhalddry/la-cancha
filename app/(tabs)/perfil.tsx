@@ -34,7 +34,6 @@ import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { Sheet } from '@/components/ui/Sheet';
 import { PlayerPositions } from '@/components/feature/PlayerPositions';
-import { Stars } from '@/components/ui/Stars';
 import { Divider } from '@/components/ui/Divider';
 import { IconCircle } from '@/components/ui/IconCircle';
 import { PressableScale } from '@/components/ui/PressableScale';
@@ -42,13 +41,20 @@ import { Screen } from '@/components/ui/Screen';
 import { Text } from '@/components/ui/Text';
 import { useColors } from '@/hooks/useColors';
 import { useProfile, useRequestVerification } from '@/hooks/useProfiles';
-import { labelSkill, labelSport } from '@/lib/format';
 import { useSession } from '@/store/session';
 import { radius, spacing } from '@/theme';
+import { darkPalette } from '@/theme/palettes';
 import type { ColorPalette } from '@/theme/palettes';
-import type { Sport } from '@/types/domain';
+import type { SkillLevel, Sport } from '@/types/domain';
 
 const VERIFIED_BLUE = '#1D9BF0';
+
+const LEVEL_COLOR: Record<SkillLevel, string> = {
+  1: '#FF3B30', 2: '#FF6B00', 3: '#FF9500', 4: '#ADDE2F', 5: '#7BFF00',
+};
+const LEVEL_LABEL: Record<SkillLevel, string> = {
+  1: 'Principiante', 2: 'Básico', 3: 'Intermedio', 4: 'Avanzado', 5: 'Elite',
+};
 
 const BADGE_META: Record<string, {
   color: string;
@@ -107,6 +113,8 @@ const BADGE_META: Record<string, {
 };
 
 function MetallicBadge({ label, onPress }: { label: string; onPress: () => void }) {
+  const c = useColors();
+  const isDark = c.bg === darkPalette.bg;
   const meta = BADGE_META[label] ?? {
     color: '#7BFF00',
     icon: (n: number) => <Star size={n} color="#7BFF00" weight="fill" />,
@@ -133,25 +141,25 @@ function MetallicBadge({ label, onPress }: { label: string; onPress: () => void 
 
   return (
     <PressableScale onPress={onPress} scaleTo={0.93}>
-      <View style={[metallicBadgeStyle.outer, { borderColor: `${color}80` }]}>
+      <View style={[metallicBadgeStyle.outer, { borderColor: isDark ? `${color}55` : `${color}99` }]}>
         <LinearGradient
-          colors={[`${color}22`, `${color}50`, `${color}22`]}
+          colors={isDark ? [`${color}30`, `${color}14`] : [`${color}55`, `${color}28`]}
           start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
+          end={{ x: 1, y: 0 }}
           style={metallicBadgeStyle.gradient}
         >
-          <Animated.View style={[StyleSheet.absoluteFill, { overflow: 'hidden' }]} pointerEvents="none">
-            <Animated.View style={[{ position: 'absolute', top: 0, bottom: 0, width: 70 }, shimStyle]}>
+          <Animated.View style={[StyleSheet.absoluteFill, { overflow: 'hidden', borderRadius: 999 }]} pointerEvents="none">
+            <Animated.View style={[{ position: 'absolute', top: 0, bottom: 0, width: 80 }, shimStyle]}>
               <LinearGradient
-                colors={['transparent', `${color}65`, 'transparent']}
+                colors={['transparent', isDark ? `${color}55` : `${color}88`, 'transparent']}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 0 }}
                 style={{ flex: 1 }}
               />
             </Animated.View>
           </Animated.View>
-          {icon(14)}
-          <Text variant="smallMedium" style={{ color }}>{label}</Text>
+          {icon(16)}
+          <Text style={{ fontSize: 13, fontWeight: '600', color }}>{label}</Text>
         </LinearGradient>
       </View>
     </PressableScale>
@@ -202,15 +210,15 @@ function BadgeInfoSheet({ label, onClose }: { label: string | null; onClose: () 
 const metallicBadgeStyle = StyleSheet.create({
   outer: {
     borderRadius: 999,
-    borderWidth: 1,
+    borderWidth: 1.5,
     overflow: 'hidden',
   },
   gradient: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
+    gap: 7,
+    paddingHorizontal: 14,
+    paddingVertical: 9,
   },
 });
 
@@ -251,12 +259,12 @@ function AvatarRing() {
   );
 }
 
-const SPORT_EMOJIS: Record<Sport, string> = {
-  futbol: '⚽',
-  tenis: '🎾',
-  padel: '🏓',
-  beachTennis: '🏖️',
-  basket: '🏀',
+const SPORT_CONFIG: Record<Sport, { color: string; lightColor: string; emoji: string; label: string }> = {
+  futbol:      { color: '#4ade80', lightColor: '#15803d', emoji: '⚽', label: 'Fútbol' },
+  basket:      { color: '#fb923c', lightColor: '#c2410c', emoji: '🏀', label: 'Basket' },
+  tenis:       { color: '#38bdf8', lightColor: '#0369a1', emoji: '🎾', label: 'Tenis' },
+  padel:       { color: '#a78bfa', lightColor: '#6d28d9', emoji: '🏓', label: 'Pádel' },
+  beachTennis: { color: '#fbbf24', lightColor: '#b45309', emoji: '🏖️', label: 'Beach Tennis' },
 };
 
 export default function PerfilScreen() {
@@ -264,10 +272,12 @@ export default function PerfilScreen() {
   const u = useSession((s) => s.user);
   const signOut = useSession((s) => s.signOut);
   const c = useColors();
+  const isDark = c.bg === darkPalette.bg;
   const s = useMemo(() => makeStyles(c), [c]);
   const [verifySheetOpen, setVerifySheetOpen] = useState(false);
   const [verifyDoneOpen, setVerifyDoneOpen] = useState(false);
   const [selectedBadge, setSelectedBadge] = useState<string | null>(null);
+  const [verifiedTooltipOpen, setVerifiedTooltipOpen] = useState(false);
   const { mutate: sendVerifyRequest } = useRequestVerification();
   const { data: liveProfile } = useProfile(u?.id ?? '');
   const ownBadges = liveProfile?.badges ?? [];
@@ -301,46 +311,38 @@ export default function PerfilScreen() {
         contentContainerStyle={s.scroll}
         showsVerticalScrollIndicator={false}
       >
-        <View style={s.head}>
-          <View style={{ position: 'relative' }}>
-            <Avatar name={u.name} uri={u.avatarUrl} size={88} />
+        <View style={s.hero}>
+          <View style={{ alignSelf: 'center', position: 'relative' }}>
+            <Avatar name={u.name} uri={u.avatarUrl} size={100} />
             {u.verified ? (
-              <View style={s.avatarVerifiedBadge}>
-                <SealCheck size={20} color={VERIFIED_BLUE} weight="fill" />
-              </View>
+              <PressableScale onPress={() => setVerifiedTooltipOpen(true)} scaleTo={0.9} style={s.avatarVerifiedBadge}>
+                <SealCheck size={22} color={VERIFIED_BLUE} weight="fill" />
+              </PressableScale>
             ) : null}
           </View>
-          <View style={s.headInfo}>
+
+          <View style={{ alignItems: 'center', gap: spacing.xs }}>
             <Text variant="h2">{u.name}</Text>
             {u.username ? (
-              <Text variant="small" color="textSecondary">
-                @{u.username}
-              </Text>
-            ) : null}
-            <Text variant="small" color="textSecondary">
-              {labelSkill(u.skillLevel)}
-            </Text>
-            {u.verified ? (
-              <View style={s.verified}>
-                <SealCheck size={16} color={VERIFIED_BLUE} weight="fill" />
-                <Text variant="smallMedium" style={{ color: VERIFIED_BLUE }}>
-                  Jugador verificado
-                </Text>
-              </View>
+              <Text variant="small" color="textSecondary">@{u.username}</Text>
             ) : null}
           </View>
+
           <PressableScale
             onPress={() => router.push('/perfil/editar')}
             style={s.editBtn}
-            scaleTo={0.9}
+            scaleTo={0.95}
           >
-            <PencilSimple size={18} color={c.primary} weight="bold" />
+            <PencilSimple size={14} color={c.textSecondary} weight="regular" />
+            <Text variant="small" color="textSecondary">Editar perfil</Text>
           </PressableScale>
         </View>
 
         {ownBadges.length > 0 ? (
           <View style={s.badgesWrap}>
-            {ownBadges.map((b) => <MetallicBadge key={b} label={b} onPress={() => setSelectedBadge(b)} />)}
+            {ownBadges.map((b) => (
+              <MetallicBadge key={b} label={b} onPress={() => setSelectedBadge(b)} />
+            ))}
           </View>
         ) : null}
 
@@ -355,35 +357,46 @@ export default function PerfilScreen() {
           </Card>
         ) : null}
 
-        <View>
-          <Text variant="caption" color="textSecondary">
-            Deportes
-          </Text>
-          <View style={s.sportsRow}>
-            {u.sports.map((sport) => (
-              <View key={sport} style={s.sportItem}>
-                <View style={s.sportIconWrap}>
-                  <Text style={s.sportEmoji}>{SPORT_EMOJIS[sport]}</Text>
-                </View>
-                <Text variant="small" color="textPrimary">
-                  {labelSport(sport)}
-                </Text>
-              </View>
-            ))}
+        {u.sports.length > 0 ? (
+          <View style={{ gap: spacing.sm }}>
+            <Text variant="caption" color="textSecondary">Mis deportes</Text>
+            <View style={{ gap: spacing.sm }}>
+              {u.sports.map((sp) => {
+                const cfg = SPORT_CONFIG[sp];
+                const lvl = u.sportLevels?.[sp];
+                return (
+                  <LinearGradient
+                    key={sp}
+                    colors={isDark ? [`${cfg.color}22`, `${cfg.color}08`] : [`${cfg.color}44`, `${cfg.color}18`]}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 0 }}
+                    style={[s.sportCard, { borderColor: isDark ? c.border : `${cfg.color}66`, shadowColor: cfg.color }]}
+                  >
+                    <Text style={s.sportCardEmoji}>{cfg.emoji}</Text>
+                    <Text variant="bodyMedium" style={{ color: isDark ? cfg.color : cfg.lightColor, flex: 1 }}>{cfg.label}</Text>
+                    {lvl ? (
+                      <View style={{ alignItems: 'flex-end', gap: 4 }}>
+                        <View style={{ flexDirection: 'row', gap: 5 }}>
+                          {([1, 2, 3, 4, 5] as const).map((n) => (
+                            <View key={n} style={{
+                              width: 9, height: 9, borderRadius: 4.5,
+                              backgroundColor: n <= lvl
+                                ? LEVEL_COLOR[lvl as SkillLevel]
+                                : `${LEVEL_COLOR[lvl as SkillLevel]}${isDark ? '28' : '50'}`,
+                            }} />
+                          ))}
+                        </View>
+                        <Text style={{ fontSize: 11, fontWeight: '600', color: LEVEL_COLOR[lvl as SkillLevel] }}>
+                          {LEVEL_LABEL[lvl as SkillLevel]}
+                        </Text>
+                      </View>
+                    ) : null}
+                  </LinearGradient>
+                );
+              })}
+            </View>
           </View>
-        </View>
-
-        <View>
-          <Text variant="caption" color="textSecondary">
-            Nivel de juego
-          </Text>
-          <Card style={s.levelCard}>
-            <Stars level={u.skillLevel} size={22} />
-            <Text variant="bodySemibold" color="textPrimary">
-              {labelSkill(u.skillLevel)}
-            </Text>
-          </Card>
-        </View>
+        ) : null}
 
         {u.sports.length > 0 ? (
           <View style={{ gap: spacing.sm }}>
@@ -511,6 +524,24 @@ export default function PerfilScreen() {
 
       <BadgeInfoSheet label={selectedBadge} onClose={() => setSelectedBadge(null)} />
 
+      <Sheet visible={verifiedTooltipOpen} onClose={() => setVerifiedTooltipOpen(false)}>
+        <View style={{ alignItems: 'center', gap: spacing.md, paddingBottom: spacing.md }}>
+          <View style={{
+            width: 72, height: 72, borderRadius: 36,
+            backgroundColor: `${VERIFIED_BLUE}18`,
+            borderWidth: 1.5, borderColor: `${VERIFIED_BLUE}50`,
+            alignItems: 'center', justifyContent: 'center',
+          }}>
+            <SealCheck size={40} color={VERIFIED_BLUE} weight="fill" />
+          </View>
+          <Text variant="h3" color="textPrimary">Jugador verificado</Text>
+          <Text variant="body" color="textSecondary" style={{ textAlign: 'center', lineHeight: 22 }}>
+            Este jugador fue revisado y confirmado por el equipo de La Cancha. Perfil auténtico, historial confiable.
+          </Text>
+          <Button label="Entendido" onPress={() => setVerifiedTooltipOpen(false)} />
+        </View>
+      </Sheet>
+
       <Sheet visible={verifyDoneOpen} onClose={() => setVerifyDoneOpen(false)}>
         <View style={{ alignItems: 'center', gap: spacing.md, paddingBottom: spacing.md }}>
           <View style={{
@@ -571,23 +602,32 @@ function makeStyles(c: ColorPalette) {
       paddingBottom: 120,
       gap: spacing.xl,
     },
-    head: { flexDirection: 'row', gap: spacing.lg, alignItems: 'center' },
-    headInfo: { flex: 1, gap: spacing.xs },
-    verified: {
+    hero: {
+      alignItems: 'center',
+      gap: spacing.lg,
+      paddingTop: spacing.sm,
+    },
+    editBtn: {
       flexDirection: 'row',
       alignItems: 'center',
       gap: spacing.xs,
-      marginTop: spacing.xs,
-    },
-    editBtn: {
-      width: 40,
-      height: 40,
+      paddingHorizontal: spacing.lg,
+      paddingVertical: spacing.sm,
       borderRadius: radius.full,
-      backgroundColor: c.primarySoft,
       borderWidth: 1,
-      borderColor: c.primary,
+      borderColor: c.border,
+      backgroundColor: c.surface,
+    },
+    verifiedChip: {
+      flexDirection: 'row',
       alignItems: 'center',
-      justifyContent: 'center',
+      gap: spacing.xs,
+      paddingHorizontal: spacing.md,
+      paddingVertical: 4,
+      backgroundColor: `${VERIFIED_BLUE}18`,
+      borderRadius: radius.full,
+      borderWidth: 1,
+      borderColor: `${VERIFIED_BLUE}40`,
     },
     avatarVerifiedBadge: {
       position: 'absolute',
@@ -598,32 +638,24 @@ function makeStyles(c: ColorPalette) {
       padding: 2,
     },
     bio: { marginTop: spacing.xs },
-    sportsRow: {
+    sportCard: {
       flexDirection: 'row',
-      gap: spacing.lg,
-      marginTop: spacing.sm,
-      flexWrap: 'wrap',
-    },
-    sportItem: { alignItems: 'center', gap: spacing.xs, width: 64 },
-    sportEmoji: { fontSize: 28, lineHeight: 36 },
-    sportIconWrap: {
-      width: 56,
-      height: 56,
-      borderRadius: 28,
-      backgroundColor: c.surface,
+      alignItems: 'center',
+      borderRadius: radius.lg,
       borderWidth: 1,
-      borderColor: c.border,
-      alignItems: 'center',
-      justifyContent: 'center',
+      overflow: 'hidden',
+      paddingVertical: spacing.md,
+      paddingRight: spacing.lg,
+      gap: spacing.md,
+      shadowOffset: { width: 0, height: 3 },
+      shadowOpacity: 0.2,
+      shadowRadius: 10,
+      elevation: 4,
     },
-    levelCard: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'space-between',
-      marginTop: spacing.sm,
-    },
+    sportCardBar: { width: 4, alignSelf: 'stretch' },
+    sportCardEmoji: { fontSize: 22, lineHeight: 28, paddingLeft: spacing.md },
     chips: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginTop: spacing.sm },
-    badgesWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
+    badgesWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, justifyContent: 'center' },
     settingRow: {
       flexDirection: 'row',
       alignItems: 'center',

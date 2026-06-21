@@ -22,6 +22,7 @@ import Animated, { FadeInDown } from 'react-native-reanimated';
 import { Button } from '@/components/ui/Button';
 import { Chip } from '@/components/ui/Chip';
 import { EmptyState } from '@/components/ui/EmptyState';
+import { SportOrbs } from '@/components/feature/SportOrbs';
 import { PressableScale } from '@/components/ui/PressableScale';
 import { Screen } from '@/components/ui/Screen';
 import { Sheet } from '@/components/ui/Sheet';
@@ -60,6 +61,12 @@ type OpenFilter = 'sport' | 'type' | 'level' | 'distance' | 'sort' | 'position' 
 const SPORT_OPTIONS: SportFilter[] = ['all', 'futbol', 'basket', 'padel', 'tenis', 'beachTennis'];
 const TYPE_OPTIONS: MatchType[] = ['chill', 'seria', 'competencia'];
 const LEVEL_OPTIONS: SkillLevel[] = [1, 2, 3, 4, 5];
+const LEVEL_COLOR: Record<number, string> = {
+  1: '#FF3B30', 2: '#FF6B00', 3: '#FF9500', 4: '#ADDE2F', 5: '#7BFF00',
+};
+const LEVEL_LABEL: Record<number, string> = {
+  1: 'Principiante', 2: 'Básico', 3: 'Intermedio', 4: 'Avanzado', 5: 'Elite',
+};
 const DISTANCE_OPTIONS = [1, 3, 5, 10] as const;
 const SORT_OPTIONS: { value: SortOption; label: string }[] = [
   { value: 'recientes', label: 'Más recientes' },
@@ -365,28 +372,27 @@ export default function BuscarScreen() {
           )}
           ListEmptyComponent={
             <View style={s.empty}>
-              <EmptyState
-                icon={<MagnifyingGlass size={36} color={c.primary} weight="bold" />}
-                title="Sin resultados"
-                description="Ajusta tus filtros o intenta otra búsqueda."
-                action={
-                  (sport !== 'all' || type !== null || level !== null || distance !== null || position !== null) ? (
-                    <Button
-                      label="Limpiar filtros"
-                      variant="secondary"
-                      fullWidth={false}
-                      style={{ marginTop: spacing.md }}
-                      onPress={() => {
-                        setSport('all');
-                        setType(null);
-                        setLevel(null);
-                        setDistance(null);
-                        setPosition(null);
-                      }}
-                    />
-                  ) : undefined
-                }
-              />
+              <SportOrbs size={260} />
+              <View style={s.emptyText}>
+                <Text variant="h3" color="textPrimary" style={{ textAlign: 'center' }}>Sin resultados</Text>
+                <Text variant="body" color="textSecondary" style={{ textAlign: 'center' }}>
+                  Ajusta tus filtros o intenta otra búsqueda.
+                </Text>
+              </View>
+              {(sport !== 'all' || type !== null || level !== null || distance !== null || position !== null) ? (
+                <Button
+                  label="Limpiar filtros"
+                  variant="secondary"
+                  fullWidth={false}
+                  onPress={() => {
+                    setSport('all');
+                    setType(null);
+                    setLevel(null);
+                    setDistance(null);
+                    setPosition(null);
+                  }}
+                />
+              ) : null}
             </View>
           }
           ListFooterComponent={
@@ -462,30 +468,47 @@ export default function BuscarScreen() {
 
         {openFilter === 'level' ? (
           <View style={s.sheetContent}>
-            <PressableScale
-              style={[s.optionRow, level === null ? s.optionRowActive : null]}
-              scaleTo={0.98}
-              onPress={() => { setLevel(null); setOpenFilter(null); }}
-            >
-              <Text variant="body" color={level === null ? 'primary' : 'textPrimary'}>
-                Todos los niveles
-              </Text>
-              {level === null ? <View style={s.activeDot} /> : null}
-            </PressableScale>
-            {LEVEL_OPTIONS.map((lvl) => (
-              <PressableScale
-                key={lvl}
-                style={[s.optionRow, level === lvl ? s.optionRowActive : null]}
-                scaleTo={0.98}
-                onPress={() => { setLevel(lvl); setOpenFilter(null); }}
-              >
-                <Stars level={lvl} size={14} />
-                <Text variant="body" color={level === lvl ? 'primary' : 'textPrimary'} style={{ flex: 1 }}>
-                  {labelSkill(lvl)}
+            <View style={{ flexDirection: 'row', gap: spacing.xs, justifyContent: 'space-between' }}>
+              {LEVEL_OPTIONS.map((lvl) => {
+                const active = level === lvl;
+                const color = LEVEL_COLOR[lvl];
+                return (
+                  <PressableScale
+                    key={lvl}
+                    scaleTo={0.88}
+                    onPress={() => { setLevel(active ? null : lvl); if (!active) setOpenFilter(null); }}
+                    style={{
+                      flex: 1, aspectRatio: 1, borderRadius: radius.lg, borderWidth: 1.5,
+                      alignItems: 'center', justifyContent: 'center',
+                      backgroundColor: active ? color : `${color}20`,
+                      borderColor: active ? color : `${color}50`,
+                    }}
+                  >
+                    <Text style={{ fontSize: 15, fontWeight: '600', color: active ? '#000' : color }}>{lvl}</Text>
+                  </PressableScale>
+                );
+              })}
+            </View>
+            {level !== null ? (
+              <View style={{ alignItems: 'center', marginTop: spacing.sm }}>
+                <Text style={{ fontWeight: '600', color: LEVEL_COLOR[level] }}>
+                  {LEVEL_LABEL[level]}
                 </Text>
-                {level === lvl ? <View style={s.activeDot} /> : null}
+              </View>
+            ) : (
+              <View style={{ alignItems: 'center', marginTop: spacing.sm }}>
+                <Text variant="body" color="textTertiary">Todos los niveles</Text>
+              </View>
+            )}
+            {level !== null ? (
+              <PressableScale
+                scaleTo={0.97}
+                onPress={() => { setLevel(null); setOpenFilter(null); }}
+                style={[s.optionRow, { marginTop: spacing.sm, justifyContent: 'center' }]}
+              >
+                <Text variant="bodyMedium" color="textSecondary">Limpiar nivel</Text>
               </PressableScale>
-            ))}
+            ) : null}
           </View>
         ) : null}
 
@@ -634,7 +657,8 @@ function makeStyles(c: ColorPalette) {
     },
     errorWrap: { flex: 1, paddingHorizontal: spacing.lg },
     headerRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: spacing.md },
-    empty: { height: 320 },
+    empty: { alignItems: 'center', gap: spacing.lg, paddingVertical: spacing.xxxl },
+    emptyText: { alignItems: 'center', gap: spacing.xs, paddingHorizontal: spacing.lg },
     loadingMore: { paddingVertical: spacing.lg, alignItems: 'center' },
     sheetContent: { gap: spacing.xs, paddingBottom: spacing.lg },
     optionRow: {

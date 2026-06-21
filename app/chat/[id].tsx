@@ -153,11 +153,22 @@ function VoiceBubble({
 
 function ReplyQuote({ replyTo, isMe, c }: { replyTo: ChatMessageData['replyTo']; isMe: boolean; c: ColorPalette }) {
   if (!replyTo) return null;
-  const textColor = isMe ? c.bg : c.textPrimary;
+  const barColor = isMe ? 'rgba(0,0,0,0.6)' : c.primary;
+  const bgColor = isMe ? 'rgba(0,0,0,0.25)' : c.primarySoft;
+  const nameColor = isMe ? c.textOnPrimary : c.primary;
+  const bodyColor = isMe ? `${c.textOnPrimary}CC` : c.textSecondary;
   return (
-    <Text variant="caption" style={{ color: textColor, opacity: 0.6, marginBottom: spacing.xs }} numberOfLines={1}>
-      {replyTo.voiceUrl ? '🎤 Nota de voz' : replyTo.body}
-    </Text>
+    <View style={{ flexDirection: 'row', borderRadius: 8, overflow: 'hidden', marginBottom: spacing.xs, backgroundColor: bgColor, minWidth: 160 }}>
+      <View style={{ width: 3, backgroundColor: barColor }} />
+      <View style={{ flex: 1, paddingHorizontal: spacing.sm, paddingVertical: 6, gap: 2 }}>
+        <Text style={{ fontSize: 12, fontWeight: '700', color: nameColor, lineHeight: 16 }} numberOfLines={1}>
+          {replyTo.authorName}
+        </Text>
+        <Text style={{ fontSize: 12, color: bodyColor, lineHeight: 16 }} numberOfLines={1}>
+          {replyTo.voiceUrl ? '🎤 Nota de voz' : replyTo.body}
+        </Text>
+      </View>
+    </View>
   );
 }
 
@@ -284,11 +295,13 @@ function Bubble({
           ]}>
             <ReplyQuote replyTo={message.replyTo} isMe={isMe} c={c} />
             {message.voiceUrl ? (
-              <VoiceBubble url={message.voiceUrl} durationSec={message.voiceDurationSec} messageId={message.id} isMe={isMe} c={c} />
+              <View style={{ paddingRight: 64 }}>
+                <VoiceBubble url={message.voiceUrl} durationSec={message.voiceDurationSec} messageId={message.id} isMe={isMe} c={c} />
+              </View>
             ) : (
-              <Text variant="body" color={isMe ? 'surface' : 'textPrimary'}>{message.body}</Text>
+              <Text variant="body" color={isMe ? 'surface' : 'textPrimary'} style={{ paddingRight: 64 }}>{message.body}</Text>
             )}
-            <View style={[s.timeRow, isMe ? s.timeRight : s.timeLeft]}>
+            <View style={s.timeAbs}>
               <Text variant="caption" style={{ color: isMe ? c.bg : c.textTertiary, opacity: 0.65 }}>{timeOnly(message.sentAt)}</Text>
               {isMe && !isOptimistic ? (
                 othersReadAt && new Date(othersReadAt) >= new Date(message.sentAt)
@@ -496,21 +509,26 @@ export default function ChatScreen() {
                   <Text variant="caption" color="textTertiary">{day}</Text>
                   <View style={s.dayLine} />
                 </View>
-                {items.map((msg) => (
-                  <Bubble
-                    key={msg.id}
-                    message={msg}
-                    myId={userId ?? ''}
-                    c={c}
-                    othersReadAt={othersReadAt}
-                    onAvatarPress={(authorId) => router.push(`/perfil/${authorId}`)}
-                    onReply={(m) => setReplyTo(m)}
-                    selectMode={selectMode}
-                    selected={selectedIds.has(msg.id)}
-                    onEnterSelect={enterSelect}
-                    onToggleSelect={toggleSelect}
-                  />
-                ))}
+                {items.map((msg, i) => {
+                  const prev = i > 0 ? items[i - 1] : null;
+                  const senderChanged = prev && prev.authorId !== msg.authorId;
+                  return (
+                    <View key={msg.id} style={senderChanged ? { marginTop: spacing.md } : undefined}>
+                      <Bubble
+                        message={msg}
+                        myId={userId ?? ''}
+                        c={c}
+                        othersReadAt={othersReadAt}
+                        onAvatarPress={(authorId) => router.push(`/perfil/${authorId}`)}
+                        onReply={(m) => setReplyTo(m)}
+                        selectMode={selectMode}
+                        selected={selectedIds.has(msg.id)}
+                        onEnterSelect={enterSelect}
+                        onToggleSelect={toggleSelect}
+                      />
+                    </View>
+                  );
+                })}
               </View>
             ))}
           </ScrollView>
@@ -670,9 +688,7 @@ function makeStyles(c: ColorPalette, bottomInset = 0) {
     bubbleSelected: { borderWidth: 2, borderColor: c.primary },
     bubbleDimmed: { opacity: 0.4 },
     checkBadge: { position: 'absolute', top: -8, right: -8, width: 20, height: 20, borderRadius: 10, backgroundColor: c.primary, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: c.bg },
-    timeRow: { flexDirection: 'row', alignItems: 'center', gap: 3, marginTop: 3 },
-    timeRight: { justifyContent: 'flex-end' },
-    timeLeft: { justifyContent: 'flex-start' },
+    timeAbs: { position: 'absolute', bottom: 4, right: spacing.sm, flexDirection: 'row', alignItems: 'center', gap: 3 },
     typingRow: {
       flexDirection: 'row', alignItems: 'center', gap: spacing.xs,
       paddingHorizontal: spacing.lg, paddingVertical: spacing.xs, backgroundColor: c.bg,
