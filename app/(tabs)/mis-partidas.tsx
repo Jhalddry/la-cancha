@@ -258,6 +258,7 @@ export default function MisPartidasScreen() {
       ) : showEmpty ? (
         <ScrollView
           key={tab}
+          style={{ flex: 1 }}
           contentContainerStyle={s.emptyScroll}
           alwaysBounceVertical={false}
           refreshControl={
@@ -492,7 +493,7 @@ export default function MisPartidasScreen() {
 function makeStyles(c: ColorPalette) {
   return StyleSheet.create({
     emptyScroll: { flex: 1 },
-    emptyWrap: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: spacing.lg, paddingHorizontal: spacing.xxl, paddingVertical: spacing.xxxl },
+    emptyWrap: { flex: 1, alignItems: 'center', justifyContent: 'flex-start', paddingTop: '22%', gap: spacing.lg, paddingHorizontal: spacing.xxl },
     emptyText: { alignItems: 'center', gap: spacing.xs },
     head: { paddingHorizontal: spacing.lg, paddingTop: spacing.md, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
     historialBtn: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, opacity: 0.7 },

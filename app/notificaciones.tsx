@@ -5,6 +5,7 @@ import {
   Flag,
   Play,
   Star,
+  Trash,
   UserPlus,
   Warning,
   X,
@@ -119,14 +120,14 @@ export default function NotificacionesScreen() {
         title="Notificaciones"
         trailing={
           all.length > 0 ? (
-            <View style={{ flexDirection: 'row', gap: spacing.md, alignItems: 'center' }}>
+            <View style={{ flexDirection: 'row', gap: spacing.lg, alignItems: 'center' }}>
               {unreadCount > 0 ? (
-                <PressableScale onPress={() => markAllRead()} scaleTo={0.9}>
-                  <Text variant="smallMedium" color="primary">Leer todas</Text>
+                <PressableScale onPress={() => markAllRead()} scaleTo={0.85}>
+                  <CheckCircle size={22} color={c.primary} weight="fill" />
                 </PressableScale>
               ) : null}
-              <PressableScale onPress={() => setDeleteAllConfirm(true)} scaleTo={0.9}>
-                <Text variant="smallMedium" color="alert">Borrar todas</Text>
+              <PressableScale onPress={() => setDeleteAllConfirm(true)} scaleTo={0.85}>
+                <Trash size={22} color={c.alert} weight="bold" />
               </PressableScale>
             </View>
           ) : undefined

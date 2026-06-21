@@ -1,5 +1,5 @@
 import { useRouter } from 'expo-router';
-import { ChatCircle, ChatCircleDots, Trash, WifiSlash } from 'phosphor-react-native';
+import { Check, ChatCircle, ChatCircleDots, Trash, WifiSlash, X } from 'phosphor-react-native';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Animated, type DimensionValue, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 
@@ -79,10 +79,27 @@ export default function ChatsScreen() {
     refetch: refetchPrivate,
   } = useMyPrivateThreads();
   const { mutate: deleteThread } = useDeleteThread();
-  const [deleteThreadId, setDeleteThreadId] = useState<string | null>(null);
 
-  // Track pull-to-refresh separately so background invalidateQueries refetches
-  // don't accidentally show the spinner.
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [deleteConfirm, setDeleteConfirm] = useState(false);
+  const isSelecting = selectedIds.size > 0;
+
+  const toggleSelect = (id: string) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const clearSelection = () => setSelectedIds(new Set());
+
+  const handleDeleteSelected = () => {
+    selectedIds.forEach(id => deleteThread(id));
+    clearSelection();
+  };
+
   const [pullRefreshingThreads, setPullRefreshingThreads] = useState(false);
   const [pullRefreshingPrivate, setPullRefreshingPrivate] = useState(false);
 
@@ -106,12 +123,28 @@ export default function ChatsScreen() {
   return (
     <Screen>
       <View style={s.head}>
-        <Text variant="h2">Chats</Text>
+        {isSelecting ? (
+          <View style={s.selectHeader}>
+            <PressableScale onPress={clearSelection} scaleTo={0.85}>
+              <X size={22} color={c.textSecondary} />
+            </PressableScale>
+            <Text variant="h2" style={{ flex: 1, marginLeft: spacing.md }}>
+              {selectedIds.size} seleccionado{selectedIds.size !== 1 ? 's' : ''}
+            </Text>
+            <PressableScale onPress={() => setDeleteConfirm(true)} scaleTo={0.85}>
+              <Trash size={22} color={c.alert} weight="bold" />
+            </PressableScale>
+          </View>
+        ) : (
+          <Text variant="h2">Chats</Text>
+        )}
       </View>
 
-      <View style={s.tabsWrap}>
-        <SegmentedTabs options={OPTIONS} value={tab} onChange={setTab} />
-      </View>
+      {!isSelecting && (
+        <View style={s.tabsWrap}>
+          <SegmentedTabs options={OPTIONS} value={tab} onChange={setTab} />
+        </View>
+      )}
 
       {isLoading ? (
         <View style={s.skeletonWrap}>
@@ -173,7 +206,7 @@ export default function ChatsScreen() {
           </ScrollView>
         ) : (
           <ScrollView
-            contentContainerStyle={s.scroll}
+            contentContainerStyle={[s.scroll, isSelecting && { paddingTop: spacing.md }]}
             showsVerticalScrollIndicator={false}
             refreshControl={
               <RefreshControl
@@ -188,8 +221,10 @@ export default function ChatsScreen() {
               <View key={t.id}>
                 <MatchChatRow
                   thread={t}
-                  onPress={() => router.push(`/chat/${t.matchId}`)}
-                  onLongPress={() => setDeleteThreadId(t.id)}
+                  isSelecting={isSelecting}
+                  isSelected={selectedIds.has(t.id)}
+                  onPress={() => isSelecting ? toggleSelect(t.id) : router.push(`/chat/${t.matchId}`)}
+                  onLongPress={() => toggleSelect(t.id)}
                   c={c}
                   s={s}
                 />
@@ -219,7 +254,7 @@ export default function ChatsScreen() {
           </ScrollView>
         ) : (
           <ScrollView
-            contentContainerStyle={s.scroll}
+            contentContainerStyle={[s.scroll, isSelecting && { paddingTop: spacing.md }]}
             showsVerticalScrollIndicator={false}
             refreshControl={
               <RefreshControl
@@ -234,7 +269,10 @@ export default function ChatsScreen() {
               <View key={t.id}>
                 <PrivateChatRow
                   thread={t}
-                  onPress={() => router.push(`/direct/${t.otherUser.id}`)}
+                  isSelecting={isSelecting}
+                  isSelected={selectedIds.has(t.id)}
+                  onPress={() => isSelecting ? toggleSelect(t.id) : router.push(`/direct/${t.otherUser.id}`)}
+                  onLongPress={() => toggleSelect(t.id)}
                   c={c}
                   s={s}
                 />
@@ -246,12 +284,13 @@ export default function ChatsScreen() {
       )}
 
       <ConfirmSheet
-        visible={deleteThreadId !== null}
-        onClose={() => setDeleteThreadId(null)}
-        title="Eliminar chat"
-        description="¿Eliminar este chat y todos sus mensajes? Esta acción no se puede deshacer."
+        visible={deleteConfirm}
+        onClose={() => setDeleteConfirm(false)}
+        title={`Eliminar ${selectedIds.size} chat${selectedIds.size !== 1 ? 's' : ''}`}
+        description="Se eliminarán los chats seleccionados y todos sus mensajes. Esta acción no se puede deshacer."
         confirmLabel="Eliminar"
-        onConfirm={() => { if (deleteThreadId) deleteThread(deleteThreadId); }}
+        confirmColor={c.alert}
+        onConfirm={handleDeleteSelected}
       />
     </Screen>
   );
@@ -261,12 +300,16 @@ export default function ChatsScreen() {
 
 function MatchChatRow({
   thread,
+  isSelecting,
+  isSelected,
   onPress,
   onLongPress,
   c,
   s,
 }: {
   thread: ChatThreadData;
+  isSelecting: boolean;
+  isSelected: boolean;
   onPress: () => void;
   onLongPress: () => void;
   c: ColorPalette;
@@ -277,6 +320,11 @@ function MatchChatRow({
 
   return (
     <PressableScale onPress={onPress} onLongPress={onLongPress} style={s.row} scaleTo={0.98}>
+      {isSelecting ? (
+        <View style={[s.checkbox, isSelected && { backgroundColor: c.primary, borderColor: c.primary }]}>
+          {isSelected ? <Check size={12} color={c.textOnPrimary} weight="bold" /> : null}
+        </View>
+      ) : null}
       <View style={s.avatarsWrap}>
         {thread.participants.slice(0, 3).map((p, i) => (
           <View key={p.id} style={[s.avatarOffset, { marginLeft: i === 0 ? 0 : -10, zIndex: 3 - i }]}>
@@ -315,19 +363,30 @@ function MatchChatRow({
 
 function PrivateChatRow({
   thread,
+  isSelecting,
+  isSelected,
   onPress,
+  onLongPress,
   c,
   s,
 }: {
   thread: PrivateThreadData;
+  isSelecting: boolean;
+  isSelected: boolean;
   onPress: () => void;
+  onLongPress: () => void;
   c: ColorPalette;
   s: ReturnType<typeof makeStyles>;
 }) {
   const lastTime = thread.lastMessageAt ? relativeTime(thread.lastMessageAt) : '';
 
   return (
-    <PressableScale onPress={onPress} style={s.row} scaleTo={0.98}>
+    <PressableScale onPress={onPress} onLongPress={onLongPress} style={s.row} scaleTo={0.98}>
+      {isSelecting ? (
+        <View style={[s.checkbox, isSelected && { backgroundColor: c.primary, borderColor: c.primary }]}>
+          {isSelected ? <Check size={12} color={c.textOnPrimary} weight="bold" /> : null}
+        </View>
+      ) : null}
       <Avatar name={thread.otherUser.name} uri={thread.otherUser.avatarUrl} size={44} />
       <View style={s.col}>
         <View style={s.titleRow}>
@@ -353,11 +412,12 @@ function PrivateChatRow({
 
 function makeStyles(c: ColorPalette) {
   return StyleSheet.create({
-    head: { paddingHorizontal: spacing.lg, paddingTop: spacing.md, paddingBottom: spacing.xs },
-    tabsWrap: { paddingHorizontal: spacing.lg, paddingBottom: spacing.sm },
+    head: { paddingHorizontal: spacing.lg, paddingTop: spacing.md, paddingBottom: spacing.xs, backgroundColor: c.bg },
+    selectHeader: { flexDirection: 'row', alignItems: 'center', flex: 1 },
+    tabsWrap: { paddingHorizontal: spacing.lg, paddingBottom: spacing.sm, backgroundColor: c.bg },
     skeletonWrap: { paddingHorizontal: spacing.lg, paddingTop: spacing.md, gap: spacing.lg },
     skeletonRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
-    scroll: { paddingHorizontal: spacing.lg, paddingBottom: spacing.huge },
+    scroll: { paddingHorizontal: spacing.lg, paddingTop: spacing.sm, paddingBottom: spacing.huge },
     row: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: spacing.md },
     avatarsWrap: { flexDirection: 'row', width: 64 },
     avatarOffset: {},
@@ -379,6 +439,15 @@ function makeStyles(c: ColorPalette) {
       borderRadius: 10,
       paddingHorizontal: 5,
       backgroundColor: c.primary,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    checkbox: {
+      width: 22,
+      height: 22,
+      borderRadius: 11,
+      borderWidth: 2,
+      borderColor: c.border,
       alignItems: 'center',
       justifyContent: 'center',
     },

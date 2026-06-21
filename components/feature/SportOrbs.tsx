@@ -292,12 +292,6 @@ export function SportOrbs({ size = BASE_H }: { size?: number }) {
 
       </View>
 
-      {/* Sport name label */}
-      <RNText style={{ fontSize: 11 * sc, opacity: 0.4, marginTop: 6 * sc, letterSpacing: 0.3 }}>
-        {SPORT_LABEL[sportIdx]}
-      </RNText>
     </View>
   );
 }
-
-const SPORT_LABEL = ['Fútbol', 'Básket', 'Tenis', 'Beach Tennis', 'Pádel'] as const;

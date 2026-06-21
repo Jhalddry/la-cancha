@@ -335,7 +335,8 @@ export default function BuscarScreen() {
         <FlatList
           data={filtered}
           keyExtractor={(m) => m.id}
-          contentContainerStyle={s.scroll}
+          style={{ flex: 1 }}
+          contentContainerStyle={[s.scroll, filtered.length === 0 && { flexGrow: 1 }]}
           showsVerticalScrollIndicator={false}
           onEndReached={() => {
             if (hasNextPage && !isFetchingNextPage) void fetchNextPage();
@@ -657,7 +658,7 @@ function makeStyles(c: ColorPalette) {
     },
     errorWrap: { flex: 1, paddingHorizontal: spacing.lg },
     headerRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: spacing.md },
-    empty: { alignItems: 'center', gap: spacing.lg, paddingVertical: spacing.xxxl },
+    empty: { flex: 1, alignItems: 'center', justifyContent: 'flex-start', paddingTop: '22%', gap: spacing.lg, paddingHorizontal: spacing.xxl },
     emptyText: { alignItems: 'center', gap: spacing.xs, paddingHorizontal: spacing.lg },
     loadingMore: { paddingVertical: spacing.lg, alignItems: 'center' },
     sheetContent: { gap: spacing.xs, paddingBottom: spacing.lg },
