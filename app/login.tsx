@@ -239,9 +239,8 @@ export default function LoginScreen() {
             variant="secondary"
             leading={<GoogleColorIcon size={18} />}
             fullWidth={false}
-            style={{ flex: 1 }}
-            onPress={handleGoogleSignIn}
-            disabled={loading}
+            style={{ flex: 1, opacity: 0.4 }}
+            disabled
           />
           <Button
             label="Apple"

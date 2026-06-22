@@ -1,11 +1,32 @@
 import { useState, useEffect } from 'react';
+import { supabase } from '@/lib/supabase';
 
-// Fallback rate used when the live fetch fails or is loading.
-// Updated to reflect the actual BCV rate as of 2026.
 export const BCV_RATE = 90.0;
 
-/** Fetches the official BCV (Banco Central de Venezuela) USD→VES rate.
- *  Returns the static BCV_RATE fallback on any error (network, parse, timeout). */
+async function fetchLastStoredRate(): Promise<number | null> {
+  try {
+    const { data } = await supabase
+      .from('exchange_rate')
+      .select('rate')
+      .order('fetched_at', { ascending: false })
+      .limit(1)
+      .single();
+    const r = (data as { rate?: number } | null)?.rate;
+    return typeof r === 'number' && r > 0 ? r : null;
+  } catch {
+    return null;
+  }
+}
+
+async function storeRate(rate: number): Promise<void> {
+  try {
+    await supabase.from('exchange_rate').insert({ rate, source: 'bcv' });
+  } catch {
+    // non-critical
+  }
+}
+
+/** Fetches the live BCV rate. On failure falls back to last DB record, then to BCV_RATE. */
 export async function fetchBcvRate(): Promise<number> {
   try {
     const controller = new AbortController();
@@ -19,33 +40,33 @@ export async function fetchBcvRate(): Promise<number> {
     } finally {
       clearTimeout(timeoutId);
     }
-    if (!res.ok) return BCV_RATE;
+    if (!res.ok) throw new Error('non-ok');
     const data = (await res.json()) as { promedio?: number; venta?: number };
     const rate = data.promedio ?? data.venta;
-    if (typeof rate !== 'number' || rate <= 0) return BCV_RATE;
-    return parseFloat(rate.toString());
+    if (typeof rate !== 'number' || rate <= 0) throw new Error('invalid');
+    const parsed = parseFloat(rate.toString());
+    void storeRate(parsed);
+    return parsed;
   } catch {
-    return BCV_RATE;
+    const stored = await fetchLastStoredRate();
+    return stored ?? BCV_RATE;
   }
 }
 
-/** Hook that starts with the static fallback and upgrades to the live rate on mount.
- *  @returns `{ rate, isLive }` — isLive is false while using the static fallback. */
+/** Hook that starts with static fallback and upgrades to live (or last stored) rate on mount. */
 export function useBcvRate(): { rate: number; isLive: boolean } {
   const [rate, setRate] = useState<number>(BCV_RATE);
   const [isLive, setIsLive] = useState<boolean>(false);
 
   useEffect(() => {
     let cancelled = false;
-    fetchBcvRate().then((liveRate) => {
-      if (!cancelled && liveRate !== BCV_RATE) {
-        setRate(liveRate);
+    fetchBcvRate().then((resolved) => {
+      if (!cancelled && resolved !== BCV_RATE) {
+        setRate(resolved);
         setIsLive(true);
       }
     });
-    return () => {
-      cancelled = true;
-    };
+    return () => { cancelled = true; };
   }, []);
 
   return { rate, isLive };

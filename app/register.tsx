@@ -284,8 +284,8 @@ export default function RegisterScreen() {
           label="Continuar con Google"
           variant="secondary"
           leading={<GoogleColorIcon size={18} />}
-          onPress={handleGoogleSignIn}
-          disabled={loading}
+          style={{ opacity: 0.4 }}
+          disabled
         />
 
         <View style={staticStyles.regRow}>
