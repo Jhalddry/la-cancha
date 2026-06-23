@@ -1082,11 +1082,11 @@ function StatBlock({
       onPress={onPress}
       activeOpacity={onPress ? 0.6 : 1}
     >
-      <Text variant="h2" color={accent ? 'primary' : 'textPrimary'}>
+      <Text variant="h2" style={accent ? { color: '#FFD93D' } : undefined} color={accent ? undefined : 'textPrimary'}>
         <AnimatedNumber value={value} />
       </Text>
       {stars != null ? (
-        <Stars level={stars} size={11} />
+        <Stars level={stars} size={11} filledColor="#FFD93D" emptyColor="rgba(255,217,61,0.2)" />
       ) : null}
       <Text variant="caption" color={onPress ? 'primary' : 'textSecondary'} style={{ textAlign: 'center' }}>
         {label}

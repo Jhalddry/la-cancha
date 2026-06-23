@@ -158,7 +158,7 @@ export default function EditPerfilScreen() {
   const onAvatarPress = () => {
     if (avatarUri) {
       Alert.alert('Foto de perfil', undefined, [
-        { text: 'Cambiar foto', onPress: uploadAvatar },
+        { text: 'Cambiar foto', onPress: () => setTimeout(uploadAvatar, 350) },
         {
           text: 'Eliminar foto', style: 'destructive',
           onPress: () => Alert.alert('Eliminar foto', '¿Estás seguro?', [

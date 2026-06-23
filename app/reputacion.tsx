@@ -1,5 +1,5 @@
 import { useRouter } from 'expo-router';
-import { ArrowUp, Check, Star, WarningCircle } from 'phosphor-react-native';
+import { ArrowUp, Check, WarningCircle } from 'phosphor-react-native';
 import { useMemo } from 'react';
 import { ActivityIndicator, ScrollView, StyleSheet, View } from 'react-native';
 import { useQuery } from '@tanstack/react-query';
@@ -11,6 +11,8 @@ import { EmptyState } from '@/components/ui/EmptyState';
 import { Screen } from '@/components/ui/Screen';
 import { Stars } from '@/components/ui/Stars';
 import { Text } from '@/components/ui/Text';
+
+const STAR_AMBER = '#FFD93D';
 import { useColors } from '@/hooks/useColors';
 import { fetchMyRatings, type RatingRow } from '@/lib/ratingsApi';
 import { useSession } from '@/store/session';
@@ -67,7 +69,7 @@ export default function ReputacionScreen() {
     queryKey: ['my-ratings', userId ?? ''],
     queryFn: () => fetchMyRatings(userId!),
     enabled: !!userId,
-    staleTime: 30_000,
+    staleTime: 0,
   });
 
   const overall = useMemo(() => {
@@ -116,12 +118,19 @@ export default function ReputacionScreen() {
           {/* Overall rating card */}
           <Card>
             <View style={staticStyles.ratingCenter}>
-              <Text variant="h1" color="primary">
+              <Text style={{ fontSize: 52, fontWeight: '800', color: STAR_AMBER, letterSpacing: -1 }}>
                 {overall != null ? overall.toFixed(1) : '—'}
               </Text>
               {overall != null ? (
-                <Stars level={overall} size={20} />
-              ) : null}
+                <Stars level={overall} size={22} filledColor={STAR_AMBER} emptyColor="rgba(255,217,61,0.2)" />
+              ) : (
+                <Stars level={0} size={22} filledColor={STAR_AMBER} emptyColor="rgba(255,217,61,0.2)" />
+              )}
+              <Text variant="caption" color="textTertiary">
+                {ratings && ratings.length > 0
+                  ? `${ratings.length} reseña${ratings.length !== 1 ? 's' : ''}`
+                  : 'Sin reseñas aún'}
+              </Text>
             </View>
             <View style={s.divider} />
             <View style={staticStyles.statsRow}>
@@ -214,7 +223,7 @@ export default function ReputacionScreen() {
           {/* Reviews */}
           {!ratings || ratings.length === 0 ? (
             <EmptyState
-              icon={<Stars level={3} size={32} />}
+              icon={<Stars level={3} size={32} filledColor={STAR_AMBER} emptyColor="rgba(255,217,61,0.2)" />}
               title="Sin reseñas aún"
               description="Cuando otros jugadores te califiquen, aparecerán aquí."
             />
@@ -229,10 +238,7 @@ export default function ReputacionScreen() {
                       <Avatar name={review.raterName} uri={review.raterAvatarUrl} size={36} />
                       <View style={staticStyles.reviewAuthorInfo}>
                         <Text variant="bodyMedium" color="textPrimary">{review.raterName}</Text>
-                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
-                          <Star size={11} color={c.seria} weight="fill" />
-                          <Text variant="caption" color="textSecondary">{review.stars}</Text>
-                        </View>
+                        <Stars level={review.stars} size={13} filledColor={STAR_AMBER} emptyColor="rgba(255,217,61,0.2)" />
                       </View>
                     </View>
                     <Text variant="caption" color="textTertiary">{fmtDate(review.createdAt)}</Text>

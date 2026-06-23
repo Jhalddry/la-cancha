@@ -4,6 +4,11 @@ import { supabase } from "@/lib/supabase";
 import { rowToPlayer } from "@/lib/mappers";
 import type { Player } from "@/types/domain";
 
+// Prevents onAuthStateChange from double-fetching the profile when our own
+// signIn / signUp / completeOAuthSignIn is already doing it.  Set to the
+// user-id before fetchOrCreateProfile; cleared to null immediately after.
+let _signingInUserId: string | null = null;
+
 async function fetchProfile(userId: string): Promise<Player | null> {
   const { data, error } = await supabase
     .from("profiles")
@@ -86,8 +91,10 @@ export const useSession = create<SessionState>((set) => ({
       const { data, error } = await supabase.auth.signInWithPassword({ email, password });
       if (error) return error.message;
       if (data.user) {
+        _signingInUserId = data.user.id;
         const fallback = data.user.email?.split("@")[0] ?? "Usuario";
         const profile = await fetchOrCreateProfile(data.user.id, fallback);
+        _signingInUserId = null;
         set({
           user: profile,
           isAuthed: true,
@@ -97,6 +104,7 @@ export const useSession = create<SessionState>((set) => ({
       }
       return null;
     } catch (e: unknown) {
+      _signingInUserId = null;
       console.error("[signIn] threw:", e);
       return e instanceof Error ? e.message : "Error de conexión";
     }
@@ -111,11 +119,14 @@ export const useSession = create<SessionState>((set) => ({
       });
       if (error) return error.message;
       if (data.user) {
+        _signingInUserId = data.user.id;
         const profile = await fetchOrCreateProfile(data.user.id, name);
+        _signingInUserId = null;
         set({ user: profile, isAuthed: true, isLoading: false, isOnboarded: false });
       }
       return null;
     } catch (e: unknown) {
+      _signingInUserId = null;
       return e instanceof Error ? e.message : "Error de conexión";
     }
   },
@@ -126,11 +137,13 @@ export const useSession = create<SessionState>((set) => ({
       if (error) return error.message;
       const session = data.session;
       if (!session?.user) return 'No se pudo obtener la sesión.';
+      _signingInUserId = session.user.id;
       const fallback =
         (session.user.user_metadata?.name as string | undefined) ??
         session.user.email?.split('@')[0] ??
         'Usuario';
       const profile = await fetchOrCreateProfile(session.user.id, fallback);
+      _signingInUserId = null;
       set({
         user: profile,
         isAuthed: true,
@@ -139,6 +152,7 @@ export const useSession = create<SessionState>((set) => ({
       });
       return null;
     } catch (e: unknown) {
+      _signingInUserId = null;
       return e instanceof Error ? e.message : 'Error de conexión';
     }
   },
@@ -197,6 +211,10 @@ export const useSession = create<SessionState>((set) => ({
         event === "SIGNED_IN" ||
         event === "USER_UPDATED"
       ) {
+        // Skip if our own signIn/signUp/completeOAuthSignIn is already
+        // fetching the profile for this user — avoids the race where
+        // onAuthStateChange's fetch returns null and calls signOut().
+        if (_signingInUserId === session.user.id) return;
         const current = useSession.getState().user;
         if (current?.id === session.user.id) {
           set({ isAuthed: true, isLoading: false });
