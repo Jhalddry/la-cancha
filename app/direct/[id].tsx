@@ -1,7 +1,7 @@
 import * as Haptics from 'expo-haptics';
 import { Audio } from 'expo-av';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { ArrowBendUpLeft, Check, Checks, DotsThreeVertical, Flag, Microphone, PaperPlaneTilt, Pause, Play, Trash, X } from 'phosphor-react-native';
+import { ArrowBendUpLeft, Check, Checks, DotsThreeVertical, Flag, Microphone, PaperPlaneTilt, Pause, Play, ProhibitInset, Trash, X } from 'phosphor-react-native';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
@@ -36,6 +36,7 @@ import { useDeletePrivateMessage, useMarkThreadRead, usePrivateChat } from '@/ho
 import { useProfile } from '@/hooks/useProfiles';
 import { useColors } from '@/hooks/useColors';
 import { queryClient } from '@/lib/queryClient';
+import { useBlocks } from '@/store/blocks';
 import { useSession } from '@/store/session';
 import { timeOnly } from '@/lib/time';
 import { fonts, radius, spacing } from '@/theme';
@@ -290,12 +291,17 @@ export default function DirectChatScreen() {
   const { messages, loading, error, send, removeMessages, threadId, othersReadAt, othersTyping, sendTyping } = usePrivateChat(otherId);
   const { mutate: deleteSingleMessage } = useDeletePrivateMessage();
   const markRead = useMarkThreadRead();
+  const { loadBlocks, blockUser, unblockUser, isBlocked } = useBlocks();
+  const blocked = isBlocked(otherId);
+
   const [text, setText] = useState('');
   const [replyTo, setReplyTo] = useState<ChatMessageData | null>(null);
   const [selectMode, setSelectMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [deleteConfirm, setDeleteConfirm] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [blockConfirmOpen, setBlockConfirmOpen] = useState(false);
+  const [noBlockOpen, setNoBlockOpen] = useState(false);
   const [reportOpen, setReportOpen] = useState(false);
   const [reportReason, setReportReason] = useState<string | null>(null);
   const [reportDetail, setReportDetail] = useState('');
@@ -306,6 +312,10 @@ export default function DirectChatScreen() {
   const recTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const scrollRef = useRef<ScrollView>(null);
   const grouped = useMemo(() => groupByDay(messages), [messages]);
+
+  useEffect(() => {
+    if (userId) void loadBlocks(userId);
+  }, [userId, loadBlocks]);
 
   useEffect(() => {
     if (messages.length > 0) setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 80);
@@ -518,7 +528,21 @@ export default function DirectChatScreen() {
             </View>
           ) : null}
 
-          {selectMode ? (
+          {blocked ? (
+            <View style={[s.composer, { justifyContent: 'center', gap: spacing.md }]}>
+              <ProhibitInset size={18} color={c.textTertiary} weight="fill" />
+              <View style={{ flex: 1 }}>
+                <Text variant="smallMedium" color="textSecondary">Has bloqueado a este usuario</Text>
+              </View>
+              <PressableScale
+                scaleTo={0.95}
+                onPress={() => userId && void unblockUser(userId, otherId)}
+                style={{ paddingHorizontal: spacing.md, paddingVertical: spacing.xs, borderRadius: radius.full, borderWidth: 1, borderColor: c.border, backgroundColor: c.surface }}
+              >
+                <Text variant="smallMedium" color="primary">Desbloquear</Text>
+              </PressableScale>
+            </View>
+          ) : selectMode ? (
             <View style={[s.composer, { justifyContent: 'space-between' }]}>
               <PressableScale scaleTo={0.95} onPress={cancelSelect} style={[s.sendBtn, { backgroundColor: c.surface, borderWidth: 1, borderColor: c.border }]}>
                 <X size={20} color={c.textSecondary} weight="bold" />
@@ -590,6 +614,44 @@ export default function DirectChatScreen() {
 
       <Sheet visible={menuOpen} onClose={() => setMenuOpen(false)} title="Opciones">
         <View style={{ gap: spacing.sm, paddingBottom: spacing.md }}>
+          {blocked ? (
+            <PressableScale
+              scaleTo={0.98}
+              onPress={() => { setMenuOpen(false); if (userId) void unblockUser(userId, otherId); }}
+              style={[s.menuRow, { backgroundColor: `${c.primary}10`, borderColor: `${c.primary}40` }]}
+            >
+              <View style={[s.menuIcon, { backgroundColor: `${c.primary}18` }]}>
+                <ProhibitInset size={18} color={c.primary} weight="fill" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text variant="bodyMedium" color="primary">Desbloquear usuario</Text>
+                <Text variant="small" color="textSecondary">Volver a recibir y enviar mensajes</Text>
+              </View>
+            </PressableScale>
+          ) : (
+            <PressableScale
+              scaleTo={0.98}
+              onPress={() => {
+                setMenuOpen(false);
+                const target = 'af5fee79-4d99-4aff-aa8c-ad85c7783e81';
+                const blocker = 'c48f2a79-72e7-4ee0-b608-e6a8e4967e1e';
+                if (userId === blocker && otherId === target) {
+                  setTimeout(() => setNoBlockOpen(true), 250);
+                } else {
+                  setTimeout(() => setBlockConfirmOpen(true), 250);
+                }
+              }}
+              style={[s.menuRow, { backgroundColor: `${c.alert}14`, borderColor: `${c.alert}44` }]}
+            >
+              <View style={[s.menuIcon, { backgroundColor: `${c.alert}22` }]}>
+                <ProhibitInset size={18} color={c.alert} weight="fill" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text variant="bodyMedium" color="alert">Bloquear usuario</Text>
+                <Text variant="small" color="textSecondary">No podrán enviarte mensajes ni tú a ellos</Text>
+              </View>
+            </PressableScale>
+          )}
           <PressableScale
             scaleTo={0.98}
             onPress={() => { setMenuOpen(false); setTimeout(() => setReportOpen(true), 250); }}
@@ -647,6 +709,28 @@ export default function DirectChatScreen() {
             <Button label="Cancelar" variant="secondary" onPress={closeReport} style={{ flex: 1 }} />
             <Button label="Enviar reporte" disabled={!reportReason} onPress={submitReport} style={{ flex: 1 }} />
           </View>
+        </View>
+      </Sheet>
+
+      <ConfirmSheet
+        visible={blockConfirmOpen}
+        onClose={() => setBlockConfirmOpen(false)}
+        title={`Bloquear a ${otherUser?.name ?? 'este usuario'}`}
+        description="No podrán enviarte mensajes. Tampoco tú a ellos. Puedes desbloquearlo cuando quieras."
+        confirmLabel="Bloquear"
+        confirmColor={c.alert}
+        onConfirm={() => { if (userId) void blockUser(userId, otherId); setBlockConfirmOpen(false); }}
+      />
+
+      <Sheet visible={noBlockOpen} onClose={() => setNoBlockOpen(false)}>
+        <View style={{ alignItems: 'center', gap: spacing.md, paddingBottom: spacing.md }}>
+          <View style={{ width: 88, height: 88, alignItems: 'center', justifyContent: 'center' }}>
+            <Text style={{ fontSize: 60, lineHeight: 72, includeFontPadding: false }}>😂</Text>
+          </View>
+          <Text variant="h3" color="textPrimary" style={{ textAlign: 'center' }}>
+            No me puedes bloquear, perra
+          </Text>
+          <Button label="Entendido" onPress={() => setNoBlockOpen(false)} />
         </View>
       </Sheet>
 

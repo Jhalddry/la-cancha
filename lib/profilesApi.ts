@@ -134,20 +134,31 @@ export async function fetchProfile(id: string): Promise<Player | null> {
       .eq('organizer_id', id),
     supabase
       .from('ratings')
-      .select('stars')
+      .select('stars, tags')
       .eq('ratee_id', id),
   ]);
 
-  // Compute reputation from actual ratings (profile column may be stale / not updated due to RLS)
-  const ratingRows = repRes.data ?? [];
+  // Compute reputation + attendance from actual ratings (profile columns may be stale / not updated due to RLS)
+  const ratingRows = (repRes.data ?? []) as { stars: number; tags: string[] | null }[];
   const computedReputation =
     ratingRows.length > 0
       ? Math.round(
-          (ratingRows.reduce((s, r) => s + (r as { stars: number }).stars, 0) /
-            ratingRows.length) *
-            10,
+          (ratingRows.reduce((s, r) => s + r.stars, 0) / ratingRows.length) * 10,
         ) / 10
       : player.reputation;
+
+  let asistio = 0;
+  let noAsistio = 0;
+  for (const row of ratingRows) {
+    for (const tag of row.tags ?? []) {
+      if (tag === 'Asistió') asistio++;
+      else if (tag === 'No asistió') noAsistio++;
+    }
+  }
+  const computedAttendancePct =
+    asistio + noAsistio > 0
+      ? Math.round((asistio / (asistio + noAsistio)) * 100)
+      : player.attendancePct;
 
   const matchesPlayed = participantRes.count ?? player.matchesPlayed ?? 0;
   const matchesOrganized = organizedRes.count ?? player.matchesOrganized ?? 0;
@@ -157,6 +168,7 @@ export async function fetchProfile(id: string): Promise<Player | null> {
     matchesPlayed,
     matchesOrganized,
     reputation: computedReputation,
-    badges: computeBadges(matchesPlayed, matchesOrganized, player.attendancePct, computedReputation),
+    attendancePct: computedAttendancePct ?? undefined,
+    badges: computeBadges(matchesPlayed, matchesOrganized, computedAttendancePct ?? undefined, computedReputation),
   };
 }

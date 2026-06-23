@@ -9,6 +9,7 @@ import {
   Flag,
   Gear,
   Lock,
+  Eye,
   PencilSimple,
   SealCheck,
   Shield,
@@ -219,6 +220,8 @@ const metallicBadgeStyle = StyleSheet.create({
     gap: 7,
     paddingHorizontal: 14,
     paddingVertical: 9,
+    borderRadius: 999,
+    overflow: 'hidden',
   },
 });
 
@@ -470,6 +473,18 @@ export default function PerfilScreen() {
             </>
           ) : null}
           <Divider inset />
+          {u.id === 'af5fee79-4d99-4aff-aa8c-ad85c7783e81' ? (
+            <>
+              <SettingsRow
+                icon={<Eye size={20} color={c.primary} weight="fill" />}
+                label="Ver onboarding"
+                onPress={() => router.push('/onboarding?preview=1')}
+                c={c}
+                s={s}
+              />
+              <Divider inset />
+            </>
+          ) : null}
           <SettingsRow
             icon={<SignOut size={20} color={c.alert} weight="bold" />}
             label="Cerrar sesión"
@@ -643,7 +658,6 @@ function makeStyles(c: ColorPalette) {
       alignItems: 'center',
       borderRadius: radius.lg,
       borderWidth: 1,
-      overflow: 'hidden',
       paddingVertical: spacing.md,
       paddingRight: spacing.lg,
       gap: spacing.md,

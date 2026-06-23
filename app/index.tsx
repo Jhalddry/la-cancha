@@ -8,6 +8,7 @@ import Animated, {
   useSharedValue,
   withDelay,
   withSequence,
+  withSpring,
   withTiming,
 } from 'react-native-reanimated';
 import Svg, { Circle, Line } from 'react-native-svg';
@@ -32,53 +33,78 @@ export default function SplashRoute() {
   const c = useColors();
   const s = useMemo(() => makeStyles(c), [c]);
 
-  const dotScale = useSharedValue(0);
-  const dotOpacity = useSharedValue(0);
+  const dotScale       = useSharedValue(0);
+  const dotOpacity     = useSharedValue(0);
   const circleProgress = useSharedValue(CIRCUMFERENCE);
-  const armScale = useSharedValue(0);
+  const armScale       = useSharedValue(0);
   const wordmarkOpacity = useSharedValue(0);
-  const wordmarkY = useSharedValue(12);
-  const glowOpacity = useSharedValue(0);
+  const wordmarkY      = useSharedValue(16);
+  const wordmarkScale  = useSharedValue(0.86);
+  const glowOpacity    = useSharedValue(0);
+  const glowScale      = useSharedValue(1);
+  const logoRotate     = useSharedValue(0);
 
   useEffect(() => {
+    // 1. Dot materializes
     dotOpacity.value = withTiming(1, { duration: 250 });
-    dotScale.value = withTiming(1, { duration: 400, easing: Easing.out(Easing.cubic) });
+    dotScale.value   = withTiming(1, { duration: 400, easing: Easing.out(Easing.cubic) });
 
+    // 2. Circle draws
     circleProgress.value = withDelay(
       450,
       withTiming(0, { duration: 700, easing: Easing.inOut(Easing.cubic) }),
     );
 
-    armScale.value = withDelay(
-      1100,
-      withTiming(1, { duration: 400, easing: Easing.out(Easing.cubic) }),
+    // 3. Arms spring in with slight overshoot
+    armScale.value = withDelay(1100, withSpring(1, { damping: 10, stiffness: 120 }));
+
+    // 4. Micro-wobble after arms land
+    logoRotate.value = withDelay(
+      1360,
+      withSequence(
+        withTiming(-3,  { duration: 80 }),
+        withTiming(3,   { duration: 100 }),
+        withTiming(-1,  { duration: 80 }),
+        withTiming(0,   { duration: 80 }),
+      ),
     );
 
-    wordmarkOpacity.value = withDelay(1400, withTiming(1, { duration: 350 }));
-    wordmarkY.value = withDelay(1400, withTiming(0, { duration: 450, easing: Easing.out(Easing.cubic) }));
+    // 5. Wordmark slides + springs in
+    wordmarkOpacity.value = withDelay(1460, withTiming(1, { duration: 320 }));
+    wordmarkY.value       = withDelay(1460, withTiming(0, { duration: 480, easing: Easing.out(Easing.cubic) }));
+    wordmarkScale.value   = withDelay(1460, withSpring(1, { damping: 14, stiffness: 100 }));
 
+    // 6. Glow triple-pulse
     glowOpacity.value = withDelay(
-      1700,
+      1760,
       withSequence(
-        withTiming(1, { duration: 300 }),
-        withTiming(0.6, { duration: 300 }),
+        withTiming(1,    { duration: 220 }),
+        withTiming(0.4,  { duration: 200 }),
+        withTiming(0.85, { duration: 180 }),
+        withTiming(0.25, { duration: 180 }),
+        withTiming(0.55, { duration: 140 }),
+        withTiming(0,    { duration: 400 }),
+      ),
+    );
+    glowScale.value = withDelay(
+      1760,
+      withSequence(
+        withTiming(1.18, { duration: 220 }),
+        withTiming(1,    { duration: 200 }),
+        withTiming(1.10, { duration: 180 }),
+        withTiming(1,    { duration: 180 }),
+        withTiming(1.06, { duration: 140 }),
+        withTiming(1,    { duration: 400 }),
       ),
     );
 
     const t = setTimeout(() => {
       router.replace(isAuthed ? '/(tabs)' : '/login');
-    }, 2400);
+    }, 2700);
     return () => clearTimeout(t);
   }, [
-    armScale,
-    circleProgress,
-    dotOpacity,
-    dotScale,
-    glowOpacity,
-    isAuthed,
-    router,
-    wordmarkOpacity,
-    wordmarkY,
+    armScale, circleProgress, dotOpacity, dotScale, glowOpacity, glowScale,
+    isAuthed, logoRotate, router, wordmarkOpacity, wordmarkScale, wordmarkY,
   ]);
 
   const dotAnimatedProps = useAnimatedProps(() => ({
@@ -91,18 +117,24 @@ export default function SplashRoute() {
   }));
 
   const armStyle = useAnimatedStyle(() => ({
-    opacity: armScale.value,
-    transform: [{ scale: 0.6 + armScale.value * 0.4 }],
+    opacity: armScale.value > 0 ? 1 : 0,
+    transform: [
+      { scale: 0.6 + armScale.value * 0.4 },
+      { rotate: `${logoRotate.value}deg` },
+    ],
   }));
 
   const wordmarkStyle = useAnimatedStyle(() => ({
     opacity: wordmarkOpacity.value,
-    transform: [{ translateY: wordmarkY.value }],
+    transform: [
+      { translateY: wordmarkY.value },
+      { scale: wordmarkScale.value },
+    ],
   }));
 
   const glowStyle = useAnimatedStyle(() => ({
-    opacity: glowOpacity.value * 0.7,
-    transform: [{ scale: 1 + glowOpacity.value * 0.15 }],
+    opacity: glowOpacity.value * 0.65,
+    transform: [{ scale: glowScale.value }],
   }));
 
   return (
@@ -132,61 +164,18 @@ export default function SplashRoute() {
           </Svg>
           <Animated.View style={[StyleSheet.absoluteFill, s.arms, armStyle]}>
             <Svg width={SIZE} height={SIZE} viewBox="0 0 200 200">
-              <Line
-                x1={4}
-                y1={CENTER}
-                x2={28}
-                y2={CENTER}
-                stroke={c.primary}
-                strokeWidth={STROKE_WIDTH}
-                strokeLinecap="round"
-              />
-              <Line
-                x1={172}
-                y1={CENTER}
-                x2={196}
-                y2={CENTER}
-                stroke={c.primary}
-                strokeWidth={STROKE_WIDTH}
-                strokeLinecap="round"
-              />
-              <Line
-                x1={CENTER}
-                y1={4}
-                x2={CENTER}
-                y2={28}
-                stroke={c.primary}
-                strokeWidth={STROKE_WIDTH}
-                strokeLinecap="round"
-              />
-              <Line
-                x1={CENTER}
-                y1={172}
-                x2={CENTER}
-                y2={196}
-                stroke={c.primary}
-                strokeWidth={STROKE_WIDTH}
-                strokeLinecap="round"
-              />
-              <Circle
-                cx={CENTER}
-                cy={CENTER}
-                r={11}
-                stroke={c.primary}
-                strokeWidth={STROKE_WIDTH - 3}
-                fill="none"
-              />
+              <Line x1={4}   y1={CENTER} x2={28}  y2={CENTER} stroke={c.primary} strokeWidth={STROKE_WIDTH} strokeLinecap="round" />
+              <Line x1={172} y1={CENTER} x2={196} y2={CENTER} stroke={c.primary} strokeWidth={STROKE_WIDTH} strokeLinecap="round" />
+              <Line x1={CENTER} y1={4}   x2={CENTER} y2={28}  stroke={c.primary} strokeWidth={STROKE_WIDTH} strokeLinecap="round" />
+              <Line x1={CENTER} y1={172} x2={CENTER} y2={196} stroke={c.primary} strokeWidth={STROKE_WIDTH} strokeLinecap="round" />
+              <Circle cx={CENTER} cy={CENTER} r={11} stroke={c.primary} strokeWidth={STROKE_WIDTH - 3} fill="none" />
             </Svg>
           </Animated.View>
         </View>
 
         <Animated.View style={[s.wordmark, wordmarkStyle]}>
-          <Text variant="display" color="textPrimary">
-            LA{' '}
-          </Text>
-          <Text variant="display" color="primary">
-            CANCHA
-          </Text>
+          <Text variant="display" color="textPrimary">LA{' '}</Text>
+          <Text variant="display" color="primary">CANCHA</Text>
         </Animated.View>
         <Animated.View style={wordmarkStyle}>
           <Text variant="caption" color="textSecondary" style={s.tagline}>

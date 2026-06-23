@@ -20,6 +20,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import 'react-native-reanimated';
 
+
 import { queryClient } from '@/lib/queryClient';
 import { registerForPushNotifications } from '@/lib/pushNotifications';
 import { setAnalyticsUser } from '@/lib/analytics';
@@ -86,7 +87,17 @@ export default function RootLayout() {
 
   useEffect(() => {
     const unsubscribe = initialize();
-    return unsubscribe;
+    // Safety net: if session init stalls (network timeout, cold start race),
+    // unblock the UI after 8s rather than showing a permanent black screen.
+    const timeout = setTimeout(() => {
+      if (useSession.getState().isLoading) {
+        useSession.setState({ isLoading: false });
+      }
+    }, 8000);
+    return () => {
+      unsubscribe();
+      clearTimeout(timeout);
+    };
   }, [initialize]);
 
   // Register push token + analytics user when user logs in
@@ -121,7 +132,9 @@ export default function RootLayout() {
     }
   }, [fontsLoaded, isLoading]);
 
-  if (!fontsLoaded || isLoading) return null;
+  if (!fontsLoaded || isLoading) {
+    return <View style={[styles.root, { backgroundColor: c.bg }]} />;
+  }
 
   return (
     <QueryClientProvider client={queryClient}>

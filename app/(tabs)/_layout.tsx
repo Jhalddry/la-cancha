@@ -4,7 +4,8 @@ import {
   Label,
   NativeTabs,
 } from 'expo-router/unstable-native-tabs';
-import { Redirect } from 'expo-router';
+import { Redirect, Tabs } from 'expo-router';
+import { ChatCircleDots, Flag, House, MagnifyingGlass, User } from 'phosphor-react-native';
 import { DynamicColorIOS, Platform } from 'react-native';
 
 import { useUnreadChatCount } from '@/hooks/useChat';
@@ -21,15 +22,79 @@ export default function TabsLayout() {
   const { data: unreadNotifs = 0 } = useUnreadCount();
 
   if (!isAuthed) return <Redirect href="/login" />;
-  // isAuthed but no profile yet — fetchOrCreateProfile still running or failed.
-  // Return null to block render without redirecting to onboarding.
   if (!user) return null;
   if (!isOnboarded) return <Redirect href="/onboarding" />;
 
-  const tintColor =
-    Platform.OS === 'ios'
-      ? DynamicColorIOS({ dark: c.primary, light: c.primaryDim })
-      : c.primary;
+  if (Platform.OS === 'android') {
+    return (
+      <Tabs
+        screenOptions={{
+          headerShown: false,
+          tabBarActiveTintColor: c.primary,
+          tabBarInactiveTintColor: c.textTertiary,
+          tabBarStyle: {
+            backgroundColor: c.surface,
+            borderTopColor: c.border,
+            borderTopWidth: 1,
+          },
+          tabBarLabelStyle: {
+            fontSize: 11,
+            fontFamily: 'Inter_500Medium',
+          },
+        }}
+      >
+        <Tabs.Screen
+          name="index"
+          options={{
+            title: 'Inicio',
+            tabBarIcon: ({ focused, color }) => (
+              <House size={24} color={color} weight={focused ? 'fill' : 'regular'} />
+            ),
+            tabBarBadge: unreadNotifs > 0 ? (unreadNotifs > 99 ? '99+' : String(unreadNotifs)) : undefined,
+          }}
+        />
+        <Tabs.Screen
+          name="buscar"
+          options={{
+            title: 'Buscar',
+            tabBarIcon: ({ focused, color }) => (
+              <MagnifyingGlass size={24} color={color} weight={focused ? 'fill' : 'regular'} />
+            ),
+          }}
+        />
+        <Tabs.Screen
+          name="mis-partidas"
+          options={{
+            title: 'Mis Partidas',
+            tabBarIcon: ({ focused, color }) => (
+              <Flag size={24} color={color} weight={focused ? 'fill' : 'regular'} />
+            ),
+          }}
+        />
+        <Tabs.Screen
+          name="chats"
+          options={{
+            title: 'Chats',
+            tabBarIcon: ({ focused, color }) => (
+              <ChatCircleDots size={24} color={color} weight={focused ? 'fill' : 'regular'} />
+            ),
+            tabBarBadge: unreadChats > 0 ? (unreadChats > 99 ? '99+' : String(unreadChats)) : undefined,
+          }}
+        />
+        <Tabs.Screen
+          name="perfil"
+          options={{
+            title: 'Perfil',
+            tabBarIcon: ({ focused, color }) => (
+              <User size={24} color={color} weight={focused ? 'fill' : 'regular'} />
+            ),
+          }}
+        />
+      </Tabs>
+    );
+  }
+
+  const tintColor = DynamicColorIOS({ dark: c.primary, light: c.primaryDim });
 
   return (
     <NativeTabs tintColor={tintColor}>

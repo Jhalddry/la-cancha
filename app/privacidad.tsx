@@ -16,53 +16,68 @@ export default function PrivacidadScreen() {
 
   return (
     <Screen edges={['top']}>
-      <BackHeader
-        title="Política de Privacidad"
-        onBack={() => router.back()}
-        transparent
-      />
-      <ScrollView
-        contentContainerStyle={staticStyles.scroll}
-        showsVerticalScrollIndicator={false}
-      >
+      <BackHeader title="Política de Privacidad" onBack={() => router.back()} transparent />
+      <ScrollView contentContainerStyle={staticStyles.scroll} showsVerticalScrollIndicator={false}>
         <Text variant="caption" color="textTertiary">
-          Última actualización: 18 de mayo de 2026
+          Última actualización: 22 de junio de 2026
         </Text>
 
         <Section title="Información que Recopilamos">
           <Text variant="body" color="textSecondary">
-            En La Cancha recopilamos información necesaria para brindarte el mejor servicio:
+            Recopilamos únicamente los datos necesarios para brindarte el servicio:
           </Text>
-          <Bullet text="Datos de perfil: nombre, correo electrónico, foto y preferencias deportivas." dotStyle={s.dot} />
-          <Bullet text="Datos de ubicación: para mostrarte partidas cercanas (solo cuando la app está en uso)." dotStyle={s.dot} />
-          <Bullet text="Información de uso: cómo interactúas con la plataforma para mejorar la experiencia." dotStyle={s.dot} />
-          <Bullet text="Comunicaciones: mensajes dentro de la app entre jugadores y organizadores." dotStyle={s.dot} />
+          <Bullet text="Datos de cuenta: nombre, correo electrónico y contraseña (almacenada con hash, nunca en texto plano)." dotStyle={s.dot} />
+          <Bullet text="Perfil deportivo: nombre de usuario, foto de perfil, deportes, nivel de juego, posiciones preferidas, ciudad y biografía." dotStyle={s.dot} />
+          <Bullet text="Ubicación: coordenadas GPS para mostrarte distancias a partidas cercanas. Solo se accede mientras la app está en uso y con tu permiso explícito." dotStyle={s.dot} />
+          <Bullet text="Contenido generado: mensajes de chat (texto y notas de voz), fotos de partida y calificaciones." dotStyle={s.dot} />
+          <Bullet text="Datos de uso: eventos anónimos de interacción (pantallas visitadas, acciones realizadas) para mejorar la experiencia. No incluyen datos personales identificables." dotStyle={s.dot} />
+          <Bullet text="Token de notificaciones push: si otorgas permiso, almacenamos el token del dispositivo para enviarte avisos de partidas, mensajes y calificaciones." dotStyle={s.dot} />
+          <Bullet text="Lista de usuarios bloqueados: se almacena localmente en tu dispositivo (AsyncStorage) y no se sincroniza con nuestros servidores." dotStyle={s.dot} />
         </Section>
 
         <Section title="Cómo Usamos tu Información">
           <Text variant="body" color="textSecondary">
-            Utilizamos tus datos exclusivamente para:
+            Usamos tus datos exclusivamente para:
           </Text>
-          <Bullet text="Conectarte con jugadores y partidas cercanas a tu ubicación." dotStyle={s.dot} />
-          <Bullet text="Mostrarte partidas relevantes según tu deporte, nivel y posición." dotStyle={s.dot} />
-          <Bullet text="Gestionar pagos y transacciones dentro de la plataforma." dotStyle={s.dot} />
-          <Bullet text="Enviarte notificaciones sobre tus partidas y mensajes." dotStyle={s.dot} />
-          <Bullet text="Mejorar continuamente el servicio basándonos en el uso." dotStyle={s.dot} />
+          <Bullet text="Autenticarte y mantener tu sesión activa de forma segura." dotStyle={s.dot} />
+          <Bullet text="Mostrarte partidas relevantes filtradas por deporte, nivel, ubicación y distancia." dotStyle={s.dot} />
+          <Bullet text="Facilitar la comunicación entre jugadores y organizadores vía chat de partida y mensajes privados." dotStyle={s.dot} />
+          <Bullet text="Reproducir y almacenar notas de voz enviadas en los chats." dotStyle={s.dot} />
+          <Bullet text="Calcular y mostrar tu reputación en base a calificaciones recibidas de otros jugadores." dotStyle={s.dot} />
+          <Bullet text="Asignar insignias automáticamente según tus estadísticas de partidas jugadas y organizadas." dotStyle={s.dot} />
+          <Bullet text="Enviarte notificaciones push sobre solicitudes de unión, aprobaciones, inicio/fin de partidas, mensajes y calificaciones." dotStyle={s.dot} />
+          <Bullet text="Detectar y prevenir comportamientos abusivos o fraudulentos en la plataforma." dotStyle={s.dot} />
         </Section>
 
-        <Section title="Compartir Información">
+        <Section title="Compartir Información con Terceros">
           <Text variant="body" color="textSecondary">
-            La Cancha no vende ni comparte tu información personal con terceros con fines comerciales. Solo compartimos datos en estos casos:
+            La Cancha no vende ni comparte tu información personal con fines comerciales. Los datos se comparten únicamente en estos casos:
           </Text>
-          <Bullet text="Con otros jugadores: tu nombre, foto y nivel de juego son visibles en tu perfil público." dotStyle={s.dot} />
-          <Bullet text="Con organizadores: al unirte a una partida, el organizador puede ver tu perfil." dotStyle={s.dot} />
-          <Bullet text="Por obligación legal: si una autoridad competente lo requiere debidamente." dotStyle={s.dot} />
+          <Bullet text="Con otros usuarios: tu nombre, foto, nivel y deportes son visibles en tu perfil público. Tu ciudad y bio son opcionales." dotStyle={s.dot} />
+          <Bullet text="Con organizadores de partida: al unirte, el organizador ve tu perfil y el método de pago que seleccionaste." dotStyle={s.dot} />
+          <Bullet text="Con Supabase (proveedor de infraestructura): almacenamos todos los datos en servidores de Supabase con cifrado en reposo y en tránsito. Supabase no accede a tu información con fines propios." dotStyle={s.dot} />
+          <Bullet text="Por obligación legal: únicamente si una autoridad competente lo requiere mediante proceso legal debidamente fundado." dotStyle={s.dot} />
         </Section>
 
-        <Section title="Seguridad de Datos">
+        <Section title="Almacenamiento y Seguridad">
           <Text variant="body" color="textSecondary">
-            Implementamos medidas de seguridad estándar de la industria para proteger tu información, incluyendo cifrado en tránsito y en reposo. No almacenamos información de tarjetas de crédito ni datos bancarios completos.
+            Tomamos las siguientes medidas para proteger tu información:
           </Text>
+          <Bullet text="Todas las comunicaciones usan HTTPS/TLS." dotStyle={s.dot} />
+          <Bullet text="Las contraseñas se almacenan con hash seguro; nunca las vemos en texto plano." dotStyle={s.dot} />
+          <Bullet text="Los archivos (fotos de perfil, fotos de partida, notas de voz) se guardan en Supabase Storage con acceso restringido por políticas de seguridad." dotStyle={s.dot} />
+          <Bullet text="Los tokens de sesión se renuevan automáticamente y expiran si no se usa la app." dotStyle={s.dot} />
+          <Bullet text="La lista de usuarios bloqueados se almacena localmente y no viaja a nuestros servidores." dotStyle={s.dot} />
+        </Section>
+
+        <Section title="Retención de Datos">
+          <Text variant="body" color="textSecondary">
+            Conservamos tu información mientras tengas una cuenta activa. Al eliminar tu cuenta:
+          </Text>
+          <Bullet text="Tu perfil, mensajes y datos de partidas son eliminados de forma permanente." dotStyle={s.dot} />
+          <Bullet text="Las calificaciones que otros usuarios te dieron pueden conservarse de forma anonimizada para integridad del sistema." dotStyle={s.dot} />
+          <Bullet text="Las fotos que subiste son eliminadas del almacenamiento." dotStyle={s.dot} />
+          <Bullet text="Los datos de uso anónimos pueden conservarse con fines estadísticos." dotStyle={s.dot} />
         </Section>
 
         <Section title="Tus Derechos">
@@ -70,15 +85,15 @@ export default function PrivacidadScreen() {
             Como usuario de La Cancha tienes derecho a:
           </Text>
           <Bullet text="Acceder a toda la información personal que tenemos sobre ti." dotStyle={s.dot} />
-          <Bullet text="Rectificar datos incorrectos o incompletos desde tu perfil." dotStyle={s.dot} />
-          <Bullet text="Eliminar tu cuenta y todos tus datos de nuestra plataforma." dotStyle={s.dot} />
-          <Bullet text="Portar tus datos a otra plataforma en formato estándar." dotStyle={s.dot} />
-          <Bullet text="Oponerte al procesamiento de tus datos para fines de marketing." dotStyle={s.dot} />
+          <Bullet text="Rectificar datos incorrectos o incompletos desde tu perfil en cualquier momento." dotStyle={s.dot} />
+          <Bullet text="Eliminar tu cuenta y todos tus datos. Escríbenos a privacidad@lacancha.app." dotStyle={s.dot} />
+          <Bullet text="Revocar el permiso de ubicación o notificaciones desde la configuración de tu dispositivo." dotStyle={s.dot} />
+          <Bullet text="Bloquear a otros usuarios desde los chats privados para impedir la comunicación." dotStyle={s.dot} />
         </Section>
 
         <Section title="Contacto">
           <Text variant="body" color="textSecondary">
-            Para ejercer tus derechos o consultas sobre privacidad, contáctanos en:
+            Para ejercer tus derechos o resolver dudas sobre privacidad:
           </Text>
           <Text variant="bodyMedium" color="primary" style={staticStyles.email}>
             privacidad@lacancha.app
@@ -95,9 +110,7 @@ export default function PrivacidadScreen() {
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <View style={staticStyles.section}>
-      <Text variant="h3" color="textPrimary">
-        {title}
-      </Text>
+      <Text variant="h3" color="textPrimary">{title}</Text>
       <View style={staticStyles.sectionBody}>{children}</View>
     </View>
   );
@@ -107,9 +120,7 @@ function Bullet({ text, dotStyle }: { text: string; dotStyle: object }) {
   return (
     <View style={staticStyles.bullet}>
       <View style={dotStyle} />
-      <Text variant="body" color="textSecondary" style={{ flex: 1 }}>
-        {text}
-      </Text>
+      <Text variant="body" color="textSecondary" style={{ flex: 1 }}>{text}</Text>
     </View>
   );
 }

@@ -28,7 +28,8 @@
       "mcp__visualize__show_widget",
       "Bash(Read \"C:/Users/User/AppData/Local/Temp/claude/C--Users-User-OneDrive-Documents-la-cancha/ee5d9841-2885-4703-9f74-a9d13f6e8607/tasks/bzbj6v6rk.output\")",
       "PowerShell(Get-ChildItem \"C:\\\\Users\\\\User\\\\OneDrive\\\\Documents\\\\la-cancha\\\\supabase\\\\migrations\\\\\" | Where-Object { $_.Name -match \"photo\" })",
-      "Bash(npm install *)"
+      "Bash(npm install *)",
+      "Bash(grep -v \"//\\\\|test\")"
     ]
   }
 }

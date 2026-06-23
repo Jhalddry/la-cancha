@@ -1299,7 +1299,6 @@ function makeStyles(c: ColorPalette) {
       alignItems: 'center',
       borderRadius: radius.lg,
       borderWidth: 1,
-      overflow: 'hidden',
       paddingVertical: spacing.md,
       paddingHorizontal: spacing.lg,
       gap: spacing.md,
