@@ -118,7 +118,10 @@ export default function ReputacionScreen() {
           {/* Overall rating card */}
           <Card>
             <View style={staticStyles.ratingCenter}>
-              <Text style={{ fontSize: 52, fontWeight: '800', color: STAR_AMBER, letterSpacing: -1 }}>
+              <Text
+                variant="display"
+                style={{ fontSize: 56, color: STAR_AMBER, lineHeight: 68, letterSpacing: -2, includeFontPadding: false }}
+              >
                 {overall != null ? overall.toFixed(1) : '—'}
               </Text>
               {overall != null ? (
