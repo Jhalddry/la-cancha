@@ -18,7 +18,7 @@ import {
   XCircle,
 } from 'phosphor-react-native';
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { ActivityIndicator, Modal, ScrollView, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Modal, ScrollView, StyleSheet, View, type ViewInstance } from 'react-native';
 import Animated, {
   useAnimatedScrollHandler,
   useAnimatedStyle,
@@ -52,6 +52,7 @@ import { supabase } from '@/lib/supabase';
 import { useProfile } from '@/hooks/useProfiles';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { fetchMatchPhotos, type MatchPhoto } from '@/lib/matchPhotosApi';
+import { useRequireAuth } from '@/hooks/useRequireAuth';
 import { useSession } from '@/store/session';
 import {
   formatMatchTime,
@@ -84,6 +85,7 @@ export default function MatchDetailScreen() {
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
   const userId = useSession((st) => st.user?.id);
+  const requireAuth = useRequireAuth();
   const isAdmin = useSession((st) => st.user?.isAdmin ?? false);
   const { data: match, isLoading } = useMatch(id);
   const { mutate: leaveMatch, isPending: isLeaving } = useLeaveMatch();
@@ -93,7 +95,7 @@ export default function MatchDetailScreen() {
   const [leaveConfirmOpen, setLeaveConfirmOpen] = useState(false);
   const [selectedParticipant, setSelectedParticipant] = useState<MatchParticipant | null>(null);
 
-  const shareCardRef = useRef<View>(null);
+  const shareCardRef = useRef<ViewInstance>(null);
   const [viewerCount, setViewerCount] = useState(0);
 
   // Track who's viewing this match in real time via Supabase Presence
@@ -587,7 +589,7 @@ export default function MatchDetailScreen() {
             <>
               <Button
                 label="Quiero unirme"
-                onPress={() => router.push(`/unirse/${match.id}`)}
+                onPress={() => requireAuth(() => router.push(`/unirse/${match.id}`))}
               />
               <Text variant="small" color="textTertiary" style={s.footerNote}>
                 El pago se coordina con el organizador

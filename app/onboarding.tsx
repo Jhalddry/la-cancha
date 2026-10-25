@@ -7,7 +7,7 @@ import {
   StyleSheet,
   useWindowDimensions,
   View,
-  type ScrollView as ScrollViewType,
+  type ScrollViewInstance,
 } from 'react-native';
 import Animated, {
   cancelAnimation,
@@ -336,7 +336,7 @@ export default function OnboardingScreen() {
 
   const [step, setStep] = useState(0);
   const isIntro = step < slides.length;
-  const introRef = useRef<ScrollViewType | null>(null);
+  const introRef = useRef<ScrollViewInstance | null>(null);
 
   // Setup state
   const [username, setUsername]   = useState('');

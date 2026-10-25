@@ -32,6 +32,7 @@ export default function LoginScreen() {
   const router = useRouter();
   const signIn = useSession((s) => s.signIn);
   const completeOAuthSignIn = useSession((s) => s.completeOAuthSignIn);
+  const enterGuest = useSession((s) => s.enterGuest);
   const c = useColors();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -250,6 +251,15 @@ export default function LoginScreen() {
             style={{ flex: 1, opacity: 0.4 }}
           />
         </View>
+
+        <Button
+          label="Explorar sin cuenta"
+          variant="ghost"
+          onPress={() => {
+            enterGuest();
+            router.replace('/(tabs)');
+          }}
+        />
 
         <View style={staticStyles.regRow}>
           <Text variant="small" color="textSecondary">

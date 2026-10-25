@@ -27,6 +27,7 @@ import {
   TextInput as RNTextInput,
   TouchableOpacity,
   View,
+  type ViewInstance,
 } from 'react-native';
 import { captureRef } from 'react-native-view-shot';
 import * as Sharing from 'expo-sharing';
@@ -237,7 +238,7 @@ export default function PlayerProfileScreen() {
     if (!id) return;
     router.push(`/direct/${id}`);
   };
-  const shareCardRef = useRef<View>(null);
+  const shareCardRef = useRef<ViewInstance>(null);
 
   const handleShare = async () => {
     try {

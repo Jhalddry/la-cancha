@@ -38,6 +38,7 @@ import { PlayerPositions } from '@/components/feature/PlayerPositions';
 import { Divider } from '@/components/ui/Divider';
 import { IconCircle } from '@/components/ui/IconCircle';
 import { PressableScale } from '@/components/ui/PressableScale';
+import { GuestPrompt } from '@/components/feature/GuestPrompt';
 import { Screen } from '@/components/ui/Screen';
 import { Text } from '@/components/ui/Text';
 import { useColors } from '@/hooks/useColors';
@@ -270,7 +271,7 @@ const SPORT_CONFIG: Record<Sport, { color: string; lightColor: string; emoji: st
   beachTennis: { color: '#fbbf24', lightColor: '#b45309', emoji: '🏖️', label: 'Beach Tennis' },
 };
 
-export default function PerfilScreen() {
+function PerfilContent() {
   const router = useRouter();
   const u = useSession((s) => s.user);
   const signOut = useSession((s) => s.signOut);
@@ -679,4 +680,17 @@ function makeStyles(c: ColorPalette) {
     },
     empty: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   });
+}
+
+export default function PerfilScreen() {
+  const user = useSession((s) => s.user);
+  if (!user) {
+    return (
+      <GuestPrompt
+        title="Tu perfil"
+        description="Inicia sesión para ver tu perfil, reputación y ajustes."
+      />
+    );
+  }
+  return <PerfilContent />;
 }

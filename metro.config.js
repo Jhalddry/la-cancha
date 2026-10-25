@@ -14,6 +14,13 @@ config.resolver.resolveRequest = (context, moduleName, platform) => {
       filePath: path.resolve(__dirname, 'node_modules/@supabase/supabase-js/dist/index.cjs'),
     };
   }
+  // react-native-maps is native-only; use a placeholder on web.
+  if (platform === 'web' && moduleName === 'react-native-maps') {
+    return {
+      type: 'sourceFile',
+      filePath: path.resolve(__dirname, 'lib/web/react-native-maps.tsx'),
+    };
+  }
   if (moduleName.startsWith('@opentelemetry/')) {
     return { type: 'empty' };
   }

@@ -16,6 +16,7 @@ import { Screen } from '@/components/ui/Screen';
 import { ShimmerSkeleton } from '@/components/ui/ShimmerSkeleton';
 import { Text } from '@/components/ui/Text';
 import { CityPickerSheet } from '@/components/feature/CityPickerSheet';
+import { useRequireAuth } from '@/hooks/useRequireAuth';
 import { useSession } from '@/store/session';
 import { useMatches } from '@/hooks/useMatches';
 import { useUnreadCount } from '@/hooks/useNotifications';
@@ -39,7 +40,9 @@ export default function HomeScreen() {
   const router = useRouter();
   const user = useSession((s) => s.user);
   const setCityStore = useSession((s) => s.setCity);
-  const displayName = user?.name ?? '…';
+  const isGuest = useSession((s) => s.isGuest);
+  const requireAuth = useRequireAuth();
+  const displayName = user?.name ?? (isGuest ? 'invitado' : '…');
   const city = user?.city ?? '';
   const [locationOpen, setLocationOpen] = useState(false);
   const {
@@ -109,7 +112,7 @@ export default function HomeScreen() {
             <PressableScale
               style={s.bellBtn}
               scaleTo={0.92}
-              onPress={() => router.push('/notificaciones')}
+              onPress={() => requireAuth(() => router.push('/notificaciones'))}
             >
               <Bell size={22} color={c.textPrimary} weight="regular" />
               {unreadCount > 0 ? <View style={s.bellDot} /> : null}
@@ -136,7 +139,7 @@ export default function HomeScreen() {
             <Text variant="small" color="bg" style={s.ctaSubPrimary}>Encuentra partidas cerca de ti</Text>
           </PressableScale>
           {!user?.isAdmin ? (
-            <PressableScale style={[s.cta, s.ctaSecondary]} scaleTo={0.97} onPress={() => router.push('/crear')}>
+            <PressableScale style={[s.cta, s.ctaSecondary]} scaleTo={0.97} onPress={() => requireAuth(() => router.push('/crear'))}>
               <View style={s.ctaIconWrapSecondary}>
                 <Plus size={22} color={c.primary} weight="bold" />
               </View>

@@ -1,5 +1,4 @@
 import * as Haptics from 'expo-haptics';
-import { Audio } from 'expo-av';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { ArrowBendUpLeft, Check, Checks, DotsThreeVertical, Flag, Microphone, PaperPlaneTilt, Pause, Play, ProhibitInset, Trash, X } from 'phosphor-react-native';
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -11,6 +10,7 @@ import {
   StyleSheet,
   TextInput as RNTextInput,
   View,
+  type ScrollViewInstance,
 } from 'react-native';
 import Animated, {
   runOnJS,
@@ -35,6 +35,7 @@ import { TextInput } from '@/components/ui/TextInput';
 import { useDeletePrivateMessage, useMarkThreadRead, usePrivateChat } from '@/hooks/useChat';
 import { useProfile } from '@/hooks/useProfiles';
 import { useColors } from '@/hooks/useColors';
+import { useVoicePlayback, useVoiceRecorder } from '@/hooks/useVoice';
 import { queryClient } from '@/lib/queryClient';
 import { useBlocks } from '@/store/blocks';
 import { useSession } from '@/store/session';
@@ -59,42 +60,13 @@ function barHeights(id: string, count = 20): number[] {
 // ─── Voice bubble ─────────────────────────────────────────────────────────────
 
 function VoiceBubble({ url, durationSec, messageId, isMe, c }: { url: string; durationSec?: number; messageId: string; isMe: boolean; c: ColorPalette }) {
-  const [playing, setPlaying] = useState(false);
-  const [elapsed, setElapsed] = useState(0);
   const [containerWidth, setContainerWidth] = useState(0);
-  const progress = useSharedValue(0);
-  const soundRef = useRef<Audio.Sound | null>(null);
+  const { playing, elapsed, progress, toggle: handlePlay } = useVoicePlayback(url, durationSec ?? 0);
   const bars = useMemo(() => barHeights(messageId), [messageId]);
   const total = durationSec ?? 0;
   const accent = isMe ? c.bg : c.primary;
 
-  useEffect(() => {
-    return () => { soundRef.current?.unloadAsync().catch(() => {}); };
-  }, []);
-
   const clipStyle = useAnimatedStyle(() => ({ width: containerWidth * progress.value }));
-
-  const handlePlay = async () => {
-    if (playing) { await soundRef.current?.pauseAsync(); setPlaying(false); return; }
-    try {
-      if (!soundRef.current) {
-        await Audio.setAudioModeAsync({ playsInSilentModeIOS: true, allowsRecordingIOS: false });
-        const { sound } = await Audio.Sound.createAsync(
-          { uri: url },
-          { shouldPlay: true, progressUpdateIntervalMillis: 80 },
-          (status) => {
-            if (!status.isLoaded) return;
-            const pos = status.positionMillis ?? 0;
-            progress.value = withTiming(total > 0 ? Math.min(pos / (total * 1000), 1) : 0, { duration: 100 });
-            setElapsed(Math.floor(pos / 1000));
-            if (status.didJustFinish) { setPlaying(false); setElapsed(0); progress.value = withTiming(0, { duration: 300 }); soundRef.current = null; }
-          },
-        );
-        soundRef.current = sound;
-      } else { await soundRef.current.playAsync(); }
-      setPlaying(true);
-    } catch { setPlaying(false); }
-  };
 
   const fmtSec = (s: number) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 
@@ -306,11 +278,8 @@ export default function DirectChatScreen() {
   const [reportReason, setReportReason] = useState<string | null>(null);
   const [reportDetail, setReportDetail] = useState('');
   const [reportDoneOpen, setReportDoneOpen] = useState(false);
-  const [isRecording, setIsRecording] = useState(false);
-  const [recElapsed, setRecElapsed] = useState(0);
-  const recRef = useRef<Audio.Recording | null>(null);
-  const recTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const scrollRef = useRef<ScrollView>(null);
+  const { isRecording, elapsed: recElapsed, start: startRecording, stop: stopVoice, cancel: cancelRecording } = useVoiceRecorder();
+  const scrollRef = useRef<ScrollViewInstance>(null);
   const grouped = useMemo(() => groupByDay(messages), [messages]);
 
   useEffect(() => {
@@ -370,44 +339,11 @@ export default function DirectChatScreen() {
     void queryClient.invalidateQueries({ queryKey: ['private-threads', userId] });
   };
 
-  const startRecording = async () => {
-    try {
-      const { granted } = await Audio.requestPermissionsAsync();
-      if (!granted) return;
-      await Audio.setAudioModeAsync({ allowsRecordingIOS: true, playsInSilentModeIOS: true });
-      const rec = new Audio.Recording();
-      await rec.prepareToRecordAsync(Audio.RecordingOptionsPresets.HIGH_QUALITY);
-      await rec.startAsync();
-      recRef.current = rec;
-      setRecElapsed(0);
-      setIsRecording(true);
-      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-      recTimerRef.current = setInterval(() => setRecElapsed((e) => e + 1), 1000);
-    } catch { setIsRecording(false); }
-  };
-
   const stopRecording = async () => {
-    if (recTimerRef.current) clearInterval(recTimerRef.current);
-    setIsRecording(false);
-    const rec = recRef.current;
-    recRef.current = null;
+    const rec = await stopVoice();
     if (!rec) return;
-    try {
-      await rec.stopAndUnloadAsync();
-      const uri = rec.getURI();
-      if (uri && recElapsed > 0) {
-        await handleVoiceSend(uri, recElapsed);
-        void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      }
-    } catch {}
-  };
-
-  const cancelRecording = async () => {
-    if (recTimerRef.current) clearInterval(recTimerRef.current);
-    setIsRecording(false);
-    const rec = recRef.current;
-    recRef.current = null;
-    try { if (rec) await rec.stopAndUnloadAsync(); } catch {}
+    await handleVoiceSend(rec.uri, rec.durationSec);
+    void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
   };
 
   const closeReport = () => { setReportOpen(false); setReportReason(null); setReportDetail(''); };

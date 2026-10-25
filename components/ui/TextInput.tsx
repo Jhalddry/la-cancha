@@ -4,6 +4,7 @@ import {
   TextInput as RNTextInput,
   View,
   type StyleProp,
+  type TextInputInstance,
   type TextInputProps,
   type TextStyle,
   type ViewStyle,
@@ -25,7 +26,7 @@ interface Props extends Omit<TextInputProps, 'style'> {
   variant?: 'default' | 'plain';
 }
 
-export const TextInput = forwardRef<RNTextInput, Props>(function TextInput(
+export const TextInput = forwardRef<TextInputInstance, Props>(function TextInput(
   {
     label,
     leading,

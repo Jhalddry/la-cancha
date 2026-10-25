@@ -7,11 +7,15 @@
     "icon": "./assets/images/icon.png",
     "scheme": "lacancha",
     "userInterfaceStyle": "dark",
-    "newArchEnabled": true,
     "platforms": [
       "ios",
-      "android"
+      "android",
+      "web"
     ],
+    "web": {
+      "bundler": "metro",
+      "output": "single"
+    },
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.lacancha.app",
@@ -26,7 +30,6 @@
         "foregroundImage": "./assets/images/android-icon-foreground.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
-      "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
       "permissions": [
         "android.permission.ACCESS_COARSE_LOCATION",
@@ -68,7 +71,9 @@
           "photosPermission": "La Cancha necesita acceso a tus fotos para elegir foto de perfil y enviar imágenes en el chat.",
           "cameraPermission": "La Cancha necesita acceso a tu cámara para tomar fotos de perfil y enviarlas en el chat."
         }
-      ]
+      ],
+      "expo-audio",
+      "expo-asset"
     ],
     "experiments": {
       "typedRoutes": false,

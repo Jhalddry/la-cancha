@@ -60,7 +60,7 @@ See `CLAUDE.md §11` for the full roadmap.
 
 | Layer | Choice |
 |---|---|
-| Framework | Expo SDK 54 (managed workflow), React Native 0.81, React 19 |
+| Framework | Expo SDK 58 (managed workflow), React Native 0.88, React 19.3 |
 | Language | TypeScript 5.9 strict |
 | Navigation | expo-router 6 (file-based) |
 | Backend | Supabase (Postgres, Auth, Storage, Realtime, RPC) |
@@ -92,7 +92,7 @@ npx expo start
 
 Scan QR with Expo Go (iOS/Android) or press `i` / `a` for simulators.
 
-**Requirements:** Node 18+, Expo Go on device or Xcode/Android Studio for simulators.
+**Requirements:** Node 22.13+, Expo Go on device or Xcode/Android Studio for simulators.
 
 ### Database
 

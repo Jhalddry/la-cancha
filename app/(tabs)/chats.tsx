@@ -9,6 +9,8 @@ import { ConfirmSheet } from '@/components/ui/ConfirmSheet';
 import { Divider } from '@/components/ui/Divider';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { PressableScale } from '@/components/ui/PressableScale';
+import { GuestPrompt } from '@/components/feature/GuestPrompt';
+import { useSession } from '@/store/session';
 import { Screen } from '@/components/ui/Screen';
 import { SegmentedTabs } from '@/components/ui/SegmentedTabs';
 import { Text } from '@/components/ui/Text';
@@ -60,7 +62,7 @@ function SkeletonPulse({
   );
 }
 
-export default function ChatsScreen() {
+function ChatsContent() {
   const router = useRouter();
   const c = useColors();
   const s = useMemo(() => makeStyles(c), [c]);
@@ -452,4 +454,17 @@ function makeStyles(c: ColorPalette) {
       justifyContent: 'center',
     },
   });
+}
+
+export default function ChatsScreen() {
+  const user = useSession((s) => s.user);
+  if (!user) {
+    return (
+      <GuestPrompt
+        title="Tus chats"
+        description="Inicia sesión para chatear con jugadores de tus partidas."
+      />
+    );
+  }
+  return <ChatsContent />;
 }

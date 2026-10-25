@@ -401,7 +401,7 @@ export default function BuscarScreen() {
               <View style={s.loadingMore}>
                 <ActivityIndicator color={c.primary} />
               </View>
-            ) : null
+            ) : undefined
           }
         />
       )}

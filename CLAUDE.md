@@ -1,6 +1,6 @@
 # La Cancha — Claude Code Guide
 
-> **CRITICAL: Expo SDK 54.** Read versioned docs at <https://docs.expo.dev/versions/v54.0.0/> before writing any Expo/React Native code. APIs change between SDKs — do not trust pre-SDK-54 docs or training data.
+> **CRITICAL: Expo SDK 58.** Read versioned docs at <https://docs.expo.dev/versions/v58.0.0/> before writing any Expo/React Native code. APIs change between SDKs — do not trust pre-SDK-54 docs or training data.
 
 ---
 

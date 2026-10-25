@@ -60,6 +60,9 @@ interface SessionState {
   isAuthed: boolean;
   isLoading: boolean;
   isOnboarded: boolean;
+  /** Browsing without an account (in-memory only, resets on app restart). */
+  isGuest: boolean;
+  enterGuest: () => void;
   setUser: (user: Player | null) => void;
   setOnboarded: (v: boolean) => void;
   setCity: (city: string) => Promise<void>;
@@ -75,6 +78,9 @@ export const useSession = create<SessionState>((set) => ({
   isAuthed: false,
   isLoading: true,
   isOnboarded: false,
+  isGuest: false,
+
+  enterGuest: () => set({ isGuest: true, isLoading: false }),
 
   setUser: (user) => set({ user, isAuthed: !!user }),
   setOnboarded: (v) => set({ isOnboarded: v }),
@@ -159,7 +165,7 @@ export const useSession = create<SessionState>((set) => ({
 
   signOut: async () => {
     await supabase.auth.signOut();
-    set({ user: null, isAuthed: false, isOnboarded: false });
+    set({ user: null, isAuthed: false, isOnboarded: false, isGuest: false });
   },
 
   initialize: () => {

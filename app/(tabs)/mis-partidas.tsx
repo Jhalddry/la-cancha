@@ -27,6 +27,7 @@ import { ConfirmSheet } from '@/components/ui/ConfirmSheet';
 import { Divider } from '@/components/ui/Divider';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { PressableScale } from '@/components/ui/PressableScale';
+import { GuestPrompt } from '@/components/feature/GuestPrompt';
 import { Screen } from '@/components/ui/Screen';
 import { SegmentedTabs } from '@/components/ui/SegmentedTabs';
 import { Text } from '@/components/ui/Text';
@@ -132,7 +133,7 @@ function Countdown({ startsAt }: { startsAt: string }) {
   );
 }
 
-export default function MisPartidasScreen() {
+function MisPartidasContent() {
   const router = useRouter();
   const [tab, setTab] = useState<Tab>('proximas');
   const userId = useSession((st) => st.user?.id);
@@ -620,4 +621,17 @@ function makeStyles(c: ColorPalette) {
       borderRadius: radius.full,
     },
   });
+}
+
+export default function MisPartidasScreen() {
+  const user = useSession((s) => s.user);
+  if (!user) {
+    return (
+      <GuestPrompt
+        title="Tus partidas"
+        description="Inicia sesión para ver, crear y administrar tus partidas."
+      />
+    );
+  }
+  return <MisPartidasContent />;
 }
