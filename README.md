@@ -2,29 +2,57 @@
 
 > *Arma tu partida en segundos*
 
-Mobile-first sports matchmaking app for Venezuela. Find pickup games, create matches, and connect with players near you.
+Mobile-first sports matchmaking app for Venezuela. Find pickup games, create matches, chat with players, and build reputation.
 
 ---
 
 ## What it does
 
-- **Buscar** — find nearby matches filtered by sport, type (chill / seria / torneo), skill level, and distance
+- **Buscar** — nearby matches (real GPS distance) filtered by sport, type (chill / seria / competencia), skill level, and distance. Bookmark matches.
 - **Crear** — 5-step wizard: sport → modality → type/level/positions → location/date/price → payments/requirements
-- **Unirse** — join flow with payment method selection and requirements confirmation
-- **Chat** — messaging with organizers and teammates
-- **Calificar** — post-match player ratings (stars, tags, comment)
+- **Unirse** — 4-step join flow: summary, payment method, requirements, success. Organizer approves or rejects requests.
+- **Mis partidas** — Próximas / Pasadas / Activas. Organizers edit, start, and end matches; players rate after.
+- **Chat** — match group chats and private DMs (only between players who shared a match), with read receipts, typing indicator, voice messages, swipe-to-reply, and multi-select delete.
+- **Calificar** — post-match ratings (stars, tags, comment) feeding reputation and automatic badges.
+- **Fotos** — match photo gallery after the game ends.
+- **Compartir** — share match and player profile as an image.
 
 Sports: **fútbol** (5/7/11), **basket** (3v3/5v5), **tenis**, **pádel**, **beach tennis**
 
-Venezuelan context: USD/Bolívar pricing with BCV rate, Pago Móvil, Zelle, USDT (Binance).
+Venezuelan context: USD/Bolívar pricing with live BCV rate, Pago Móvil, Zelle, USDT (Binance).
 
 ---
 
 ## Status
 
-**Frontend-complete MVP.** All screens built, dark/light mode fully implemented, local state wired via Zustand. No backend yet — all data is mocked.
+**Working app on a real backend.** Auth, data, storage, realtime, and push all run on Supabase.
 
-**Next step:** Supabase backend (auth, CRUD, realtime chat). See `CLAUDE.md §11`.
+Done:
+- Supabase auth (email/password), profile auto-creation via DB trigger, session restore
+- React Query data layer; no mock data in screens; pull-to-refresh, skeletons, infinite scroll, error states
+- Real GPS distance (`expo-location` + haversine)
+- Live BCV rate (`ve.dolarapi.com`) with persisted fallback
+- Realtime chat: messages, read receipts, typing indicator (Broadcast), live viewer count (Presence)
+- Voice messages, swipe-to-reply, multi-select delete in chats
+- Push notifications via Expo Push API (new chat messages, match events)
+- Notifications feed with deep links and swipe-to-dismiss
+- Avatar upload and match photos (Supabase Storage)
+- Reputation, 8-tier automatic badges (DB triggers), per-sport skill levels
+- Reports and block flows; admin verification screen
+- Share cards (match and player) via `react-native-view-shot` + `expo-sharing`
+- Premium UX: animated numbers, badge shimmer, wizard slide transitions, glass bottom sheets, confetti, 3D sport ball, parallax hero, Android tab polish, onboarding and splash revamp
+- Internal analytics (`custom_events` table, no third party)
+- DB security hardening (pinned `search_path`, revoked PUBLIC execute, tightened storage policies)
+
+Pending / known:
+- Google sign-in disabled for now
+- Sentry removed (needs native build; incompatible with Expo Go)
+- Payments are honor-system (no escrow)
+- Real canchas table (map picker still uses `data/canchas.ts`)
+- Tests, accessibility audit, i18n
+- EAS Build profiles and store release
+
+See `CLAUDE.md §11` for the full roadmap.
 
 ---
 
@@ -32,13 +60,15 @@ Venezuelan context: USD/Bolívar pricing with BCV rate, Pago Móvil, Zelle, USDT
 
 | Layer | Choice |
 |---|---|
-| Framework | Expo SDK 54 (managed workflow) |
+| Framework | Expo SDK 54 (managed workflow), React Native 0.81, React 19 |
 | Language | TypeScript 5.9 strict |
 | Navigation | expo-router 6 (file-based) |
-| State | Zustand 5 |
-| UI | React Native + react-native-reanimated 4 |
+| Backend | Supabase (Postgres, Auth, Storage, Realtime, RPC) |
+| Server state | @tanstack/react-query |
+| Client state | Zustand 5 |
+| UI | React Native + react-native-reanimated 4 + gesture-handler |
 | Icons | phosphor-react-native 3 |
-| Maps | react-native-maps |
+| Maps / location | react-native-maps, expo-location |
 | Fonts | @expo-google-fonts/inter |
 
 ---
@@ -47,6 +77,16 @@ Venezuelan context: USD/Bolívar pricing with BCV rate, Pago Móvil, Zelle, USDT
 
 ```bash
 npm install
+```
+
+Create `.env` at the project root (both required, app throws at startup if missing):
+
+```
+EXPO_PUBLIC_SUPABASE_URL=https://xxxx.supabase.co
+EXPO_PUBLIC_SUPABASE_ANON_KEY=eyJ...
+```
+
+```bash
 npx expo start
 ```
 
@@ -54,17 +94,30 @@ Scan QR with Expo Go (iOS/Android) or press `i` / `a` for simulators.
 
 **Requirements:** Node 18+, Expo Go on device or Xcode/Android Studio for simulators.
 
+### Database
+
+Migrations live in `supabase/migrations/`. Apply them in order to your Supabase project. Manual step: create a public Storage bucket named `match-photos`.
+
+### Lint and types
+
+```bash
+npx tsc --noEmit
+npx expo lint
+```
+
 ---
 
 ## Project Structure
 
 ```
-app/          # All screens (expo-router file-based routing)
-components/   # UI primitives + feature composites
+app/          # Screens (expo-router file-based routing)
+components/   # UI primitives, brand, feature composites
 features/     # Match-domain components (MatchCard, PositionPitch, etc.)
-store/        # Zustand stores (session, draftMatch, theme, matchOverrides, joinedMatches)
-lib/          # Pure helpers (format, exchange, time)
-data/         # Mock data (matches, players, chats, canchas)
+hooks/        # React Query hooks (matches, chat, profiles, notifications, location, bookmarks)
+lib/          # Pure async helpers and API modules (Supabase, format, exchange, geo, push)
+store/        # Zustand stores (session, draftMatch, theme)
+supabase/     # SQL migrations and config
+data/         # Legacy mock data (only canchas still used)
 types/        # TypeScript domain types
 theme/        # Design tokens (palettes, spacing, radius, typography)
 ```
@@ -77,6 +130,9 @@ Full architecture docs: [`CLAUDE.md`](./CLAUDE.md)
 
 | Screen | Route |
 |---|---|
+| Splash / auth gate | `/` |
+| Onboarding | `/onboarding` |
+| Login / Register | `/login`, `/register` |
 | Home | `/(tabs)` |
 | Search | `/(tabs)/buscar` |
 | My matches | `/(tabs)/mis-partidas` |
@@ -86,13 +142,18 @@ Full architecture docs: [`CLAUDE.md`](./CLAUDE.md)
 | Join flow | `/unirse/[id]` |
 | Create wizard | `/crear` |
 | Edit match | `/editar/[id]` |
-| Rate player | `/calificar/[id]` |
+| Rate player | `/calificar/[id]?matchId=` |
 | Player profile | `/perfil/[id]` |
 | Edit profile | `/perfil/editar` |
-| Chat thread | `/chat/[id]` |
+| Match chat | `/chat/[id]` |
+| Private chat | `/direct/[id]` |
+| Notifications | `/notificaciones` |
+| Reputation | `/reputacion` |
+| History | `/historial` |
 | Settings | `/ajustes` |
-| Change email | `/cuenta/correo` |
-| Change password | `/cuenta/contrasena` |
+| Change email / password | `/cuenta/correo`, `/cuenta/contrasena` |
+| Admin verifications | `/admin/verificaciones` |
+| Terms / Privacy | `/terminos`, `/privacidad` |
 
 ---
 
@@ -101,28 +162,28 @@ Full architecture docs: [`CLAUDE.md`](./CLAUDE.md)
 - **Dark-first** with full light mode support (toggle in Ajustes)
 - Neon green accent `#7BFF00` (dark) / `#1A7A00` (light)
 - All colors reactive via `useColors()` → `makeStyles(c: ColorPalette)` pattern
-- Match type colors: chill (green), seria (amber), torneo (red)
-- MatchCard: type-tinted background + colored border + sport emoji watermark
+- Match type colors: chill (green), seria (amber), competencia (red)
 - Inter font family, 6 weights
+- UI strings in Spanish (es-VE); code and comments in English
 
 ---
 
 ## Roadmap
 
-1. **Phase A** — Supabase backend (auth, CRUD, storage, realtime)
-2. **Phase B** — Push notifications (`expo-notifications`)
-3. **Phase C** — Real location (`expo-location`, haversine distance)
-4. **Phase D** — Payments (Pago Móvil API / Stripe Connect)
-5. **Phase E** — Reputation system + match recommendations
-6. **Phase F** — Tests, accessibility, i18n
-7. **Phase G** — EAS Build + App Store / Play Store
+1. **Push** — credentials for APNs/FCM, notification deep links, realtime on `match_participants`
+2. **Canchas** — real `canchas` table, reverse geocoding, cancha photos
+3. **Payments** — escrow via local processor
+4. **Reputation** — rating breakdown per tag, auto `calificar` banner after match end
+5. **Quality** — jest + testing-library, accessibility, i18n
+6. **Release** — EAS Build profiles, Apple Developer / Play Console, icons, public privacy policy
+7. **Backlog** — leaderboards, recurring matches, chat reactions, referrals, map view in buscar
 
 ---
 
 ## Dev Notes
 
 - `typedRoutes: false` in `app.json` — allows string interpolation in route paths
-- Mock user auto-signed in for dev (`store/session.ts` → `isAuthed: true`)
-- BCV rate is a hardcoded constant in `lib/exchange.ts` (`BCV_RATE = 36.72`)
+- Never `npm install` native modules directly; use `npx expo install <pkg>`
 - All screens must use `useColors()` + `makeStyles(c)` — never the static `colors` import
-- `mockMatches[5]` (`m_6`) is organized by `mockCurrentUser` — needed for Creadas tab + invite sheet
+- Chat is gated by `fetchSharedMatchId`: only players who shared a match can message
+- Supabase migrations use unique version prefixes (letter suffixes are tracked as separate versions)
