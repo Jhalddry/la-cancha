@@ -1,5 +1,5 @@
 import { useRouter } from 'expo-router';
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import Animated, {
   Easing,
@@ -30,6 +30,8 @@ const STROKE_WIDTH = 10;
 export default function SplashRoute() {
   const router = useRouter();
   const isAuthed = useSession((s) => s.isAuthed);
+  const isLoading = useSession((s) => s.isLoading);
+  const [animDone, setAnimDone] = useState(false);
   const c = useColors();
   const s = useMemo(() => makeStyles(c), [c]);
 
@@ -98,14 +100,19 @@ export default function SplashRoute() {
       ),
     );
 
-    const t = setTimeout(() => {
-      router.replace(isAuthed ? '/(tabs)' : '/login');
-    }, 2700);
+    const t = setTimeout(() => setAnimDone(true), 2700);
     return () => clearTimeout(t);
   }, [
     armScale, circleProgress, dotOpacity, dotScale, glowOpacity, glowScale,
-    isAuthed, logoRotate, router, wordmarkOpacity, wordmarkScale, wordmarkY,
+    logoRotate, wordmarkOpacity, wordmarkScale, wordmarkY,
   ]);
+
+  // Redirect only once the intro finished AND session restore resolved, so a slow
+  // profile fetch can't bounce a signed-in user to /login.
+  useEffect(() => {
+    if (!animDone || isLoading) return;
+    router.replace(isAuthed ? '/(tabs)' : '/login');
+  }, [animDone, isLoading, isAuthed, router]);
 
   const dotAnimatedProps = useAnimatedProps(() => ({
     r: 5 + dotScale.value * 2,

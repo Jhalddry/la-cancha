@@ -147,8 +147,9 @@ export default function AjustesScreen() {
           </View>
         </Card>
 
-        {/* Account */}
-        <SectionLabel title="Cuenta" />
+        {/* Account (signed-in users only) */}
+        {user ? <SectionLabel title="Cuenta" /> : null}
+        {user ? (
         <Card padded={false}>
           <SettingsRow label="Cambiar contraseña" onPress={() => router.push('/cuenta/contrasena')} />
           <Divider inset />
@@ -169,6 +170,7 @@ export default function AjustesScreen() {
             }
           />
         </Card>
+        ) : null}
       </ScrollView>
 
       <CityPickerSheet

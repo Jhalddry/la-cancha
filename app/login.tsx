@@ -10,7 +10,7 @@ import {
 } from 'phosphor-react-native';
 
 import { GoogleColorIcon } from '@/components/brand/GoogleColorIcon';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Alert, ScrollView, StyleSheet, View } from 'react-native';
 
 import { Crosshair } from '@/components/brand/Crosshair';
@@ -33,7 +33,15 @@ export default function LoginScreen() {
   const signIn = useSession((s) => s.signIn);
   const completeOAuthSignIn = useSession((s) => s.completeOAuthSignIn);
   const enterGuest = useSession((s) => s.enterGuest);
+  const isAuthed = useSession((s) => s.isAuthed);
   const c = useColors();
+
+  // A slow session restore can land the user here before it resolves; once it
+  // does, move on instead of leaving a signed-in user on the login form.
+  useEffect(() => {
+    if (isAuthed) router.replace('/(tabs)');
+  }, [isAuthed, router]);
+
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [secure, setSecure] = useState(true);

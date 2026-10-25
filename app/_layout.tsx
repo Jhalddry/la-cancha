@@ -1,3 +1,4 @@
+import '@/lib/web/alertPolyfill';
 import {
   Inter_400Regular,
   Inter_500Medium,
