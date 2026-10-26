@@ -64,7 +64,7 @@ export default function CambiarCorreoScreen() {
 
   return (
     <Screen>
-      <BackHeader title="Correo electrónico" onBack={() => router.back()} />
+      <BackHeader title="Correo electrónico" />
       <ScrollView
         contentContainerStyle={s.scroll}
         showsVerticalScrollIndicator={false}

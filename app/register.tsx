@@ -162,7 +162,7 @@ export default function RegisterScreen() {
 
   return (
     <Screen edges={['top']}>
-      <BackHeader transparent onBack={() => router.back()} />
+      <BackHeader transparent />
       <ScrollView
         contentContainerStyle={staticStyles.scroll}
         showsVerticalScrollIndicator={false}

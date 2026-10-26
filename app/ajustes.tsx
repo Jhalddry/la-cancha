@@ -72,7 +72,7 @@ export default function AjustesScreen() {
 
   return (
     <Screen>
-      <BackHeader title="Ajustes" onBack={() => router.back()} />
+      <BackHeader title="Ajustes" />
       <ScrollView
         contentContainerStyle={s.content}
         showsVerticalScrollIndicator={false}

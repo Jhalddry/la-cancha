@@ -93,7 +93,7 @@ export default function CambiarContrasenaScreen() {
   if (saved) {
     return (
       <Screen>
-        <BackHeader title="Contraseña" onBack={() => router.back()} />
+        <BackHeader title="Contraseña" />
         <View style={s.successWrap}>
           <Card>
             <View style={s.successRow}>
@@ -121,7 +121,7 @@ export default function CambiarContrasenaScreen() {
 
   return (
     <Screen>
-      <BackHeader title="Contraseña" onBack={() => router.back()} />
+      <BackHeader title="Contraseña" />
       <ScrollView
         contentContainerStyle={s.scroll}
         showsVerticalScrollIndicator={false}

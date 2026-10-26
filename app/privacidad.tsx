@@ -16,7 +16,7 @@ export default function PrivacidadScreen() {
 
   return (
     <Screen edges={['top']}>
-      <BackHeader title="Política de Privacidad" onBack={() => router.back()} transparent />
+      <BackHeader title="Política de Privacidad" transparent />
       <ScrollView contentContainerStyle={staticStyles.scroll} showsVerticalScrollIndicator={false}>
         <Text variant="caption" color="textTertiary">
           Última actualización: 22 de junio de 2026

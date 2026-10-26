@@ -1,4 +1,4 @@
-import { useNavigation, useRouter } from 'expo-router';
+import { useRouter } from 'expo-router';
 import { CaretLeft } from 'phosphor-react-native';
 import type { ReactNode } from 'react';
 import { useMemo } from 'react';
@@ -21,11 +21,12 @@ interface Props {
 
 export function BackHeader({ title, titleNode, onBack, trailing, transparent }: Props) {
   const router = useRouter();
-  const navigation = useNavigation();
   const c = useColors();
   const styles = useMemo(() => makeStyles(c), [c]);
-  const canGoBack = onBack != null || navigation.canGoBack();
-  const handleBack = onBack ?? (() => router.back());
+  // Always show the button: with no history (deep link, web reload) fall back to home
+  // instead of rendering an empty circle.
+  const handleBack =
+    onBack ?? (() => (router.canGoBack() ? router.back() : router.replace('/(tabs)')));
   return (
     <View
       style={[
@@ -33,13 +34,9 @@ export function BackHeader({ title, titleNode, onBack, trailing, transparent }: 
         transparent ? null : styles.bar,
       ]}
     >
-      {canGoBack ? (
-        <PressableScale style={styles.iconBtn} scaleTo={0.9} onPress={handleBack}>
-          <CaretLeft size={22} color={c.textPrimary} weight="bold" />
-        </PressableScale>
-      ) : (
-        <View style={styles.iconBtn} />
-      )}
+      <PressableScale style={styles.iconBtn} scaleTo={0.9} onPress={handleBack}>
+        <CaretLeft size={22} color={c.textPrimary} weight="bold" />
+      </PressableScale>
       <View style={styles.titleWrap}>
         {titleNode ?? (title ? (
           <Text variant="bodySemibold" color="textPrimary" numberOfLines={1}>

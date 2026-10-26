@@ -40,7 +40,7 @@ export default function AdminVerificacionesScreen() {
   if (!user?.isAdmin) {
     return (
       <Screen edges={['top']}>
-        <BackHeader title="Administración" onBack={() => router.back()} />
+        <BackHeader title="Administración" />
         <View style={s.center}>
           <Text variant="body" color="textSecondary">Sin acceso.</Text>
         </View>
@@ -52,7 +52,7 @@ export default function AdminVerificacionesScreen() {
     <Screen edges={['top']}>
       <BackHeader
         title="Solicitudes de verificación"
-        onBack={() => router.back()}
+       
         trailing={
           requests && requests.length > 0 ? (
             <View style={s.badge}>

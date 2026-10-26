@@ -248,7 +248,7 @@ export default function CrearWizard() {
   if (user?.isAdmin) {
     return (
       <Screen edges={['top']}>
-        <BackHeader title="Crear partida" onBack={() => router.back()} />
+        <BackHeader title="Crear partida" />
         <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 32 }}>
           <Text variant="h3" color="textPrimary" style={{ textAlign: 'center' }}>
             Las cuentas de administrador no pueden crear partidas

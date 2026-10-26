@@ -1,5 +1,5 @@
 import { useRouter } from 'expo-router';
-import { ArrowUp, Check, WarningCircle } from 'phosphor-react-native';
+import { ArrowUp, Check, Star, WarningCircle } from 'phosphor-react-native';
 import { useMemo } from 'react';
 import { ActivityIndicator, ScrollView, StyleSheet, View } from 'react-native';
 import { useQuery } from '@tanstack/react-query';
@@ -102,7 +102,7 @@ export default function ReputacionScreen() {
 
   return (
     <Screen>
-      <BackHeader title="Reputación" onBack={() => router.back()} />
+      <BackHeader title="Reputación" />
       {isLoading ? (
         <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
           <ActivityIndicator color={c.primary} size="large" />
@@ -226,7 +226,7 @@ export default function ReputacionScreen() {
           {/* Reviews */}
           {!ratings || ratings.length === 0 ? (
             <EmptyState
-              icon={<Stars level={3} size={32} filledColor={STAR_AMBER} emptyColor="rgba(255,217,61,0.2)" />}
+              icon={<Star size={32} color={STAR_AMBER} weight="fill" />}
               title="Sin reseñas aún"
               description="Cuando otros jugadores te califiquen, aparecerán aquí."
             />
