@@ -31,6 +31,7 @@ export default function SplashRoute() {
   const router = useRouter();
   const isAuthed = useSession((s) => s.isAuthed);
   const isLoading = useSession((s) => s.isLoading);
+  const enterGuest = useSession((s) => s.enterGuest);
   const [animDone, setAnimDone] = useState(false);
   const c = useColors();
   const s = useMemo(() => makeStyles(c), [c]);
@@ -111,8 +112,10 @@ export default function SplashRoute() {
   // profile fetch can't bounce a signed-in user to /login.
   useEffect(() => {
     if (!animDone || isLoading) return;
-    router.replace(isAuthed ? '/(tabs)' : '/login');
-  }, [animDone, isLoading, isAuthed, router]);
+    // No session: open the app as a guest; sign-in is requested when joining or creating.
+    if (!isAuthed) enterGuest();
+    router.replace('/(tabs)');
+  }, [animDone, isLoading, isAuthed, enterGuest, router]);
 
   const dotAnimatedProps = useAnimatedProps(() => ({
     r: 5 + dotScale.value * 2,

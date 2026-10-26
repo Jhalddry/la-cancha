@@ -165,7 +165,7 @@ export const useSession = create<SessionState>((set) => ({
 
   signOut: async () => {
     await supabase.auth.signOut();
-    set({ user: null, isAuthed: false, isOnboarded: false, isGuest: false });
+    set({ user: null, isAuthed: false, isOnboarded: false, isGuest: true });
   },
 
   initialize: () => {

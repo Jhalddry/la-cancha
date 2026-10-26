@@ -297,7 +297,7 @@ function PerfilContent() {
             scaleTo={0.96}
             onPress={async () => {
               await signOut();
-              router.replace('/login');
+              router.replace('/(tabs)');
             }}
           >
             <Text variant="bodyMedium" color="alert">
@@ -492,7 +492,7 @@ function PerfilContent() {
             danger
             onPress={() => {
               signOut();
-              router.replace('/login');
+              router.replace('/(tabs)');
             }}
             c={c}
             s={s}
